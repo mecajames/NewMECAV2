@@ -28,5 +28,7 @@ export { TicketStaffManagement } from './components/admin/TicketStaffManagement'
 export { TicketStaffArea } from './components/admin/TicketStaffArea';
 export { TicketStaffRatings } from './components/admin/TicketStaffRatings';
 export { TicketRoutingRules } from './components/admin/TicketRoutingRules';
+export { TicketCategoriesManagement } from './components/admin/TicketCategoriesManagement';
+export { TicketCustomFields } from './components/admin/TicketCustomFields';
 export { TicketSystemSettings } from './components/admin/TicketSystemSettings';
 export { MyTicketTools } from './components/admin/MyTicketTools';

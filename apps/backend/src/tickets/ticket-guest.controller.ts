@@ -34,6 +34,8 @@ interface CreateGuestTicketDto {
   priority?: string;
   guest_name: string;
   event_id?: string;
+  department_id?: string;
+  custom_field_answers?: { field_id: string; value: unknown }[];
 }
 
 interface AddCommentDto {
@@ -170,6 +172,8 @@ export class TicketGuestController {
       priority: body.priority as any,
       guest_name: body.guest_name,
       event_id: body.event_id,
+      department_id: body.department_id,
+      custom_field_answers: body.custom_field_answers as any,
     }, { ipAddress, userAgent });
   }
 

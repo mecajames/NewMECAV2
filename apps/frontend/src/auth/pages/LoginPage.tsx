@@ -71,19 +71,36 @@ export default function LoginPage() {
     const { error } = await signIn(liveEmail, livePassword);
 
     if (error) {
-      // A member migrated from the old site may have an account they never set a
-      // password for — a password login can never succeed for them. Detect that
-      // and auto-send a set-password link instead of a dead-end error.
-      const passwordSetupRequired = await requestLoginRecovery(liveEmail);
-      if (passwordSetupRequired) {
-        setError('');
-        setSuccess(
-          "Welcome back! It looks like you haven't set a password since our website upgrade. " +
-            "We've emailed you a link to set your password — please check your inbox (and spam folder).",
-        );
-      } else {
-        setError(error.message);
+      // Only probe for a "migrated account that never set a password" when the
+      // failure is a genuine CREDENTIAL rejection. A transient failure — rate
+      // limit (429), server 5xx, a network drop, or brief server clock skew
+      // that makes a freshly issued token look invalid — must NOT auto-send a
+      // set-password email or show the "set your password" message: doing so
+      // turns a momentary blip into the "I have to reset my password every
+      // single time I log in" loop. On a transient error, surface the real
+      // message instead so the member isn't pushed into a needless reset.
+      const looksLikeBadCredentials =
+        error.status === 400 ||
+        error.code === 'invalid_credentials' ||
+        /invalid login credentials/i.test(error.message ?? '');
+
+      if (looksLikeBadCredentials) {
+        // A member migrated from the old site may have an account they never set
+        // a password for — a password login can never succeed for them. Detect
+        // that and auto-send a set-password link instead of a dead-end error.
+        const passwordSetupRequired = await requestLoginRecovery(liveEmail);
+        if (passwordSetupRequired) {
+          setError('');
+          setSuccess(
+            "Welcome back! It looks like you haven't set a password since our website upgrade. " +
+              "We've emailed you a link to set your password — please check your inbox (and spam folder).",
+          );
+          setLoading(false);
+          return;
+        }
       }
+
+      setError(error.message);
       setLoading(false);
     } else {
       // Clean up timeout redirect storage

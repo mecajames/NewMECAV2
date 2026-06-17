@@ -1,24 +1,23 @@
 import { useState, useEffect } from 'react';
-import {
-  X,
-  Ticket,
-  Tag,
-  Building,
-  AlertTriangle,
-  Calendar,
-  Send,
-  Paperclip,
-} from 'lucide-react';
+import { X, Ticket, Tag, Building, AlertTriangle, Send, Paperclip } from 'lucide-react';
 import {
   ticketsApi,
   Ticket as TicketType,
-  TicketCategory,
-  TicketDepartment,
   TicketPriority,
   CreateTicketData,
 } from '../tickets.api-client';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { eventsApi } from '@/events';
+import { TicketCustomField, TicketDepartmentResponse, TicketCategoryConfig, TicketPurchase } from '@newmeca/shared';
+import { listPublicDepartments } from '../ticket-admin.api-client';
+import { listCategoriesForDepartment } from '../ticket-categories.api-client';
+import { listCustomFieldsForCategory, getMyPurchases, listStaffForPicker } from '../ticket-custom-fields.api-client';
+import {
+  TicketCustomFieldInputs,
+  getMissingRequiredFields,
+  buildCustomFieldAnswers,
+  CustomFieldValues,
+} from './TicketCustomFieldInputs';
 
 const TICKET_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const TICKET_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
@@ -36,46 +35,12 @@ interface CreateTicketFormProps {
   preselectedEventId?: string;
 }
 
-const categoryOptions: { value: TicketCategory; label: string; description: string }[] = [
-  { value: 'general', label: 'General', description: 'General questions or inquiries' },
-  { value: 'membership', label: 'Membership', description: 'Membership status, renewals, or benefits' },
-  { value: 'event_registration', label: 'Event Registration', description: 'Issues with registering for events' },
-  { value: 'payment', label: 'Payment', description: 'Payment processing or billing issues' },
-  { value: 'technical', label: 'Technical', description: 'Website or app technical issues' },
-  { value: 'competition_results', label: 'Competition Results', description: 'Questions about competition scores or results' },
-  { value: 'event_hosting', label: 'Event Hosting', description: 'Hosting or organizing MECA events' },
-  { value: 'account', label: 'Account', description: 'Account access or profile issues' },
-  { value: 'other', label: 'Other', description: 'Anything not covered above' },
+const priorityOptions: { value: TicketPriority; label: string; className: string }[] = [
+  { value: 'low', label: 'Low', className: 'border-blue-500 bg-blue-500/10' },
+  { value: 'medium', label: 'Medium', className: 'border-yellow-500 bg-yellow-500/10' },
+  { value: 'high', label: 'High', className: 'border-orange-500 bg-orange-500/10' },
+  { value: 'critical', label: 'Critical', className: 'border-red-500 bg-red-500/10' },
 ];
-
-const departmentOptions: { value: TicketDepartment; label: string }[] = [
-  { value: 'general_support', label: 'General Support' },
-  { value: 'membership_services', label: 'Membership Services' },
-  { value: 'event_operations', label: 'Event Operations' },
-  { value: 'technical_support', label: 'Technical Support' },
-  { value: 'billing', label: 'Billing' },
-  { value: 'administration', label: 'Administration' },
-];
-
-const priorityOptions: { value: TicketPriority; label: string; description: string; className: string }[] = [
-  { value: 'low', label: 'Low', description: 'Not urgent', className: 'border-blue-500 bg-blue-500/10' },
-  { value: 'medium', label: 'Medium', description: 'Normal priority', className: 'border-yellow-500 bg-yellow-500/10' },
-  { value: 'high', label: 'High', description: 'Needs attention soon', className: 'border-orange-500 bg-orange-500/10' },
-  { value: 'critical', label: 'Critical', description: 'Urgent issue', className: 'border-red-500 bg-red-500/10' },
-];
-
-// Auto-suggest department based on category
-const categoryToDepartment: Record<TicketCategory, TicketDepartment> = {
-  general: 'general_support',
-  membership: 'membership_services',
-  event_registration: 'event_operations',
-  payment: 'billing',
-  technical: 'technical_support',
-  competition_results: 'event_operations',
-  event_hosting: 'event_operations',
-  account: 'technical_support',
-  other: 'general_support',
-};
 
 export function CreateTicketForm({
   isOpen,
@@ -84,18 +49,25 @@ export function CreateTicketForm({
   reporterId,
   preselectedEventId,
 }: CreateTicketFormProps) {
-  const [formData, setFormData] = useState<CreateTicketData>({
-    title: '',
-    description: '',
-    category: 'general',
-    department: 'general_support',
-    priority: 'medium',
-    reporter_id: reporterId,
-    event_id: preselectedEventId || null,
-  });
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState<TicketPriority>('medium');
+
+  const [departments, setDepartments] = useState<TicketDepartmentResponse[]>([]);
+  const [categories, setCategories] = useState<TicketCategoryConfig[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [purchases, setPurchases] = useState<TicketPurchase[]>([]);
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+
+  const [customFields, setCustomFields] = useState<TicketCustomField[]>([]);
+  const [customValues, setCustomValues] = useState<CustomFieldValues>({});
+  const [loadingFields, setLoadingFields] = useState(false);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -118,68 +90,103 @@ export function CreateTicketForm({
     e.target.value = '';
   };
 
-  // Fetch events for dropdown
+  // Load departments + events when the modal opens.
   useEffect(() => {
-    const fetchEvents = async () => {
-      setLoadingEvents(true);
-      try {
-        const data = await eventsApi.getAll(1, 100);
-        setEvents(data);
-      } catch (err) {
-        console.error('Failed to fetch events:', err);
-      } finally {
-        setLoadingEvents(false);
-      }
-    };
-    if (isOpen) {
-      fetchEvents();
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    setTitle('');
+    setDescription('');
+    setDepartmentId('');
+    setCategory('');
+    setPriority('medium');
+    setCategories([]);
+    setCustomFields([]);
+    setCustomValues({});
+    setError(null);
+    setFiles([]);
 
-  // Reset form when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setFormData({
-        title: '',
-        description: '',
-        category: 'general',
-        department: 'general_support',
-        priority: 'medium',
-        reporter_id: reporterId,
-        event_id: preselectedEventId || null,
-      });
-      setError(null);
-      setFiles([]);
-    }
+    listPublicDepartments().then(setDepartments).catch((err) => console.error('Failed to load departments:', err));
+    getMyPurchases().then(setPurchases).catch(() => setPurchases([]));
+    listStaffForPicker().then(setStaff).catch(() => setStaff([]));
+
+    setLoadingEvents(true);
+    eventsApi
+      .getAll(1, 100)
+      .then(setEvents)
+      .catch((err) => console.error('Failed to fetch events:', err))
+      .finally(() => setLoadingEvents(false));
   }, [isOpen, reporterId, preselectedEventId]);
 
-  // Auto-update department when category changes
-  const handleCategoryChange = (category: TicketCategory) => {
-    setFormData((prev) => ({
-      ...prev,
-      category,
-      department: categoryToDepartment[category],
-    }));
+  // Department chosen → load its categories, reset everything below.
+  const handleDepartmentChange = async (deptId: string) => {
+    setDepartmentId(deptId);
+    setCategory('');
+    setCategories([]);
+    setCustomFields([]);
+    setCustomValues({});
+    if (!deptId) return;
+    setLoadingCategories(true);
+    try {
+      setCategories(await listCategoriesForDepartment(deptId));
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  // Category chosen → load its custom fields (progressive disclosure).
+  const handleCategoryChange = async (key: string) => {
+    setCategory(key);
+    setCustomFields([]);
+    setCustomValues({});
+    if (!key) return;
+    setLoadingFields(true);
+    try {
+      const fields = await listCustomFieldsForCategory(key);
+      setCustomFields(fields);
+      if (preselectedEventId) {
+        const seeded: CustomFieldValues = {};
+        for (const f of fields) {
+          if (f.field_type === 'event_reference') seeded[f.id] = preselectedEventId;
+        }
+        if (Object.keys(seeded).length) setCustomValues(seeded);
+      }
+    } catch (err) {
+      console.error('Failed to load custom fields:', err);
+      setCustomFields([]);
+    } finally {
+      setLoadingFields(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validation
-    if (!formData.title.trim()) {
-      setError('Please enter a title');
-      return;
-    }
-    if (!formData.description.trim()) {
-      setError('Please enter a description');
-      return;
+    if (!title.trim()) return setError('Please enter a subject');
+    if (!departmentId) return setError('Please choose a department');
+    if (!category) return setError('Please choose a category');
+    if (!description.trim()) return setError('Please enter a description');
+
+    const missing = getMissingRequiredFields(customFields, customValues);
+    if (missing.length > 0) {
+      return setError(`Please complete required field(s): ${missing.map((f) => f.label).join(', ')}`);
     }
 
     setSubmitting(true);
     try {
-      const ticket = await ticketsApi.create(formData);
-      // Upload any screenshots and link them to the new ticket.
+      const payload: CreateTicketData = {
+        title,
+        description,
+        category,
+        department_id: departmentId,
+        priority,
+        reporter_id: reporterId,
+        event_id: preselectedEventId || null,
+        custom_field_answers: buildCustomFieldAnswers(customFields, customValues),
+      };
+      const ticket = await ticketsApi.create(payload);
       for (const file of files) {
         try {
           const uploaded = await uploadFile(file, 'ticket-attachments', ticket.id);
@@ -211,7 +218,6 @@ export function CreateTicketForm({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-2xl border border-slate-700 my-8">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-500/10 rounded-lg">
@@ -230,9 +236,7 @@ export function CreateTicketForm({
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Error Message */}
           {error && (
             <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500 rounded-lg">
               <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
@@ -240,109 +244,99 @@ export function CreateTicketForm({
             </div>
           )}
 
-          {/* Title */}
+          {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Subject <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder="Brief summary of your issue..."
               maxLength={255}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
-          {/* Category & Priority Row */}
+          {/* Department & Category */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Category */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                <Building className="w-4 h-4 inline mr-1" />
+                Department <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={departmentId}
+                onChange={(e) => handleDepartmentChange(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Select a department…</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 <Tag className="w-4 h-4 inline mr-1" />
-                Category
+                Category <span className="text-red-400">*</span>
               </label>
               <select
-                value={formData.category}
-                onChange={(e) => handleCategoryChange(e.target.value as TicketCategory)}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                value={category}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                disabled={!departmentId || loadingCategories}
+                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60"
               >
-                {categoryOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+                <option value="">
+                  {!departmentId ? 'Choose a department first' : loadingCategories ? 'Loading…' : 'Select a category…'}
+                </option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.key}>{c.label}</option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">
-                {categoryOptions.find((c) => c.value === formData.category)?.description}
-              </p>
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                <AlertTriangle className="w-4 h-4 inline mr-1" />
-                Priority
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {priorityOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, priority: opt.value })}
-                    className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      formData.priority === opt.value
-                        ? `${opt.className} border-2`
-                        : 'border-slate-600 bg-slate-700 text-gray-300 hover:bg-slate-600'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
-          {/* Department */}
+          {/* Priority */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              <Building className="w-4 h-4 inline mr-1" />
-              Department
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Priority
             </label>
-            <select
-              value={formData.department}
-              onChange={(e) => setFormData({ ...formData, department: e.target.value as TicketDepartment })}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              {departmentOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {priorityOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPriority(opt.value)}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    priority === opt.value
+                      ? `${opt.className} border-2`
+                      : 'border-slate-600 bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
                   {opt.label}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
-          {/* Event (Optional) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              Related Event (Optional)
-            </label>
-            <select
-              value={formData.event_id || ''}
-              onChange={(e) => setFormData({ ...formData, event_id: e.target.value || null })}
-              className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              disabled={loadingEvents}
-            >
-              <option value="">No specific event</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.title}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Category-specific fields (progressive disclosure) */}
+          {loadingFields && <p className="text-sm text-gray-400">Loading additional fields…</p>}
+          {!loadingFields && customFields.length > 0 && (
+            <div className="space-y-4 p-4 bg-slate-900/40 rounded-lg border border-slate-700">
+              <TicketCustomFieldInputs
+                fields={customFields}
+                values={customValues}
+                onChange={(id, val) => setCustomValues((prev) => ({ ...prev, [id]: val }))}
+                events={events}
+                purchases={purchases}
+                staff={staff}
+                disabled={loadingEvents}
+              />
+            </div>
+          )}
 
           {/* Description */}
           <div>
@@ -350,8 +344,8 @@ export function CreateTicketForm({
               Description <span className="text-red-400">*</span>
             </label>
             <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               placeholder="Please describe your issue in detail. Include any relevant information that might help us assist you..."
               rows={6}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
@@ -392,7 +386,6 @@ export function CreateTicketForm({
             <p className="text-xs text-gray-500 mt-1">JPG, PNG, GIF, or WebP — up to 10MB each.</p>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-700">
             <button
               type="button"

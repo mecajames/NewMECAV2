@@ -28,7 +28,7 @@ export function TicketSystemSettings() {
     allow_attachments: true,
     max_attachment_size_mb: 10,
     require_category: true,
-    auto_close_resolved_days: 7,
+    auto_close_inactive_days: 0,
     enable_email_notifications: false,
     default_department_id: undefined,
   });
@@ -69,7 +69,7 @@ export function TicketSystemSettings() {
         ['allow_attachments', formData.allow_attachments],
         ['max_attachment_size_mb', formData.max_attachment_size_mb],
         ['require_category', formData.require_category],
-        ['auto_close_resolved_days', formData.auto_close_resolved_days],
+        ['auto_close_inactive_days', formData.auto_close_inactive_days],
         ['enable_email_notifications', formData.enable_email_notifications],
       ];
 
@@ -277,10 +277,11 @@ export function TicketSystemSettings() {
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-white font-medium">Auto-Close Resolved Tickets</p>
+              <p className="text-white font-medium">Auto-Close Inactive Tickets</p>
               <p className="text-sm text-gray-400 mt-1">
-                Automatically close tickets that have been resolved for the specified number of days.
-                Set to 0 to disable auto-close.
+                When staff have replied but the customer hasn't responded for this many days, the
+                customer is emailed a warning that the ticket will close within 24 hours, then it's
+                auto-closed if they still don't reply. Replying resets the timer. Set to 0 to disable.
               </p>
             </div>
           </div>
@@ -289,11 +290,11 @@ export function TicketSystemSettings() {
               type="number"
               min="0"
               max="365"
-              value={formData.auto_close_resolved_days}
-              onChange={(e) => handleChange('auto_close_resolved_days', parseInt(e.target.value) || 0)}
+              value={formData.auto_close_inactive_days}
+              onChange={(e) => handleChange('auto_close_inactive_days', parseInt(e.target.value) || 0)}
               className="w-24 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
-            <span className="text-gray-400">days after resolution</span>
+            <span className="text-gray-400">days awaiting customer reply</span>
           </div>
         </div>
       </div>

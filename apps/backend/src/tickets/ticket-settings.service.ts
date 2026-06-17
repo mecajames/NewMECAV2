@@ -7,7 +7,9 @@ export interface TicketSettingsMap {
   allow_attachments: boolean;
   max_attachment_size_mb: number;
   require_category: boolean;
-  auto_close_resolved_days: number;
+  // Days a ticket may sit awaiting the customer's reply (after staff replied)
+  // before it's warned + auto-closed. 0 disables the feature.
+  auto_close_inactive_days: number;
   enable_email_notifications: boolean;
   default_department_id?: string;
 }
@@ -63,7 +65,7 @@ export class TicketSettingsService {
       allow_attachments: await this.getBoolean('allow_attachments', true),
       max_attachment_size_mb: await this.getNumber('max_attachment_size_mb', 10),
       require_category: await this.getBoolean('require_category', true),
-      auto_close_resolved_days: await this.getNumber('auto_close_resolved_days', 7),
+      auto_close_inactive_days: await this.getNumber('auto_close_inactive_days', 0),
       enable_email_notifications: await this.getBoolean('enable_email_notifications', false),
       default_department_id: await this.getValue('default_department_id'),
     };

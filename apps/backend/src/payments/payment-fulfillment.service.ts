@@ -24,6 +24,9 @@ import { Membership } from '../memberships/memberships.entity';
 import { Payment } from './payments.entity';
 import { Order } from '../orders/orders.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { ShopOrder } from '../shop/entities/shop-order.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { FinalsRegistration } from '../world-finals/finals-registration.entity';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { generateSecurePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
@@ -370,6 +373,11 @@ export class PaymentFulfillmentService {
         membershipId,
       );
 
+      // PayPal: persist the capture id so the registration can be refunded in-app.
+      if (params.paymentMethod === PaymentMethod.PAYPAL) {
+        await this.em.fork().nativeUpdate(EventRegistration, { id: registrationId }, { paypalCaptureId: transactionId });
+      }
+
       this.logger.log(`Event registration completed successfully for: ${email}`);
 
       // Create Order and Invoice (async, non-blocking)
@@ -441,6 +449,11 @@ export class PaymentFulfillmentService {
         transactionId,
         chargeId,
       );
+
+      // PayPal: persist the capture id so the order can be refunded in-app.
+      if (params.paymentMethod === PaymentMethod.PAYPAL) {
+        await this.em.fork().nativeUpdate(ShopOrder, { id: order.id }, { paypalCaptureId: transactionId });
+      }
 
       this.logger.log(`Shop order ${order.orderNumber} marked as paid via ${params.paymentMethod} payment ${transactionId}`);
 
@@ -533,6 +546,11 @@ export class PaymentFulfillmentService {
         registrationId,
         transactionId,
       );
+
+      // PayPal: persist the capture id so the pre-registration can be refunded in-app.
+      if (params.paymentMethod === PaymentMethod.PAYPAL) {
+        await this.em.fork().nativeUpdate(FinalsRegistration, { id: registrationId }, { paypalCaptureId: transactionId });
+      }
 
       this.logger.log(`World Finals registration ${registrationId} marked as paid via ${params.paymentMethod} payment ${transactionId}`);
     } catch (error) {

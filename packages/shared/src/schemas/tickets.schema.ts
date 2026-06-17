@@ -4,11 +4,10 @@ import {
   TicketStatusSchema,
   TicketPriority,
   TicketPrioritySchema,
-  TicketCategory,
-  TicketCategorySchema,
   TicketDepartment,
   TicketDepartmentSchema,
 } from './enums.schema.js';
+import { TicketCustomFieldAnswerInputSchema } from './ticket-custom-fields.schema.js';
 
 // =============================================================================
 // Ticket Schemas
@@ -18,11 +17,20 @@ import {
 export const CreateTicketSchema = z.object({
   title: z.string().min(1, 'Title is required').max(255),
   description: z.string().min(1, 'Description is required'),
-  category: TicketCategorySchema.default(TicketCategory.GENERAL),
-  department: TicketDepartmentSchema.default(TicketDepartment.GENERAL_SUPPORT),
+  // Category is now a managed category KEY (see ticket-categories). Free text
+  // so admin-defined categories (e.g. "points", "results") are accepted.
+  category: z.string().min(1).default('general'),
+  // Legacy enum, kept for back-compat. The modern path sends department_id.
+  department: TicketDepartmentSchema.optional(),
+  // The department the submitter chose (FK to ticket_departments). Drives the
+  // ticket's department directly; routing still assigns staff/priority.
+  department_id: z.string().uuid().optional().nullable(),
   priority: TicketPrioritySchema.default(TicketPriority.MEDIUM),
   reporter_id: z.string().uuid(),
   event_id: z.string().uuid().optional().nullable(),
+  // Answers to admin-defined per-category custom fields. Validated against the
+  // active field definitions for the chosen category at creation time.
+  custom_field_answers: z.array(TicketCustomFieldAnswerInputSchema).optional(),
 });
 export type CreateTicketDto = z.infer<typeof CreateTicketSchema>;
 
@@ -34,7 +42,7 @@ export type CreateTicketDto = z.infer<typeof CreateTicketSchema>;
 export const UpdateTicketSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().min(1).optional(),
-  category: TicketCategorySchema.optional(),
+  category: z.string().optional(),
   department: TicketDepartmentSchema.optional(),
   department_id: z.string().uuid().optional().nullable(),
   priority: TicketPrioritySchema.optional(),
@@ -51,7 +59,7 @@ export const TicketSchema = z.object({
   ticket_number: z.string(),
   title: z.string(),
   description: z.string(),
-  category: TicketCategorySchema,
+  category: z.string(),
   department: TicketDepartmentSchema,
   priority: TicketPrioritySchema,
   status: TicketStatusSchema,
@@ -212,7 +220,7 @@ export const TicketListQuerySchema = z.object({
   limit: z.coerce.number().positive().max(100).default(10),
   status: TicketStatusSchema.optional(),
   priority: TicketPrioritySchema.optional(),
-  category: TicketCategorySchema.optional(),
+  category: z.string().optional(),
   department: TicketDepartmentSchema.optional(),
   reporter_id: z.string().uuid().optional(),
   assigned_to_id: z.string().uuid().optional(),

@@ -17,6 +17,8 @@ export * from "./membership-type-configs.schema.js";
 export * from "./results-import.schema.js";
 export * from "./tickets.schema.js";
 export * from "./ticket-admin.schema.js";
+export * from "./ticket-custom-fields.schema.js";
+export * from "./ticket-categories.schema.js";
 
 // Billing Schemas
 export * from "./billing-enums.schema.js";

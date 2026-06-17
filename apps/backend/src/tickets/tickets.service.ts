@@ -35,6 +35,7 @@ import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { StaffSignaturesService } from './staff-signatures.service';
+import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 
 /**
  * Statuses that mean nobody is actively expected to reply.
@@ -82,6 +83,7 @@ export class TicketsService {
     private readonly notificationsService: NotificationsService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly signaturesService: StaffSignaturesService,
+    private readonly customFieldsService: TicketCustomFieldsService,
   ) {}
 
   // ==========================================================================
@@ -665,6 +667,13 @@ export class TicketsService {
   ): Promise<Ticket> {
     const em = this.em.fork();
 
+    // Validate per-category custom fields BEFORE creating anything (so a missing
+    // required field fails cleanly). Also resolves an event_reference answer
+    // into an event id we can link below.
+    const category = data.category || TicketCategory.GENERAL;
+    const { fields: customFields, eventId: customEventId } =
+      await this.customFieldsService.validateForSubmission(category, data.custom_field_answers);
+
     // Generate ticket number (format: MECA-YYYYMMDD-XXXX)
     const ticketNumber = await this.generateTicketNumber(em);
 
@@ -691,9 +700,11 @@ export class TicketsService {
       submitterUserAgent: meta?.userAgent,
     };
 
-    // Set department entity from routing if available
-    if (routingResult.departmentId) {
-      ticketData.departmentEntity = Reference.createFromPK(TicketDepartmentEntity, routingResult.departmentId);
+    // Department: prefer the one the submitter chose; otherwise fall back to
+    // what routing resolved from the category/keywords.
+    const chosenDepartmentId = (data as any).department_id || routingResult.departmentId;
+    if (chosenDepartmentId) {
+      ticketData.departmentEntity = Reference.createFromPK(TicketDepartmentEntity, chosenDepartmentId);
     }
 
     // Set assigned staff from routing if available
@@ -706,12 +717,19 @@ export class TicketsService {
       }
     }
 
-    if (data.event_id) {
-      ticketData.event = Reference.createFromPK(Event, data.event_id);
+    // Prefer an explicitly-sent event_id; otherwise use an event_reference
+    // custom-field answer.
+    const effectiveEventId = data.event_id || customEventId;
+    if (effectiveEventId) {
+      ticketData.event = Reference.createFromPK(Event, effectiveEventId);
     }
 
     const ticket = em.create(Ticket, ticketData);
     await em.persistAndFlush(ticket);
+
+    // Persist custom-field answers (event_reference answers are skipped — they
+    // were folded into ticket.event above).
+    await this.customFieldsService.persistAnswers(em, ticket.id, customFields, data.custom_field_answers);
 
     // Fetch the full ticket with relations for email notifications
     const createdTicket = await this.findById(ticket.id);
@@ -1076,6 +1094,12 @@ export class TicketsService {
     // manual admin state and a reply on a resolved/closed ticket should
     // reopen via the explicit Reopen button, not via a comment side effect.
     if (!data.is_internal) {
+      // Any non-internal reply (from either side) restarts the inactivity
+      // clock, so cancel a pending auto-close warning. Persisted by the flush
+      // in the branches below (or the unconditional flush at the end).
+      const hadWarning = !!ticket.autoCloseWarningAt;
+      if (hadWarning) ticket.autoCloseWarningAt = undefined;
+
       // Statuses where comment activity should auto-shift the workflow.
       // ON_HOLD / RESOLVED / CLOSED require explicit admin moves.
       const isActive =
@@ -1104,6 +1128,9 @@ export class TicketsService {
           await em.flush();
         }
       }
+
+      // Persist the cleared warning if no status-change branch flushed it.
+      if (hadWarning) await em.flush();
     }
 
     // Send reply notification email (only for non-internal comments)

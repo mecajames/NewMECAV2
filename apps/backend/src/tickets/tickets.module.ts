@@ -1,5 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { UploadsModule } from '../uploads/uploads.module';
+import { StripeModule } from '../stripe/stripe.module';
+import { PayPalModule } from '../paypal/paypal.module';
 import { TicketsController } from './tickets.controller';
 import { TicketsService } from './tickets.service';
 import { TicketAdminController } from './ticket-admin.controller';
@@ -8,6 +10,11 @@ import { TicketDepartmentsService } from './ticket-departments.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketSettingsService } from './ticket-settings.service';
+import { TicketAutoCloseService } from './ticket-auto-close.service';
+import { TicketCustomFieldsService } from './ticket-custom-fields.service';
+import { TicketCategoriesService } from './ticket-categories.service';
+import { TicketPurchasesService } from './ticket-purchases.service';
+import { TicketRefundService } from './ticket-refund.service';
 import { TicketGuestService } from './ticket-guest.service';
 import { StaffSignaturesService } from './staff-signatures.service';
 import { StaffSignaturesController } from './staff-signatures.controller';
@@ -18,7 +25,7 @@ import { TicketCannedResponsesController } from './ticket-canned-responses.contr
 import { TicketSystemFiltersController } from './ticket-system-filters.controller';
 
 @Module({
-  imports: [UploadsModule],
+  imports: [UploadsModule, forwardRef(() => StripeModule), forwardRef(() => PayPalModule)],
   controllers: [
     TicketsController,
     TicketAdminController,
@@ -34,6 +41,11 @@ import { TicketSystemFiltersController } from './ticket-system-filters.controlle
     TicketStaffService,
     TicketRoutingService,
     TicketSettingsService,
+    TicketAutoCloseService,
+    TicketCustomFieldsService,
+    TicketCategoriesService,
+    TicketPurchasesService,
+    TicketRefundService,
     TicketGuestService,
     StaffSignaturesService,
     SavedTicketFiltersService,
@@ -45,6 +57,8 @@ import { TicketSystemFiltersController } from './ticket-system-filters.controlle
     TicketStaffService,
     TicketRoutingService,
     TicketSettingsService,
+    TicketCustomFieldsService,
+    TicketCategoriesService,
     TicketGuestService,
     StaffSignaturesService,
     SavedTicketFiltersService,

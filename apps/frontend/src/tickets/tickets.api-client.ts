@@ -65,6 +65,15 @@ export interface Ticket {
     id: string;
     name: string;
   } | null;
+  // Answers to admin-defined per-category custom fields, attached on the
+  // single-ticket detail fetch. Decoded (multiselect → array, etc.).
+  custom_field_answers?: {
+    field_id: string;
+    field_key: string;
+    label: string;
+    field_type: string;
+    value: string | number | boolean | string[] | null;
+  }[];
   comments_count?: number;
   // Decorated by the backend on list responses (not present on raw
   // single-ticket fetches). Surfaces the latest non-internal comment
@@ -168,14 +177,23 @@ export interface PaginatedTickets {
   total_pages: number;
 }
 
+export interface TicketCustomFieldAnswerData {
+  field_id: string;
+  value: string | number | boolean | string[] | null;
+}
+
 export interface CreateTicketData {
   title: string;
   description: string;
-  category?: TicketCategory;
+  // Managed category key (free text — supports admin-defined categories).
+  category?: string;
   department?: TicketDepartment;
+  // The department the submitter chose (FK to ticket_departments).
+  department_id?: string | null;
   priority?: TicketPriority;
   reporter_id: string;
   event_id?: string | null;
+  custom_field_answers?: TicketCustomFieldAnswerData[];
 }
 
 export interface UpdateTicketData {

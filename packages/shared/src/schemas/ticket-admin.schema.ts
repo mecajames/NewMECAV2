@@ -176,7 +176,8 @@ export const TicketSettingsMapSchema = z.object({
   allow_attachments: z.boolean(),
   max_attachment_size_mb: z.number(),
   require_category: z.boolean(),
-  auto_close_resolved_days: z.number(),
+  // Days awaiting customer reply (after staff replied) before warn + auto-close. 0 = off.
+  auto_close_inactive_days: z.number(),
   enable_email_notifications: z.boolean(),
   default_department_id: z.string().uuid().optional(),
 });

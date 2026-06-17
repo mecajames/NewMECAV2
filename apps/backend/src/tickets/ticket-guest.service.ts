@@ -1,23 +1,27 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, Reference } from '@mikro-orm/core';
 import { randomBytes } from 'crypto';
 import { TicketGuestToken, GuestTokenPurpose } from './entities/ticket-guest-token.entity';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { Profile } from '../profiles/profiles.entity';
-import { TicketCategory, TicketPriority, TicketStatus } from '@newmeca/shared';
+import { Event } from '../events/events.entity';
+import { TicketCategory, TicketPriority, TicketStatus, TicketCustomFieldAnswerInput } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
 import { EmailService } from '../email/email.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 
 export interface CreateGuestTicketData {
   title: string;
   description: string;
-  category: TicketCategory;
+  category: string;
   priority?: TicketPriority;
   guest_name: string;
   event_id?: string;
+  department_id?: string;
+  custom_field_answers?: TicketCustomFieldAnswerInput[];
 }
 
 export type EmailAccountStatus = 'no_account' | 'active' | 'expired';
@@ -78,6 +82,7 @@ export class TicketGuestService {
     private readonly routingService: TicketRoutingService,
     private readonly emailService: EmailService,
     private readonly uploadsService: UploadsService,
+    private readonly customFieldsService: TicketCustomFieldsService,
   ) {}
 
   /**
@@ -316,6 +321,11 @@ export class TicketGuestService {
     // guest tickets we honour the submitted category.
     const effectiveCategory = isAccountHelp ? TicketCategory.ACCOUNT : data.category;
 
+    // Validate per-category custom fields up front; resolve any event_reference
+    // answer into an event id to link on the ticket.
+    const { fields: customFields, eventId: customEventId } =
+      await this.customFieldsService.validateForSubmission(effectiveCategory, data.custom_field_answers);
+
     // Decide how the ticket relates to the profile:
     //  - account_help: a known active member who can't log in. Safe to link as
     //    reporter (they still hold no session, so no dashboard access) — gives
@@ -360,12 +370,14 @@ export class TicketGuestService {
       submitterIp: meta?.ipAddress,
       submitterUserAgent: meta?.userAgent,
       department: routingResult.departmentId ? undefined : 'general_support',
+      event: customEventId ? Reference.createFromPK(Event, customEventId) : undefined,
     } as any);
 
-    // Set department if routing found one
-    if (routingResult.departmentId) {
+    // Department: prefer the submitter's choice, else what routing resolved.
+    const chosenDeptId = data.department_id || routingResult.departmentId;
+    if (chosenDeptId) {
       const { TicketDepartment } = await import('./entities/ticket-department.entity');
-      const dept = await em.findOne(TicketDepartment, { id: routingResult.departmentId });
+      const dept = await em.findOne(TicketDepartment, { id: chosenDeptId });
       if (dept) {
         (ticket as any).departmentEntity = dept;
       }
@@ -377,6 +389,9 @@ export class TicketGuestService {
     }
 
     await em.persistAndFlush([guestToken, ticket]);
+
+    // Persist custom-field answers (event_reference folded into ticket.event above).
+    await this.customFieldsService.persistAnswers(em, ticket.id, customFields, data.custom_field_answers);
 
     // Send confirmation email to guest
     const viewTicketUrl = `${this.frontendUrl}/support/guest/ticket/${accessToken}`;
@@ -478,6 +493,10 @@ export class TicketGuestService {
     }
     // ESCALATED / PENDING_INTERNAL_REVIEW / ON_HOLD are explicit staff states
     // and are intentionally not auto-transitioned by guest comments.
+
+    // A guest reply restarts the inactivity clock → cancel any pending
+    // auto-close warning (mirrors the authenticated createComment path).
+    ticket.autoCloseWarningAt = undefined;
 
     await em.persistAndFlush([comment, ticket]);
 

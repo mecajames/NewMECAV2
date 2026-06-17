@@ -53,6 +53,8 @@ export interface CreateGuestTicketData {
   priority?: string;
   guest_name: string;
   event_id?: string;
+  department_id?: string;
+  custom_field_answers?: { field_id: string; value: string | number | boolean | string[] | null }[];
 }
 
 export type EmailAccountStatus = 'no_account' | 'active' | 'expired';
