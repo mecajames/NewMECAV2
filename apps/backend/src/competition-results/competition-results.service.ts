@@ -613,7 +613,11 @@ export class CompetitionResultsService {
     });
   }
 
-  async create(data: Partial<CompetitionResult>, userId?: string): Promise<CompetitionResult> {
+  async create(
+    data: Partial<CompetitionResult>,
+    userId?: string,
+    options?: { skipPointsRecalc?: boolean },
+  ): Promise<CompetitionResult> {
     const em = this.em.fork();
 
     // Transform snake_case API fields to camelCase entity properties
@@ -752,8 +756,12 @@ export class CompetitionResultsService {
     const result = em.create(CompetitionResult, transformedData);
     await em.persistAndFlush(result);
 
-    // Automatically recalculate points for all results in this event
-    if (eventId) {
+    // Automatically recalculate points for all results in this event.
+    // Bulk imports pass skipPointsRecalc:true and call updateEventPoints once
+    // after the whole batch — recalculating per-row makes the import O(n²)
+    // (every insert re-scans the full event), which is what timed the import
+    // endpoint out behind the load balancer (504) on large tlab uploads.
+    if (eventId && !options?.skipPointsRecalc) {
       try {
         await this.updateEventPoints(eventId);
 
@@ -815,7 +823,13 @@ export class CompetitionResultsService {
     return result;
   }
 
-  async update(id: string, data: Partial<CompetitionResult>, userId?: string, ipAddress?: string): Promise<CompetitionResult> {
+  async update(
+    id: string,
+    data: Partial<CompetitionResult>,
+    userId?: string,
+    ipAddress?: string,
+    options?: { skipPointsRecalc?: boolean },
+  ): Promise<CompetitionResult> {
     const em = this.em.fork();
     const result = await em.findOne(CompetitionResult, { id }, { populate: ['event'] });
     if (!result) {
@@ -959,8 +973,10 @@ export class CompetitionResultsService {
     }
     await em.flush();
 
-    // Automatically recalculate points for all results in this event
-    if (eventId) {
+    // Automatically recalculate points for all results in this event.
+    // Bulk imports pass skipPointsRecalc:true and recalc once after the batch
+    // (see create() — per-row recalc is O(n²) and causes the 504 on import).
+    if (eventId && !options?.skipPointsRecalc) {
       try {
         await this.updateEventPoints(eventId);
 
@@ -2318,10 +2334,21 @@ export class CompetitionResultsService {
           frequency: result.frequency || null,
           notes: `Imported from ${fileExtension} file`,
           created_by: createdBy,
-        } as any, createdBy);
+        } as any, createdBy, { skipPointsRecalc: true });
         imported++;
       } catch (error: any) {
         errors.push(`Failed to import ${result.name} in ${result.class}: ${error.message}`);
+      }
+    }
+
+    // Recalculate points ONCE for the whole event after all rows are inserted.
+    // (Each create() above skipped its per-row recalc — doing it per row is
+    // O(n²) and timed the request out at the load balancer on large imports.)
+    if (imported > 0) {
+      try {
+        await this.updateEventPoints(eventId);
+      } catch (pointsError) {
+        this.logger.error(`Failed to recalculate points for event ${eventId} after import: ${pointsError}`);
       }
     }
 
@@ -3330,7 +3357,7 @@ export class CompetitionResultsService {
               wattage: result.wattage || null,
               frequency: result.frequency || null,
               notes: `Updated from ${fileExtension} import`,
-            } as any, createdBy, ipAddress);
+            } as any, createdBy, ipAddress, { skipPointsRecalc: true });
             updated++;
             continue;
           }
@@ -3354,10 +3381,22 @@ export class CompetitionResultsService {
           frequency: result.frequency || null,
           notes: `Imported from ${fileExtension} file`,
           created_by: createdBy,
-        } as any, createdBy);
+        } as any, createdBy, { skipPointsRecalc: true });
         imported++;
       } catch (error: any) {
         errors.push(`Failed to import ${result.name} in ${result.class}: ${error.message}`);
+      }
+    }
+
+    // Recalculate points ONCE for the whole event after all rows are
+    // inserted/updated. Each create()/update() above skipped its per-row
+    // recalc — doing it per row is O(n²) and is what timed the import request
+    // out at the load balancer (504) on large tlab uploads.
+    if (imported > 0 || updated > 0) {
+      try {
+        await this.updateEventPoints(eventId);
+      } catch (pointsError) {
+        this.logger.error(`Failed to recalculate points for event ${eventId} after import: ${pointsError}`);
       }
     }
 
