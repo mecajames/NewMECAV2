@@ -220,6 +220,9 @@ export const competitionResultsApi = {
       // competition_classes row. Frontend uses this to drive the
       // "Unknown Classes" section of the import review modal.
       unknownClass?: string;
+      // Present when a matching result already exists for this event. Drives
+      // the "already in the system" duplicate banner + skip/overwrite choice.
+      existing?: { id: string; score: number; placement: number; wattage: number | null; frequency: number | null } | null;
     }>;
     totalCount: number;
     needsNameConfirmation: number;
@@ -241,14 +244,23 @@ export const competitionResultsApi = {
     parsedResults: any[],
     resolutions: Record<number, 'skip' | 'replace'>,
     createdBy: string,
-    fileExtension: string
+    fileExtension: string,
+    file?: File
   ): Promise<{ message: string; imported: number; updated: number; skipped: number; errors: string[] }> => {
-    const response = await axios.post(`/api/competition-results/import-with-resolution/${eventId}`, {
-      parsedResults,
-      resolutions,
-      createdBy,
-      fileExtension,
-    });
+    // Sent as multipart so the original upload rides along and the backend can
+    // store it (Supabase) for the Imported Files tab. JSON payloads are
+    // stringified into form fields; the controller parses them back.
+    const formData = new FormData();
+    if (file) formData.append('file', file);
+    formData.append('parsedResults', JSON.stringify(parsedResults));
+    formData.append('resolutions', JSON.stringify(resolutions));
+    formData.append('createdBy', createdBy);
+    formData.append('fileExtension', fileExtension);
+
+    const response = await axios.post(
+      `/api/competition-results/import-with-resolution/${eventId}`,
+      formData
+    );
     return response.data;
   },
 

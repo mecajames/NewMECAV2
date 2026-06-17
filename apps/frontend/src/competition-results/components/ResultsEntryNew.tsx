@@ -70,6 +70,8 @@ interface ParsedResultItem {
   missingFields: string[];
   isValid: boolean;
   validationErrors: string[];
+  // Present when a matching result already exists for this event (re-upload).
+  existing?: { id: string; score: number; placement: number; wattage: number | null; frequency: number | null } | null;
 }
 
 interface UserDecision {
@@ -190,6 +192,26 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Drives the import progress overlay: 'parsing' while the file is uploaded
+  // and validated, 'importing' while results are written. The underlying API
+  // calls are single requests, so the bar is intentionally indeterminate — it
+  // exists so large-file imports don't look frozen.
+  const [importPhase, setImportPhase] = useState<'idle' | 'parsing' | 'importing'>('idle');
+  // Item-3: how results already in the system are treated on re-upload.
+  const [duplicateMode, setDuplicateMode] = useState<'skip' | 'overwrite'>('skip');
+  // A parsed import row will actually be written (not skipped/blocked, and not
+  // an existing duplicate the admin chose to skip). Shared by the counter, the
+  // Import button's disabled state, and the per-row status text.
+  const willImportRow = (r: any): boolean => {
+    const d = userDecisions[r.index];
+    if (d?.skip) return false;
+    if (!r.isValid) return false;
+    if (r.nameMatch && d?.confirmNameMatch === null) return false;
+    if (r.missingFields.includes('wattage') && !d?.wattage) return false;
+    if (r.missingFields.includes('frequency') && !d?.frequency) return false;
+    if (r.existing && duplicateMode === 'skip') return false;
+    return true;
+  };
 
   // Membership status tracking for current entry
   const [currentEntryMembershipStatus, setCurrentEntryMembershipStatus] = useState<string>('');
@@ -593,6 +615,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
 
     setSelectedFile(file);
     setUploading(true);
+    setImportPhase('parsing');
 
     try {
       // Use the new parseAndValidate endpoint
@@ -620,6 +643,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     }
 
     setUploading(false);
+    setImportPhase('idle');
   };
 
   /**
@@ -672,66 +696,71 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
     if (!selectedEventId || !profile?.id) return;
 
     setUploading(true);
+    setImportPhase('importing');
 
     try {
       // Build the final results array applying user decisions
       const finalResults: any[] = [];
       const resolutions: Record<number, 'skip' | 'replace'> = {};
 
+      // Send EVERY parsed row in order and key the resolution map by ARRAY
+      // POSITION — the backend iterates this same array by index, so skip/
+      // replace decisions stay aligned to the right row. (The old code keyed by
+      // the original parse index while sending a filtered array, which let
+      // resolutions land on the wrong rows.)
+      let toImport = 0;
       for (const item of parsedResults) {
         const decision = userDecisions[item.index];
+        const pos = finalResults.length;
 
-        // Skip if user marked as skip
-        if (decision?.skip) {
-          resolutions[item.index] = 'skip';
-          continue;
-        }
+        const needsNameConfirm = item.nameMatch && decision?.confirmNameMatch === null;
+        const needsWattage = item.missingFields.includes('wattage') && !decision?.wattage;
+        const needsFrequency = item.missingFields.includes('frequency') && !decision?.frequency;
+        const blocked = !item.isValid || needsNameConfirm || needsWattage || needsFrequency;
 
-        // Check if name match needs confirmation but wasn't decided
-        if (item.nameMatch && decision?.confirmNameMatch === null) {
-          // Skip entries where user didn't confirm name match
-          resolutions[item.index] = 'skip';
-          continue;
-        }
-
-        // Check if missing fields weren't filled
-        if (item.missingFields.length > 0) {
-          const hasMissingWattage = item.missingFields.includes('wattage') && !decision?.wattage;
-          const hasMissingFrequency = item.missingFields.includes('frequency') && !decision?.frequency;
-          if (hasMissingWattage || hasMissingFrequency) {
-            resolutions[item.index] = 'skip';
-            continue;
-          }
-        }
-
-        // Build the result data
+        // Build the result data (apply name-match + entered wattage/frequency).
         const resultData = {
           ...item.data,
-          // Apply name match decision
           memberID: item.nameMatch && decision?.confirmNameMatch === true
             ? item.nameMatch.matchedMecaId
             : item.data.memberID || '999999',
-          // Apply user-provided wattage/frequency
-          wattage: decision?.wattage || item.data.wattage,
-          frequency: decision?.frequency || item.data.frequency,
+          wattage: decision?.wattage ?? item.data.wattage,
+          frequency: decision?.frequency ?? item.data.frequency,
         };
 
+        // Skip: user-skipped, blocked (invalid/unconfirmed/missing data), or an
+        // existing result the admin chose to leave alone.
+        if (decision?.skip || blocked || (item.existing && duplicateMode === 'skip')) {
+          finalResults.push(resultData);
+          resolutions[pos] = 'skip';
+          continue;
+        }
+
+        // Existing result the admin chose to overwrite → update it in place.
+        if (item.existing && duplicateMode === 'overwrite') {
+          resolutions[pos] = 'replace';
+        }
+
         finalResults.push(resultData);
+        toImport++;
       }
 
-      if (finalResults.length === 0) {
-        alert('No results to import. All entries were skipped or missing required data.');
+      if (toImport === 0) {
+        alert('No results to import. All entries were skipped, already in the system, or missing required data.');
         setUploading(false);
+        setImportPhase('idle');
         return;
       }
 
-      // Import using the resolution endpoint
+      // Import using the resolution endpoint. Pass the original file so the
+      // backend stores it (Supabase) + lists it in the Imported Files tab.
       const result = await competitionResultsApi.importWithResolution(
         selectedEventId,
         finalResults,
         resolutions,
         profile.id,
-        importFileExtension
+        importFileExtension,
+        selectedFile || undefined,
       );
 
       let message = result.message;
@@ -746,6 +775,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       setPreviewResults([]);
       setParsedResults([]);
       setUserDecisions({});
+      setDuplicateMode('skip');
       setShowPreviewModal(false);
       setShowImportReviewModal(false);
       if (fileInputRef.current) {
@@ -756,11 +786,13 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
       await handleRecalculatePoints();
 
       fetchExistingResults();
+      fetchImportedSessions();
     } catch (error: any) {
       alert('Failed to import file: ' + error.message);
     }
 
     setUploading(false);
+    setImportPhase('idle');
   };
 
   const resetForm = () => {
@@ -1134,6 +1166,27 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Import progress overlay — shown while a TermLab/Excel file is being
+          parsed or its results written. The underlying calls are single
+          requests, so the bar is intentionally indeterminate; it exists to
+          reassure the user the app isn't frozen on large files. */}
+      {importPhase !== 'idle' && (
+        <div className="fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4">
+          <div className="w-full max-w-md rounded-xl border border-orange-500/40 bg-slate-800 shadow-2xl p-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-block h-5 w-5 flex-shrink-0 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
+              <div className="text-sm font-medium text-white">
+                {importPhase === 'parsing'
+                  ? 'Reading and validating your file…'
+                  : 'Importing results — please keep this window open…'}
+              </div>
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-700">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-orange-500" />
+            </div>
+          </div>
+        </div>
+      )}
       <h2 className="text-2xl font-bold text-white mb-6">Competition Results Entry</h2>
 
       {/* Season and Event Selection */}
@@ -2284,6 +2337,49 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 </div>
               )}
 
+              {/* Already-in-system banner (item 3). Shown when one or more
+                  parsed rows match a result already entered for this event.
+                  Admin chooses to skip them (default) or overwrite. */}
+              {parsedResults.some(r => r.existing) && (
+                <div className="mb-4 p-4 bg-blue-900/30 border border-blue-500/50 rounded-lg">
+                  <div className="flex items-start gap-2 mb-3">
+                    <AlertCircle className="h-5 w-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-blue-100 font-semibold">
+                        {parsedResults.filter(r => r.existing).length} result{parsedResults.filter(r => r.existing).length === 1 ? ' is' : 's are'} already in the system for this event
+                      </h3>
+                      <p className="text-blue-200/80 text-xs mt-1">
+                        These match an existing entry (same competitor, format and class). Choose what to do with them — the rest still import as new.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateMode('skip')}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        duplicateMode === 'skip'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 hover:bg-slate-600 text-gray-200'
+                      }`}
+                    >
+                      Skip existing — import only new
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateMode('overwrite')}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        duplicateMode === 'overwrite'
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-slate-700 hover:bg-slate-600 text-gray-200'
+                      }`}
+                    >
+                      Overwrite existing with this file
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Results Table */}
               <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
                 <table className="w-full text-sm">
@@ -2305,6 +2401,8 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                       const needsNameConfirm = item.nameMatch && decision?.confirmNameMatch === null;
                       const needsWattage = item.missingFields.includes('wattage') && !decision?.wattage;
                       const needsFrequency = item.missingFields.includes('frequency') && !decision?.frequency;
+                      const isExisting = !!item.existing;
+                      const willSkipExisting = isExisting && duplicateMode === 'skip';
                       const hasIssues = needsNameConfirm || needsWattage || needsFrequency || !item.isValid;
 
                       return (
@@ -2322,6 +2420,17 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                                 <span className="text-yellow-400">Match found: </span>
                                 <span className="text-blue-400">{item.nameMatch.matchedName}</span>
                                 <span className="text-gray-400"> (ID: {item.nameMatch.matchedMecaId})</span>
+                              </div>
+                            )}
+                            {item.nameMatch && decision?.confirmNameMatch === true && (
+                              <div className="text-xs mt-0.5 text-green-400">→ Will link to {item.nameMatch.matchedName} (ID: {item.nameMatch.matchedMecaId})</div>
+                            )}
+                            {item.nameMatch && decision?.confirmNameMatch === false && (
+                              <div className="text-xs mt-0.5 text-gray-400">→ Will import as non-member (999999)</div>
+                            )}
+                            {isExisting && (
+                              <div className="text-xs mt-0.5 text-blue-300">
+                                Already in system (score {item.existing?.score ?? '—'}) — {willSkipExisting ? 'will skip' : 'will overwrite'}
                               </div>
                             )}
                           </td>
@@ -2379,46 +2488,68 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                             ) : !item.isValid ? (
                               <span className="text-red-400 text-xs">{item.validationErrors.join(', ')}</span>
                             ) : needsNameConfirm ? (
-                              <span className="text-yellow-400 text-xs">Confirm name match</span>
-                            ) : needsWattage || needsFrequency ? (
-                              <span className="text-orange-400 text-xs">Complete data</span>
+                              <span className="text-yellow-400 text-xs">Choose Use or Ignore</span>
+                            ) : needsWattage && needsFrequency ? (
+                              <span className="text-orange-400 text-xs">Enter wattage &amp; frequency</span>
+                            ) : needsWattage ? (
+                              <span className="text-orange-400 text-xs">Enter wattage</span>
+                            ) : needsFrequency ? (
+                              <span className="text-orange-400 text-xs">Enter frequency</span>
+                            ) : willSkipExisting ? (
+                              <span className="text-blue-300 text-xs">Already entered — skipping</span>
+                            ) : isExisting ? (
+                              <span className="text-orange-300 text-xs">Will overwrite existing</span>
                             ) : (
-                              <span className="text-green-400 text-xs">Ready</span>
+                              <span className="text-green-400 text-xs">Ready — will import</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex gap-1 flex-wrap">
                               {item.nameMatch && !isSkipped && (
-                                <>
-                                  <button
-                                    onClick={() => setUserDecisions(prev => ({
-                                      ...prev,
-                                      [item.index]: { ...prev[item.index], confirmNameMatch: true }
-                                    }))}
-                                    className={`px-2 py-1 rounded text-xs transition-colors ${
-                                      decision?.confirmNameMatch === true
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-slate-600 hover:bg-green-600 text-gray-300 hover:text-white'
-                                    }`}
-                                    title="Use matched MECA ID"
-                                  >
-                                    ✓ Use
-                                  </button>
-                                  <button
-                                    onClick={() => setUserDecisions(prev => ({
-                                      ...prev,
-                                      [item.index]: { ...prev[item.index], confirmNameMatch: false }
-                                    }))}
-                                    className={`px-2 py-1 rounded text-xs transition-colors ${
-                                      decision?.confirmNameMatch === false
-                                        ? 'bg-gray-600 text-white'
-                                        : 'bg-slate-600 hover:bg-gray-600 text-gray-300 hover:text-white'
-                                    }`}
-                                    title="Use as non-member (999999)"
-                                  >
-                                    ✗ Ignore
-                                  </button>
-                                </>
+                                (decision?.confirmNameMatch ?? null) === null ? (
+                                  // Undecided — prompt the admin to choose. Only
+                                  // these rows still show the action buttons.
+                                  <>
+                                    <button
+                                      onClick={() => setUserDecisions(prev => ({
+                                        ...prev,
+                                        [item.index]: { ...prev[item.index], confirmNameMatch: true }
+                                      }))}
+                                      className="px-2 py-1 rounded text-xs bg-green-600 hover:bg-green-700 text-white transition-colors"
+                                      title="Use matched MECA ID"
+                                    >
+                                      ✓ Use
+                                    </button>
+                                    <button
+                                      onClick={() => setUserDecisions(prev => ({
+                                        ...prev,
+                                        [item.index]: { ...prev[item.index], confirmNameMatch: false }
+                                      }))}
+                                      className="px-2 py-1 rounded text-xs bg-slate-600 hover:bg-gray-600 text-gray-300 hover:text-white transition-colors"
+                                      title="Use as non-member (999999)"
+                                    >
+                                      ✗ Ignore
+                                    </button>
+                                  </>
+                                ) : (
+                                  // Decided — show the outcome compactly with a "change"
+                                  // link, so a confirmed/Ready row no longer shows a
+                                  // lingering green button.
+                                  <span className="text-xs flex items-center gap-1.5">
+                                    {decision?.confirmNameMatch === true
+                                      ? <span className="text-green-400">✓ Member</span>
+                                      : <span className="text-gray-400">Non-member</span>}
+                                    <button
+                                      onClick={() => setUserDecisions(prev => ({
+                                        ...prev,
+                                        [item.index]: { ...prev[item.index], confirmNameMatch: null }
+                                      }))}
+                                      className="underline text-gray-400 hover:text-white"
+                                    >
+                                      change
+                                    </button>
+                                  </span>
+                                )
                               )}
                               <button
                                 onClick={() => setUserDecisions(prev => ({
@@ -2447,15 +2578,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 <div className="flex justify-between items-center text-sm">
                   <div className="text-gray-300">
                     <span className="text-green-400 font-semibold">
-                      {parsedResults.filter(r => {
-                        const d = userDecisions[r.index];
-                        if (d?.skip) return false;
-                        if (!r.isValid) return false;
-                        if (r.nameMatch && d?.confirmNameMatch === null) return false;
-                        if (r.missingFields.includes('wattage') && !d?.wattage) return false;
-                        if (r.missingFields.includes('frequency') && !d?.frequency) return false;
-                        return true;
-                      }).length}
+                      {parsedResults.filter(willImportRow).length}
                     </span>
                     <span className="text-gray-400"> of {parsedResults.length} will be imported</span>
                   </div>
@@ -2479,15 +2602,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                         // Block while unknown classes exist — admin
                         // must create them system-wide first.
                         unknownClasses.length > 0 ||
-                        parsedResults.filter(r => {
-                          const d = userDecisions[r.index];
-                          if (d?.skip) return false;
-                          if (!r.isValid) return false;
-                          if (r.nameMatch && d?.confirmNameMatch === null) return false;
-                          if (r.missingFields.includes('wattage') && !d?.wattage) return false;
-                          if (r.missingFields.includes('frequency') && !d?.frequency) return false;
-                          return true;
-                        }).length === 0
+                        parsedResults.filter(willImportRow).length === 0
                       }
                       title={unknownClasses.length > 0 ? `Resolve ${unknownClasses.length} unknown class${unknownClasses.length === 1 ? '' : 'es'} first` : undefined}
                       className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"

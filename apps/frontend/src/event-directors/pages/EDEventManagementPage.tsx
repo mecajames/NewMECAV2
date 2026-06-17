@@ -903,13 +903,15 @@ export default function EDEventManagementPage() {
         return;
       }
 
-      // Import using the resolution endpoint
+      // Import using the resolution endpoint. Pass the original file so the
+      // backend stores it (Supabase) + lists it in the Imported Files tab.
       const result = await competitionResultsApi.importWithResolution(
         eventId,
         finalResults,
         resolutions,
         profile.id,
-        importFileExtension
+        importFileExtension,
+        selectedFile || undefined,
       );
 
       let message = result.message;

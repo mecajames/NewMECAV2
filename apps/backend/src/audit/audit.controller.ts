@@ -157,22 +157,37 @@ export class AuditController {
       throw new NotFoundException('File not found for this session');
     }
 
-    try {
-      // Check if file exists
-      await fs.access(filePath);
+    const filename = path.basename(filePath);
 
-      // Get filename
-      const filename = path.basename(filePath);
-
-      // Set headers
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-      // Read and send file
-      const fileBuffer = await fs.readFile(filePath);
-      res.send(fileBuffer);
-    } catch (error) {
-      throw new NotFoundException('File not found on disk');
+    // Newer sessions store a Supabase Storage path (relative); legacy/manual
+    // sessions may still hold an absolute local-disk path. Handle both.
+    if (path.isAbsolute(filePath)) {
+      try {
+        await fs.access(filePath);
+        const fileBuffer = await fs.readFile(filePath);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(fileBuffer);
+        return;
+      } catch (error) {
+        throw new NotFoundException('File not found on disk');
+      }
     }
+
+    // Supabase Storage object — download and stream it back. (Dedicated
+    // results-imports bucket; see AuditService.saveUploadedFile.)
+    const { data, error } = await this.supabaseAdmin
+      .getClient()
+      .storage.from('results-imports')
+      .download(filePath);
+
+    if (error || !data) {
+      throw new NotFoundException('File not found in storage');
+    }
+
+    const arrayBuffer = await data.arrayBuffer();
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(Buffer.from(arrayBuffer));
   }
 }
