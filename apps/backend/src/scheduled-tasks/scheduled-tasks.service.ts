@@ -57,6 +57,96 @@ export class ScheduledTasksService {
   }
 
   // =============================================================================
+  // MEMBERSHIP STATUS RECONCILE — keep profiles.membership_status accurate.
+  // The denormalized label had no job maintaining it, so lapsed members stayed
+  // labelled 'active' (sending them to a "please log in" dead end at checkout
+  // and slipping past the expired-login gate). This reconciles the label to the
+  // source of truth and runs daily so it never drifts again.
+  // =============================================================================
+
+  // "Active" mirrors ActiveMembershipGuard: a PAID, unexpired membership OR an
+  // active free_period comp (comps MUST count — otherwise a comped member would
+  // be labelled 'expired' and the frontend gate would sign them out). Ever-paid
+  // members who aren't currently active → 'expired'; everyone else → 'none'.
+  // References the alias `p` (public.profiles p) used by both queries below.
+  private static readonly DESIRED_MEMBERSHIP_STATUS_SQL = `CASE
+    WHEN EXISTS (
+      SELECT 1 FROM public.memberships m
+       WHERE m.user_id = p.id AND m.payment_status = 'paid'
+         AND (m.end_date IS NULL OR m.end_date > now())
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.membership_comps c
+        JOIN public.memberships mc ON mc.id = c.membership_id
+       WHERE mc.user_id = p.id AND c.comp_type = 'free_period'
+         AND c.status = 'active' AND (c.ends_at IS NULL OR c.ends_at > now())
+    )
+      THEN 'active'
+    WHEN EXISTS (
+      SELECT 1 FROM public.memberships m2
+       WHERE m2.user_id = p.id AND m2.payment_status = 'paid'
+    )
+      THEN 'expired'
+    ELSE 'none'
+  END`;
+
+  /**
+   * Reconcile profiles.membership_status against the source of truth (paid +
+   * unexpired membership, or an active free_period comp). Set-based, idempotent,
+   * and lockout-safe (comps count as active). Pass { dryRun: true } to preview
+   * the change counts without writing anything.
+   */
+  async reconcileMembershipStatuses(opts: { dryRun?: boolean } = {}): Promise<{
+    dryRun: boolean;
+    totalChanged: number;
+    changes: Array<{ from: string; to: string; count: number }>;
+  }> {
+    const conn = this.em.getConnection();
+    const desired = ScheduledTasksService.DESIRED_MEMBERSHIP_STATUS_SQL;
+
+    const rows = await conn.execute<any[]>(
+      `SELECT COALESCE(p.membership_status::text, '(null)') AS from_status,
+              (${desired}) AS to_status,
+              count(*)::int AS n
+         FROM public.profiles p
+        WHERE p.membership_status::text IS DISTINCT FROM (${desired})
+        GROUP BY 1, 2
+        ORDER BY n DESC`,
+    );
+    const changes = (rows || []).map((r: any) => ({
+      from: String(r.from_status),
+      to: String(r.to_status),
+      count: Number(r.n),
+    }));
+    const totalChanged = changes.reduce((s: number, c: { count: number }) => s + c.count, 0);
+
+    if (!opts.dryRun && totalChanged > 0) {
+      await conn.execute(
+        `UPDATE public.profiles AS p
+            SET membership_status = (${desired})::public.membership_status
+          WHERE p.membership_status::text IS DISTINCT FROM (${desired})`,
+      );
+    }
+
+    this.logger.log(
+      `reconcileMembershipStatuses(${opts.dryRun ? 'dry-run' : 'apply'}): ${totalChanged} profile(s) ${opts.dryRun ? 'would change' : 'changed'}${changes.length ? ' — ' + changes.map((c: { from: string; to: string; count: number }) => `${c.from}->${c.to}:${c.count}`).join(', ') : ''}`,
+    );
+    return { dryRun: !!opts.dryRun, totalChanged, changes };
+  }
+
+  // Runs daily. NOT prod-gated: it sends no emails / issues no tokens and only
+  // corrects a denormalized label to match the membership truth, so it's safe
+  // (and beneficial) in every environment.
+  @Cron(CronExpression.EVERY_DAY_AT_6AM)
+  async reconcileMembershipStatusesCron() {
+    try {
+      await this.reconcileMembershipStatuses();
+    } catch (err) {
+      this.logger.error(`Daily membership-status reconcile failed: ${err}`);
+    }
+  }
+
+  // =============================================================================
   // DUNNING — escalating emails on failed renewal payments, auto-suspend at day 14.
   // Steps: day 1 → step 1, day 3 → step 2, day 7 → step 3, day 14 → step 4 (suspend).
   // =============================================================================
