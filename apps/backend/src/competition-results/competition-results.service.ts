@@ -2139,10 +2139,15 @@ export class CompetitionResultsService {
     });
     this.currentSessionId = session.id;
 
-    // Save uploaded file if provided and update session with file path
+    // Archive the uploaded file (best-effort). A storage failure must NEVER
+    // fail the import.
     if (file) {
-      const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
-      await this.auditService.updateSessionFilePath(session.id, filePath);
+      try {
+        const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
+        await this.auditService.updateSessionFilePath(session.id, filePath);
+      } catch (fileErr) {
+        this.logger.error(`Failed to archive import file for session ${session.id} (continuing import): ${fileErr}`);
+      }
     }
 
     // Fetch all profiles (for backward compatibility with name matching)
@@ -2820,6 +2825,10 @@ export class CompetitionResultsService {
       // competition_classes row. Frontend uses this to drive the
       // "Unknown Classes" section of the import review modal.
       unknownClass?: string;
+      // Present when a result for this competitor + format + class already
+      // exists for the event. Drives the "already in the system" duplicate
+      // banner so the admin can choose skip vs overwrite on re-upload.
+      existing?: { id: string; score: number; placement: number; wattage: number | null; frequency: number | null } | null;
     }>;
     totalCount: number;
     needsNameConfirmation: number;
@@ -2859,6 +2868,10 @@ export class CompetitionResultsService {
     // Also fetch profiles for fallback matching
     const profiles = await em.find(Profile, {});
 
+    // Existing results for this event — used to flag rows that are already in
+    // the system so the import modal can offer skip vs overwrite on re-upload.
+    const existingResults = await em.find(CompetitionResult, { event: eventId });
+
     const results: Array<{
       index: number;
       data: any;
@@ -2872,6 +2885,7 @@ export class CompetitionResultsService {
       isValid: boolean;
       validationErrors: string[];
       unknownClass?: string;
+      existing?: { id: string; score: number; placement: number; wattage: number | null; frequency: number | null } | null;
     }> = [];
 
     let needsNameConfirmation = 0;
@@ -2988,6 +3002,35 @@ export class CompetitionResultsService {
         needsDataCompletion++;
       }
 
+      // Flag rows already present for this event (same format + class AND a
+      // matching MECA ID — the file's or the name-matched one — or the
+      // competitor name). Mirrors the 'replace' matching in the import so the
+      // overwrite path lands on the same row the banner reports.
+      let existing: { id: string; score: number; placement: number; wattage: number | null; frequency: number | null } | null = null;
+      if (format && result.class) {
+        const fileMeca = result.memberID && String(result.memberID) !== '999999' ? String(result.memberID) : null;
+        const matchedMeca = nameMatch?.matchedMecaId ? String(nameMatch.matchedMecaId) : null;
+        const nameLower = (result.name || '').toLowerCase().trim();
+        const match = existingResults.find(r =>
+          r.format?.toLowerCase() === String(format).toLowerCase() &&
+          r.competitionClass?.toLowerCase() === String(result.class).toLowerCase() &&
+          (
+            (!!fileMeca && String(r.mecaId) === fileMeca) ||
+            (!!matchedMeca && String(r.mecaId) === matchedMeca) ||
+            (!!nameLower && r.competitorName?.toLowerCase().trim() === nameLower)
+          )
+        );
+        if (match) {
+          existing = {
+            id: match.id,
+            score: match.score,
+            placement: match.placement,
+            wattage: match.wattage ?? null,
+            frequency: match.frequency ?? null,
+          };
+        }
+      }
+
       const isValid = validationErrors.length === 0;
 
       results.push({
@@ -3001,6 +3044,7 @@ export class CompetitionResultsService {
         isValid,
         validationErrors,
         unknownClass: unknownClassName,
+        existing,
       });
     }
 
@@ -3152,10 +3196,16 @@ export class CompetitionResultsService {
     });
     this.currentSessionId = session.id;
 
-    // Save uploaded file if provided
+    // Archive the uploaded file (best-effort). A storage failure must NEVER
+    // fail the import — the results matter; the saved file is a convenience
+    // for the Imported Files tab.
     if (file) {
-      const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
-      await this.auditService.updateSessionFilePath(session.id, filePath);
+      try {
+        const filePath = await this.auditService.saveUploadedFile(file, eventId, session.id);
+        await this.auditService.updateSessionFilePath(session.id, filePath);
+      } catch (fileErr) {
+        this.logger.error(`Failed to archive import file for session ${session.id} (continuing import): ${fileErr}`);
+      }
     }
 
     // Fetch all profiles (for backward compatibility with name matching)

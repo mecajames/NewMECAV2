@@ -4,13 +4,38 @@ import { ResultsEntrySession } from './results-entry-session.entity';
 import { ResultsAuditLog } from './results-audit-log.entity';
 import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as XLSX from 'xlsx';
 
 @Injectable()
 export class AuditService {
-  constructor(@Inject('EntityManager') private readonly em: EntityManager) {}
+  // Dedicated private Supabase Storage bucket for uploaded import files.
+  // Durable across redeploys (the old local-disk path did not survive the
+  // containerized app). Auto-created on first use so there's no manual prod
+  // step; kept SEPARATE from the mime-restricted 'documents' bucket so
+  // .xlsx/.tlab (octet-stream) uploads aren't rejected by an allow-list.
+  private static readonly IMPORT_BUCKET = 'results-imports';
+  private static bucketEnsured = false;
+
+  constructor(
+    @Inject('EntityManager') private readonly em: EntityManager,
+    private readonly supabaseAdmin: SupabaseAdminService,
+  ) {}
+
+  /** Create the import bucket if it doesn't exist yet (idempotent). */
+  private async ensureImportBucket(): Promise<void> {
+    if (AuditService.bucketEnsured) return;
+    const { error } = await this.supabaseAdmin
+      .getClient()
+      .storage.createBucket(AuditService.IMPORT_BUCKET, { public: false });
+    // "Already exists" counts as success; only cache the flag when the bucket
+    // is definitely present so a transient failure retries next import.
+    if (!error || /exist/i.test(error.message)) {
+      AuditService.bucketEnsured = true;
+    }
+  }
 
   /**
    * Create a new entry session
@@ -131,21 +156,30 @@ export class AuditService {
     eventId: string,
     sessionId: string
   ): Promise<string> {
-    const auditDir = path.join(process.cwd(), 'audit-logs', 'uploads', eventId);
+    // Store under <eventId>/<sessionId>_<timestamp><ext> in the dedicated
+    // results-imports bucket. We persist the storage PATH (not an absolute disk
+    // path) in results_entry_sessions.file_path; downloads stream it back out
+    // of Supabase Storage. This survives container redeploys, unlike the old
+    // local-disk write.
+    await this.ensureImportBucket();
 
-    // Create directory if it doesn't exist
-    await fs.mkdir(auditDir, { recursive: true });
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const ext = path.extname(file.originalname);
-    const filename = `${sessionId}_${timestamp}${ext}`;
-    const filePath = path.join(auditDir, filename);
+    const ext = path.extname(file.originalname) || '';
+    const storagePath = `${eventId}/${sessionId}_${timestamp}${ext}`;
 
-    // Save file
-    await fs.writeFile(filePath, file.buffer);
+    const { error } = await this.supabaseAdmin
+      .getClient()
+      .storage.from(AuditService.IMPORT_BUCKET)
+      .upload(storagePath, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        upsert: true,
+      });
 
-    return filePath;
+    if (error) {
+      throw new Error(`Failed to store import file in Supabase Storage: ${error.message}`);
+    }
+
+    return storagePath;
   }
 
   /**

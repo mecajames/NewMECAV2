@@ -538,17 +538,29 @@ export class CompetitionResultsController {
 
   @Post('import-with-resolution/:eventId')
   @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
   async importWithResolution(
     @Param('eventId') eventId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: {
-      parsedResults: any[];
-      resolutions: Record<number, 'skip' | 'replace'>;
+      // Sent as multipart now so the original file rides along and gets saved
+      // to Supabase Storage for the Imported Files tab. Multipart form fields
+      // arrive as strings; we also accept plain objects for JSON callers.
+      parsedResults: string | any[];
+      resolutions?: string | Record<number, 'skip' | 'replace'>;
       createdBy: string;
-      fileExtension: string;
+      fileExtension?: string;
     },
     @Req() req: Request
   ): Promise<{ message: string; imported: number; updated: number; skipped: number; errors: string[] }> {
-    if (!body.parsedResults || !body.createdBy) {
+    const parsedResults =
+      typeof body.parsedResults === 'string' ? JSON.parse(body.parsedResults) : body.parsedResults;
+    const resolutions =
+      typeof body.resolutions === 'string'
+        ? JSON.parse(body.resolutions || '{}')
+        : body.resolutions || {};
+
+    if (!parsedResults || !body.createdBy) {
       throw new BadRequestException('Missing required fields');
     }
 
@@ -556,11 +568,11 @@ export class CompetitionResultsController {
 
     return this.competitionResultsService.importResultsWithResolution(
       eventId,
-      body.parsedResults,
+      parsedResults,
       body.createdBy,
       body.fileExtension || 'xlsx',
-      body.resolutions || {},
-      undefined, // file already saved in check-duplicates step if needed
+      resolutions,
+      file,
       ipAddress
     );
   }
