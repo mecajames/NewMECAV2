@@ -34,7 +34,7 @@ import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } fro
 import { PaymentMethodSelector, SelectedPaymentMethod } from '@/shared/components/PaymentMethodSelector';
 import { PayPalPaymentButton } from '@/shared/components/PayPalPaymentButton';
 import { paypalApi } from '@/paypal/paypal.api-client';
-import { checkAccountExists } from '@/auth/auth.api-client';
+import { checkAccountExists, claimAccount } from '@/auth/auth.api-client';
 
 import { isStripeConfigured } from '@/lib/stripe';
 
@@ -131,7 +131,7 @@ type CheckoutStep = 'info' | 'payment' | 'confirmation';
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
-  const { user, profile, signUp } = useAuth();
+  const { user, profile, signUp, signIn } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
   const [couponCode, setCouponCode] = useState('');
@@ -278,9 +278,11 @@ export default function MembershipCheckoutPage() {
       }
     }
 
-    // Password required for guests creating a NEW account. Returning members
-    // ('renewable') keep their existing account and password — no fields shown.
-    if (!user && existingAccount !== 'renewable') {
+    // Password required for guests: a brand-new email creates an account; a
+    // returning ('renewable') member SETS a password on their existing account
+    // (their old-site password never carried over). Active/blocked accounts are
+    // routed to sign-in, so no password field is shown for them.
+    if (!user && existingAccount !== 'active' && existingAccount !== 'blocked') {
       if (!accountPassword) {
         setError('Password is required to create your account');
         return false;
@@ -331,48 +333,77 @@ export default function MembershipCheckoutPage() {
   const handleContinueToPayment = async () => {
     if (!validateInfoStep() || !membership) return;
 
-    // Guests only: classify the email against existing accounts. An ACTIVE
-    // membership must be renewed from the dashboard (log in); an existing
-    // account WITHOUT one (expired or never a member) proceeds as a guest
-    // renewal — fulfillment attaches the membership to that profile by email.
+    // Guests only: classify the email and provision the account up front so the
+    // buyer ends up authenticated for the rest of checkout. An ACTIVE membership
+    // routes to sign-in; everyone else — a brand-new email OR a returning member
+    // without an active membership — finishes logged in with the password they
+    // typed right here (no "log in / forgot password" dead end).
     if (!user) {
       const classification = await classifyGuestEmail();
       setExistingAccount(classification);
       if (classification === 'active' || classification === 'blocked') return;
 
-      if (classification !== 'renewable') {
-        // Brand-new email: create the member's account NOW — before payment —
-        // with the password they just chose. This makes the buyer authenticated
-        // for the rest of checkout, so the PaymentIntent (and therefore the
-        // Stripe webhook) carry a real, token-verified userId and the backend
-        // never has to provision an account after payment. Previously the
-        // account was created post-payment here AND by the webhook concurrently;
-        // that double-create raced, collided on "email already registered", and
-        // dropped paid memberships. Creating it once, up front, also guarantees
-        // the password they typed is the one that works (no forced reset).
-        setError(null);
-        setCreatingPaymentIntent(true);
+      setError(null);
+      setCreatingPaymentIntent(true);
+
+      // Returning member (migrated/expired, no active membership): set the
+      // password they chose on their EXISTING account, then sign them in. Their
+      // old-site password never carried over, so this is how they get back in.
+      const claimExistingAndSignIn = async (): Promise<boolean> => {
+        try {
+          await claimAccount(formData.email, accountPassword);
+        } catch (err: any) {
+          setError(err?.response?.data?.message || 'Could not set your password. Please try again.');
+          return false;
+        }
+        const { error: signInError } = await signIn(formData.email, accountPassword);
+        if (signInError) {
+          setError('Your password was set, but signing in failed. Please sign in with it on the login page.');
+          return false;
+        }
+        setAccountCreated(true);
+        return true;
+      };
+
+      if (classification === 'renewable') {
+        const ok = await claimExistingAndSignIn();
+        setCreatingPaymentIntent(false);
+        if (!ok) return;
+      } else {
+        // Brand-new email: create the account NOW — before payment — with the
+        // chosen password, so the PaymentIntent carries a real userId and the
+        // backend never has to provision post-payment (which used to race the
+        // webhook and drop paid memberships).
         const { error: signUpError } = await signUp(
           formData.email,
           accountPassword,
           formData.firstName,
           formData.lastName,
         );
-        setCreatingPaymentIntent(false);
         if (signUpError) {
           const msg = String(signUpError?.message || '');
           if (/already|registered|exists/i.test(msg)) {
-            // Registered in the gap since the email check — reclassify and
-            // either continue as a renewal or send them to log in.
+            // Registered in the gap since the email check — it's really an
+            // existing account. If it has no active membership, claim it + sign
+            // in; otherwise route to sign-in.
             const reclassified = await classifyGuestEmail();
             setExistingAccount(reclassified ?? 'active');
-            if (reclassified !== 'renewable') return;
+            if (reclassified === 'renewable') {
+              const ok = await claimExistingAndSignIn();
+              setCreatingPaymentIntent(false);
+              if (!ok) return;
+            } else {
+              setCreatingPaymentIntent(false);
+              return;
+            }
           } else {
+            setCreatingPaymentIntent(false);
             setError(signUpError.message || 'Could not create your account. Please try again.');
             return;
           }
         } else {
           setAccountCreated(true);
+          setCreatingPaymentIntent(false);
         }
       }
     }
@@ -633,9 +664,8 @@ export default function MembershipCheckoutPage() {
                   <div>
                     <h3 className="text-lg font-semibold text-white">Membership Renewed</h3>
                     <p className="text-gray-400 text-sm">
-                      Your membership has been renewed on your existing MECA account. You can now{' '}
-                      <Link to="/login" className="text-orange-400 underline hover:text-orange-300">log in</Link>{' '}
-                      with your existing password.
+                      Your membership has been renewed on your existing MECA account and you're
+                      signed in now. From now on you'll sign in with the password you just set.
                     </p>
                   </div>
                 </div>
@@ -779,13 +809,10 @@ export default function MembershipCheckoutPage() {
                       </p>
                       <p className="text-green-200/90 text-sm">
                         We found your MECA account for{' '}
-                        <span className="font-semibold">{formData.email}</span>. This purchase will
-                        renew your membership on your existing account — no need to create a new one.
-                        You'll keep signing in with your existing password (use{' '}
-                        <Link to="/login" className="underline font-semibold hover:text-white">
-                          Forgot password
-                        </Link>{' '}
-                        if you've forgotten it).
+                        <span className="font-semibold">{formData.email}</span>. This renews your
+                        existing membership — no new account needed. Your password didn't carry over
+                        from the old site, so just set one below to finish. You'll use it to sign in
+                        from now on.
                       </p>
                     </div>
                   )}
@@ -835,13 +862,16 @@ export default function MembershipCheckoutPage() {
                             />
                           </div>
                         </div>
-                        {/* Returning members keep their existing account & password —
-                            only brand-new emails create one. */}
-                        {existingAccount !== 'renewable' && (
+                        {/* Guests set a password here. Brand-new emails create an
+                            account; returning ('renewable') members set one on
+                            their EXISTING account (old-site passwords never
+                            carried over). Active/blocked accounts are routed to
+                            sign-in instead, so no field for them. */}
+                        {existingAccount !== 'active' && existingAccount !== 'blocked' && (
                         <>
                         <div>
                           <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Create Password *
+                            {existingAccount === 'renewable' ? 'Set Your Password *' : 'Create Password *'}
                           </label>
                           <div className="relative">
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />

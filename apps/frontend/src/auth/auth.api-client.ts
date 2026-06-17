@@ -47,3 +47,23 @@ export const checkAccountExists = async (
     return { exists: false, canLogin: false, hasActiveMembership: false };
   }
 };
+
+/**
+ * Sets the password on an EXISTING account during membership checkout — for a
+ * returning member whose password never migrated from the old site, or whose
+ * membership lapsed (they can't sign in, so "log in / forgot password" is a
+ * dead end). Lets them set a password right in the checkout and continue.
+ *
+ * Throws on failure (so the checkout can surface the message). The backend only
+ * permits this for accounts WITHOUT an active membership.
+ */
+export const claimAccount = async (
+  email: string,
+  password: string,
+): Promise<{ success: boolean }> => {
+  const { data } = await axios.post<{ success: boolean }>('/api/auth/claim-account', {
+    email,
+    password,
+  });
+  return data;
+};

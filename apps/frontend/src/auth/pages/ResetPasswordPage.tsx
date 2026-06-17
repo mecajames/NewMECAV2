@@ -92,6 +92,13 @@ export default function ResetPasswordPage() {
     try {
       const { error: updateErr } = await supabase.auth.updateUser({ password });
       if (updateErr) {
+        // The reset failed, but simply LANDING on this page established a
+        // recovery session (Supabase detectSessionInUrl). Clear it (local
+        // scope) so the member isn't SILENTLY logged in when they navigate
+        // away and come back — that "it said it failed but somehow I'm logged
+        // in" behavior is what made a failed reset look like it worked and fed
+        // the reset-it-again loop.
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
         setError(updateErr.message || 'Failed to update password. Please request a new reset link.');
         setSubmitting(false);
         return;
@@ -101,6 +108,9 @@ export default function ResetPasswordPage() {
       await supabase.auth.signOut();
       setPhase('success');
     } catch (err) {
+      // Same cleanup on an unexpected throw — never leave a half-established
+      // recovery session behind after a failed reset.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
       setError(err instanceof Error ? err.message : 'Failed to update password.');
     } finally {
       setSubmitting(false);

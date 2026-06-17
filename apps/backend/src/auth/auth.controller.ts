@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Logger, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, HttpCode, HttpStatus, Logger, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { EntityManager } from '@mikro-orm/core';
 import { Public } from './public.decorator';
@@ -230,6 +230,64 @@ export class AuthController {
       this.logger.error(`account-exists: lookup failed for ${email}: ${err}`);
     }
     return { exists: false, canLogin: false, hasActiveMembership: false };
+  }
+
+  /**
+   * Set a password on an EXISTING account during membership checkout, so a
+   * returning member whose password didn't carry over from the old site (the
+   * 2026-03 import left ~4,000 password-less accounts) — or whose membership
+   * lapsed — can renew without a dead-end "log in / forgot password" step.
+   *
+   * SCOPED to accounts with NO ACTIVE membership: those are exactly the
+   * locked-out members who legitimately need to set a password to get back in,
+   * and there is no live session to hijack. An account WITH an active
+   * membership is rejected (those people can already sign in). Throttled.
+   */
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('claim-account')
+  @HttpCode(HttpStatus.OK)
+  async claimAccount(
+    @Body() body: { email?: string; password?: string },
+  ): Promise<{ success: boolean }> {
+    const email = (body?.email || '').trim().toLowerCase();
+    const password = body?.password || '';
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new BadRequestException('A valid email is required.');
+    }
+    if (password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters.');
+    }
+
+    const found = await this.supabaseAdmin.findUserByEmail(email);
+    if (!found.userId) {
+      throw new BadRequestException('No account was found for that email.');
+    }
+
+    // Only locked-out members (no active membership) may set a password this
+    // way; an active membership means they can already sign in.
+    const rows = await this.em.getConnection().execute(
+      `SELECT EXISTS (
+          SELECT 1 FROM public.memberships m
+           WHERE m.user_id = ?
+             AND m.payment_status = 'paid'
+             AND (m.end_date IS NULL OR m.end_date > now())
+        ) AS has_active_membership`,
+      [found.userId],
+    );
+    if (rows?.[0]?.has_active_membership === true) {
+      throw new ForbiddenException('This account has an active membership — please sign in instead.');
+    }
+
+    const result = await this.supabaseAdmin.resetPassword({
+      userId: found.userId,
+      newPassword: password,
+      forcePasswordChange: false,
+    });
+    if (!result.success) {
+      throw new BadRequestException(result.error || 'Could not set your password. Please try again.');
+    }
+    return { success: true };
   }
 
   /**
