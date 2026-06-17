@@ -12,6 +12,7 @@ import {
   User,
   Lock,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 
 /**
@@ -261,6 +262,15 @@ export default function MecaIdReassignPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // --- Membership-status reconcile (super-admin maintenance) ---
+  const [reconcileBusy, setReconcileBusy] = useState(false);
+  const [reconcilePreview, setReconcilePreview] = useState<{
+    totalChanged: number;
+    changes: Array<{ from: string; to: string; count: number }>;
+  } | null>(null);
+  const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
+  const [reconcileErr, setReconcileErr] = useState<string | null>(null);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -330,6 +340,31 @@ export default function MecaIdReassignPage() {
       setError(err?.response?.data?.message || 'Reassignment failed.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Reconcile profiles.membership_status against the membership truth. dryRun
+  // previews the counts; otherwise it applies the correction immediately. The
+  // same job also runs automatically every day.
+  const runReconcile = async (dryRun: boolean) => {
+    setReconcileErr(null);
+    setReconcileMsg(null);
+    setReconcileBusy(true);
+    try {
+      const { data } = await axios.post('/api/scheduled-tasks/reconcile-membership-status', { dryRun });
+      if (dryRun) {
+        setReconcilePreview({ totalChanged: data.totalChanged ?? 0, changes: data.changes ?? [] });
+        if ((data.totalChanged ?? 0) === 0) {
+          setReconcileMsg('Everything is already in sync — no members need correcting.');
+        }
+      } else {
+        setReconcilePreview(null);
+        setReconcileMsg(`Done. Corrected ${data.totalChanged ?? 0} member${data.totalChanged === 1 ? '' : 's'}.`);
+      }
+    } catch (err: any) {
+      setReconcileErr(err?.response?.data?.message || 'Reconcile failed.');
+    } finally {
+      setReconcileBusy(false);
     }
   };
 
@@ -470,6 +505,76 @@ export default function MecaIdReassignPage() {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* --- Membership Status Reconcile (super-admin maintenance) --- */}
+        <div className="mt-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 md:p-8">
+          <div className="flex items-center gap-3 mb-2">
+            <RefreshCw className="w-6 h-6 text-emerald-400" />
+            <h2 className="text-xl font-bold text-white">Fix Membership Statuses</h2>
+          </div>
+          <p className="text-gray-400 text-sm mb-2">
+            Re-syncs every member's active/expired label to their real membership records. This is
+            what lets expired members renew at checkout instead of being told to log in. It also runs
+            automatically every day — use this to correct everyone right now.
+          </p>
+          <p className="text-emerald-300/80 text-xs mb-4">
+            Safe to run anytime: it only fixes status labels — it never touches memberships, payments,
+            or MECA IDs.
+          </p>
+
+          {reconcilePreview && reconcilePreview.totalChanged > 0 && (
+            <div className="mb-4 bg-slate-900/60 border border-slate-700/60 rounded-lg p-4 text-sm">
+              <p className="text-white font-medium mb-2">
+                {reconcilePreview.totalChanged} member{reconcilePreview.totalChanged === 1 ? '' : 's'} will be corrected:
+              </p>
+              <ul className="space-y-1 text-gray-300">
+                {reconcilePreview.changes.map((c, i) => (
+                  <li key={i} className="font-mono text-xs">
+                    {c.from} → {c.to}: {c.count}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {reconcileErr && (
+            <div className="mb-4 flex items-start gap-2 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{reconcileErr}</span>
+            </div>
+          )}
+          {reconcileMsg && (
+            <div className="mb-4 flex items-start gap-2 text-sm text-emerald-200 bg-emerald-500/10 border border-emerald-500/30 rounded p-3">
+              <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>{reconcileMsg}</span>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => runReconcile(true)}
+              disabled={reconcileBusy}
+              className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+            >
+              {reconcileBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Preview changes
+            </button>
+            <button
+              type="button"
+              onClick={() => runReconcile(false)}
+              disabled={reconcileBusy}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-lg transition-colors flex items-center gap-2"
+            >
+              {reconcileBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Apply now
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Tip: click <strong>Preview changes</strong> first to see how many members will be corrected,
+            then <strong>Apply now</strong>.
+          </p>
         </div>
 
         <p className="mt-3 text-xs text-gray-500">

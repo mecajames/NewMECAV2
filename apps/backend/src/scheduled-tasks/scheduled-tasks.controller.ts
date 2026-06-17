@@ -11,7 +11,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { ScheduledTasksService } from './scheduled-tasks.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 import { UserRole } from '@newmeca/shared';
 
 @Controller('api/scheduled-tasks')
@@ -136,7 +136,12 @@ export class ScheduledTasksController {
     @Headers('authorization') authHeader: string,
     @Body('dryRun') dryRun?: boolean,
   ) {
-    await this.requireAdmin(authHeader);
+    // Restricted to super-admins (James Ryan, Mick Makhool) — same gate as the
+    // MECA ID reassignment tool. Other admins/staff cannot trigger it.
+    const { profile } = await this.requireAdmin(authHeader);
+    if (!isSuperAdmin(profile)) {
+      throw new ForbiddenException('This tool is restricted to super-admins.');
+    }
     return this.scheduledTasksService.reconcileMembershipStatuses({ dryRun: !!dryRun });
   }
 }
