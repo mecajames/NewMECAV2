@@ -31,10 +31,22 @@ export class TicketRoutingRule {
   @Property({ type: 'json', default: '{}' })
   conditions: RoutingConditions = {};
 
-  @ManyToOne(() => TicketDepartment, { nullable: true, fieldName: 'assign_to_department_id', serializedName: 'assign_to_department_id' })
+  // FK exposed as a plain UUID string in API responses. The ManyToOne below
+  // owns the column; this persist:false scalar exists ONLY so serialization
+  // emits `assign_to_department_id` as a string. Putting serializedName on the
+  // ManyToOne itself made a *populated* relation serialize as the whole nested
+  // department object under that key, which broke the admin UI (the <select>
+  // and display expect a UUID string). Mirrors the EventHostingRequest pattern.
+  @Property({ type: 'uuid', fieldName: 'assign_to_department_id', serializedName: 'assign_to_department_id', persist: false, nullable: true })
+  assignToDepartmentId?: string;
+
+  @ManyToOne(() => TicketDepartment, { nullable: true, fieldName: 'assign_to_department_id', hidden: true })
   assignToDepartment?: TicketDepartment;
 
-  @ManyToOne(() => TicketStaff, { nullable: true, fieldName: 'assign_to_staff_id', serializedName: 'assign_to_staff_id' })
+  @Property({ type: 'uuid', fieldName: 'assign_to_staff_id', serializedName: 'assign_to_staff_id', persist: false, nullable: true })
+  assignToStaffId?: string;
+
+  @ManyToOne(() => TicketStaff, { nullable: true, fieldName: 'assign_to_staff_id', hidden: true })
   assignToStaff?: TicketStaff;
 
   @Property({ type: 'varchar', length: 20, nullable: true, fieldName: 'set_priority', serializedName: 'set_priority' })

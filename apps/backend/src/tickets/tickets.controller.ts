@@ -21,6 +21,8 @@ import type { Request, Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { UserRole } from '@newmeca/shared';
 import { TicketsService } from './tickets.service';
+import { TicketCustomFieldsService } from './ticket-custom-fields.service';
+import { TicketPurchasesService } from './ticket-purchases.service';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
@@ -41,6 +43,8 @@ import {
 export class TicketsController {
   constructor(
     private readonly ticketsService: TicketsService,
+    private readonly customFieldsService: TicketCustomFieldsService,
+    private readonly purchasesService: TicketPurchasesService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -195,13 +199,25 @@ export class TicketsController {
     return this.ticketsService.findByTicketNumber(ticketNumber);
   }
 
+  // The current member's purchases (for the purchase_reference form field).
+  // Declared before :id so it isn't swallowed by the param route.
+  @Get('my-purchases')
+  async getMyPurchases(@Headers('authorization') authHeader: string) {
+    const user = await this.requireAuth(authHeader);
+    return this.purchasesService.getForUser(user.id);
+  }
+
   @Get(':id')
   async getTicket(
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
-  ): Promise<Ticket> {
+  ): Promise<any> {
     await this.requireAuth(authHeader);
-    return this.ticketsService.findById(id);
+    const ticket = await this.ticketsService.findById(id);
+    // Attach the submitter's answers to admin-defined custom fields so the
+    // detail view (member + admin) can render them.
+    const customFieldAnswers = await this.customFieldsService.getAnswersForTicket(id);
+    return { ...ticket.toJSON(), custom_field_answers: customFieldAnswers };
   }
 
   /**

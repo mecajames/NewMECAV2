@@ -80,6 +80,10 @@ export class FinalsRegistration {
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_payment_intent_id', serializedName: 'stripe_payment_intent_id' })
   stripePaymentIntentId?: string;
 
+  // PayPal capture id (set at PayPal fulfillment) — enables in-app refunds.
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id', serializedName: 'paypal_capture_id' })
+  paypalCaptureId?: string;
+
   @Property({ type: 'text', default: 'pending', fieldName: 'registration_status', serializedName: 'registration_status' })
   registrationStatus: string = 'pending';
 

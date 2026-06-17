@@ -23,8 +23,10 @@ export class Ticket {
   @Property({ type: 'text' })
   description!: string;
 
-  @Enum(() => TicketCategory)
-  category: TicketCategory = TicketCategory.GENERAL;
+  // Stored as free text (the managed category KEY) so admin-defined,
+  // department-scoped categories beyond the legacy enum are valid.
+  @Property({ type: 'text' })
+  category: string = TicketCategory.GENERAL;
 
   // Legacy enum field (kept for backward compatibility during migration)
   @Property({ type: 'text', nullable: true })
@@ -92,6 +94,12 @@ export class Ticket {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'closed_at', serializedName: 'closed_at' })
   closedAt?: Date;
 
+  // When the inactivity auto-close WARNING email was sent. While set, the ticket
+  // is in its 24h grace window before TicketAutoCloseService closes it. Cleared
+  // whenever a non-internal reply arrives (the inactivity clock restarts).
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'auto_close_warning_at', serializedName: 'auto_close_warning_at' })
+  autoCloseWarningAt?: Date;
+
   // Reporter-only fields captured when the member closes their own ticket
   // via "Close & rate". Optional — admin-closed tickets leave these null.
   @Property({ type: 'smallint', nullable: true, fieldName: 'customer_rating', serializedName: 'customer_rating' })
@@ -140,6 +148,7 @@ export class Ticket {
       linked_profile_hint: this.linkedProfileHint || null,
       resolved_at: this.resolvedAt?.toISOString() || null,
       closed_at: this.closedAt?.toISOString() || null,
+      auto_close_warning_at: this.autoCloseWarningAt?.toISOString() || null,
       customer_rating: this.customerRating ?? null,
       customer_feedback: this.customerFeedback ?? null,
       created_at: this.createdAt.toISOString(),

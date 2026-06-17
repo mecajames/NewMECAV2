@@ -19,6 +19,10 @@ import { TicketDepartmentsService } from './ticket-departments.service';
 import { TicketStaffService } from './ticket-staff.service';
 import { TicketRoutingService } from './ticket-routing.service';
 import { TicketSettingsService } from './ticket-settings.service';
+import { TicketCustomFieldsService } from './ticket-custom-fields.service';
+import { TicketCategoriesService } from './ticket-categories.service';
+import { TicketRefundService, RefundablePurchaseType } from './ticket-refund.service';
+import { TicketStaff } from './entities/ticket-staff.entity';
 import { TicketsService } from './tickets.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
@@ -31,6 +35,10 @@ import {
   UpdateTicketStaffDto,
   CreateTicketRoutingRuleDto,
   UpdateTicketRoutingRuleDto,
+  CreateTicketCustomFieldDto,
+  UpdateTicketCustomFieldDto,
+  CreateTicketCategoryDto,
+  UpdateTicketCategoryDto,
 } from '@newmeca/shared';
 
 @Controller('api/tickets/admin')
@@ -40,6 +48,9 @@ export class TicketAdminController {
     private readonly staffService: TicketStaffService,
     private readonly routingService: TicketRoutingService,
     private readonly settingsService: TicketSettingsService,
+    private readonly customFieldsService: TicketCustomFieldsService,
+    private readonly categoriesService: TicketCategoriesService,
+    private readonly refundService: TicketRefundService,
     private readonly ticketsService: TicketsService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
@@ -328,6 +339,139 @@ export class TicketAdminController {
       staff_id: result.staffId,
       priority: result.priority,
     };
+  }
+
+  // ==========================================================================
+  // Category Endpoints (managed, department-scoped)
+  // ==========================================================================
+
+  @Public()
+  @Get('categories/public')
+  async listPublicCategories(@Query('department_id') departmentId?: string) {
+    // Public — drives the form's Category dropdown (active categories, optionally
+    // filtered to the chosen department).
+    return this.categoriesService.findForForm(departmentId);
+  }
+
+  @Get('categories')
+  async listCategories(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.categoriesService.findAll();
+  }
+
+  @Post('categories')
+  @HttpCode(HttpStatus.CREATED)
+  async createCategory(
+    @Headers('authorization') authHeader: string,
+    @Body() data: CreateTicketCategoryDto,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.categoriesService.create(data);
+  }
+
+  @Put('categories/:id')
+  async updateCategory(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() data: UpdateTicketCategoryDto,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.categoriesService.update(id, data);
+  }
+
+  @Delete('categories/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteCategory(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.categoriesService.remove(id);
+  }
+
+  // ==========================================================================
+  // Staff (public list for the staff_reference form field)
+  // ==========================================================================
+
+  @Public()
+  @Get('staff/public')
+  async listPublicStaff() {
+    const em = this.em.fork();
+    const staff = await em.find(
+      TicketStaff,
+      { isActive: true, canBeAssignedTickets: true } as any,
+      { populate: ['profile'] },
+    );
+    return staff
+      .filter((s) => (s.profile as any)?.id)
+      .map((s) => {
+        const p = s.profile as any;
+        const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || p.email || 'Staff';
+        return { id: s.id, name };
+      });
+  }
+
+  // ==========================================================================
+  // Ticket-driven refunds (shop / event / world-finals; membership uses its
+  // own endpoint). Real gateway refunds, full or partial.
+  // ==========================================================================
+
+  @Post('refund-purchase')
+  async refundPurchase(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { type: RefundablePurchaseType; id: string; amountCents?: number; reason: string },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.refundService.refundPurchase(body);
+  }
+
+  // ==========================================================================
+  // Custom Field Endpoints
+  // ==========================================================================
+
+  @Public()
+  @Get('custom-fields/public')
+  async listPublicCustomFields(@Query('category') category?: string) {
+    // Public — used by the member + guest ticket forms to render the
+    // category's user-visible fields. Returns only active, visible fields.
+    if (!category) return [];
+    return this.customFieldsService.getFieldsForCategory(category, { visibleOnly: true });
+  }
+
+  @Get('custom-fields')
+  async listCustomFields(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.customFieldsService.findAll();
+  }
+
+  @Post('custom-fields')
+  @HttpCode(HttpStatus.CREATED)
+  async createCustomField(
+    @Headers('authorization') authHeader: string,
+    @Body() data: CreateTicketCustomFieldDto,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.customFieldsService.create(data);
+  }
+
+  @Put('custom-fields/:id')
+  async updateCustomField(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() data: UpdateTicketCustomFieldDto,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.customFieldsService.update(id, data);
+  }
+
+  @Delete('custom-fields/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteCustomField(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.customFieldsService.remove(id);
   }
 
   // ==========================================================================

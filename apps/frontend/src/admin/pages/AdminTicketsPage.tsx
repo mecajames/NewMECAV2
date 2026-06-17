@@ -8,6 +8,9 @@ import {
   Settings,
   ArrowLeft,
   Wrench,
+  ListChecks,
+  Tags,
+  BookOpen,
 } from 'lucide-react';
 import {
   TicketManagement,
@@ -15,13 +18,15 @@ import {
   TicketDepartmentManagement,
   TicketStaffArea,
   TicketRoutingRules,
+  TicketCategoriesManagement,
+  TicketCustomFields,
   TicketSystemSettings,
   MyTicketTools,
 } from '@/tickets';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 
-type TabId = 'tickets' | 'mytools' | 'staff' | 'departments' | 'routing' | 'settings';
+type TabId = 'tickets' | 'mytools' | 'staff' | 'departments' | 'categories' | 'routing' | 'custom-fields' | 'settings' | 'setup';
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'tickets', label: 'Ticket Queue', icon: <Ticket className="w-4 h-4" /> },
@@ -30,8 +35,11 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boole
   { id: 'mytools', label: 'My Tools', icon: <Wrench className="w-4 h-4" /> },
   { id: 'staff', label: 'Staff', icon: <Users className="w-4 h-4" />, adminOnly: true },
   { id: 'departments', label: 'Departments', icon: <Building2 className="w-4 h-4" />, adminOnly: true },
+  { id: 'categories', label: 'Categories', icon: <Tags className="w-4 h-4" />, adminOnly: true },
   { id: 'routing', label: 'Routing', icon: <Route className="w-4 h-4" />, adminOnly: true },
+  { id: 'custom-fields', label: 'Custom Fields', icon: <ListChecks className="w-4 h-4" />, adminOnly: true },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, adminOnly: true },
+  { id: 'setup', label: 'Setup Guide', icon: <BookOpen className="w-4 h-4" />, adminOnly: true },
 ];
 
 export function AdminTicketsPage() {
@@ -98,10 +106,45 @@ export function AdminTicketsPage() {
         return <TicketStaffArea />;
       case 'departments':
         return <TicketDepartmentManagement />;
+      case 'categories':
+        return <TicketCategoriesManagement />;
       case 'routing':
         return <TicketRoutingRules />;
+      case 'custom-fields':
+        return <TicketCustomFields />;
       case 'settings':
         return <TicketSystemSettings />;
+      case 'setup':
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Support Ticket System — Setup Guide</h2>
+                <p className="text-sm text-gray-400">
+                  Step-by-step instructions for configuring departments, categories, conditional custom fields,
+                  refunds, and auto-close. Written for non-technical admins.
+                </p>
+              </div>
+              <a
+                href="/docs/Admin-Support-Tickets-Setup-Guide.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                <BookOpen className="w-4 h-4" />
+                Open Full Guide in New Tab
+              </a>
+            </div>
+            <div className="bg-white rounded-xl overflow-hidden border border-slate-700" style={{ height: '75vh' }}>
+              <iframe
+                src="/docs/Admin-Support-Tickets-Setup-Guide.html"
+                title="Support Ticket Setup Guide"
+                className="w-full h-full"
+                style={{ border: 'none' }}
+              />
+            </div>
+          </div>
+        );
       default:
         return <TicketManagement currentUserId={profile.id} />;
     }

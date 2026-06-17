@@ -78,6 +78,10 @@ export class EventRegistration {
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_payment_intent_id' })
   stripePaymentIntentId?: string;
 
+  // PayPal capture id (set at PayPal fulfillment) — enables in-app refunds.
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id' })
+  paypalCaptureId?: string;
+
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_customer_id' })
   stripeCustomerId?: string;
 

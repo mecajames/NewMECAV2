@@ -62,6 +62,7 @@ import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
 import { TicketAttachmentImage } from './TicketAttachmentImage';
 import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
+import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
 
 // Admin-facing status pill. The pill name itself says who has the ball —
 // no separate Waiting On badge anymore (it duplicated the status name).
@@ -1164,6 +1165,47 @@ export function TicketDetail({
               <p className="text-gray-300 whitespace-pre-wrap">{ticket.description}</p>
             )}
           </div>
+
+          {/* Custom field answers submitted with the ticket */}
+          {ticket.custom_field_answers && ticket.custom_field_answers.length > 0 && (() => {
+            const purchaseAnswers = ticket.custom_field_answers.filter((a) => a.field_type === 'purchase_reference');
+            const otherAnswers = ticket.custom_field_answers.filter((a) => a.field_type !== 'purchase_reference');
+            return (
+              <div className="mt-4 space-y-3">
+                {otherAnswers.length > 0 && (
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-3">Additional Details</h3>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                      {otherAnswers.map((a) => (
+                        <div key={a.field_id}>
+                          <dt className="text-xs text-gray-400">{a.label}</dt>
+                          <dd className="text-sm text-gray-200 break-words">
+                            {a.value === null || a.value === ''
+                              ? '—'
+                              : Array.isArray(a.value)
+                                ? a.value.join(', ')
+                                : typeof a.value === 'boolean'
+                                  ? (a.value ? 'Yes' : 'No')
+                                  : String(a.value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+                {purchaseAnswers.map((a) => {
+                  let purchase: any = null;
+                  try {
+                    purchase = typeof a.value === 'string' ? JSON.parse(a.value) : a.value;
+                  } catch {
+                    purchase = null;
+                  }
+                  if (!purchase || !purchase.type) return null;
+                  return <TicketPurchaseContextPanel key={a.field_id} purchase={purchase} isStaff={isStaff} />;
+                })}
+              </div>
+            );
+          })()}
 
           {/* Attachments */}
           {attachments.length > 0 && ticketId && (() => {

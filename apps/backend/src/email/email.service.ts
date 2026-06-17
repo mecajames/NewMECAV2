@@ -1060,6 +1060,64 @@ export class EmailService {
     });
   }
 
+  /**
+   * Warn the ticket submitter that their open ticket will auto-close in 24
+   * hours because staff replied and they haven't responded within the
+   * configured inactivity window. Sent once per stale cycle by
+   * TicketAutoCloseService; replying clears the warning and restarts the clock.
+   */
+  async sendTicketAutoCloseWarningEmail(dto: {
+    to: string;
+    firstName?: string;
+    ticketNumber: string;
+    ticketTitle: string;
+    inactiveDays: number;
+    viewTicketUrl: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const subject = `Support Ticket ${dto.ticketNumber} - Closing Soon Due to Inactivity`;
+    const greeting = dto.firstName ? `Hello ${dto.firstName}` : 'Hello';
+    const dayLabel = dto.inactiveDays === 1 ? 'day' : 'days';
+
+    const html = `
+${this.getEmailHeaderHtml('Ticket Closing Soon', `Ticket ${dto.ticketNumber}`, `Your support ticket will automatically close within 24 hours`)}
+    <p style="font-size: 16px;">${greeting},</p>
+    <p>You have an open support ticket that has not been replied to for <strong>${dto.inactiveDays} ${dayLabel}</strong> and will automatically close within 24 hours.</p>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0;"><tr><td style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 16px; border-radius: 8px;">
+      <p style="margin: 0; color: #92400e;"><strong>Ticket #${dto.ticketNumber}</strong></p>
+      <p style="margin: 6px 0 0 0; color: #92400e;">${dto.ticketTitle}</p>
+    </td></tr></table>
+
+    <p>If you still need help, just reply to your ticket and it will stay open.</p>
+    ${this.getEmailButton('View &amp; Reply to Your Ticket', dto.viewTicketUrl)}
+    <p style="color: #64748b; font-size: 14px;">If your issue has already been resolved, no action is needed — the ticket will close automatically.</p>
+${this.getEmailFooterHtml()}
+    `.trim();
+
+    const text = `
+${greeting},
+
+You have an open support ticket that has not been replied to for ${dto.inactiveDays} ${dayLabel} and will automatically close within 24 hours.
+
+Ticket #${dto.ticketNumber}: ${dto.ticketTitle}
+
+If you still need help, reply to your ticket to keep it open:
+${dto.viewTicketUrl}
+
+If your issue has already been resolved, no action is needed — the ticket will close automatically.
+
+Need help? Visit our Support Desk: ${this.supportDeskUrl}
+    `.trim();
+
+    return this.sendEmail({
+      to: dto.to,
+      subject,
+      html,
+      text,
+      from: this.fromAddresses.support,
+    });
+  }
+
   // =========================================================================
   // Membership Email Methods
   // =========================================================================

@@ -411,6 +411,25 @@ export enum TicketDepartment {
   ADMINISTRATION = 'administration',
 }
 
+// Input types for admin-defined, per-category custom ticket fields.
+// EVENT_REFERENCE is special: its answer is an event UUID that maps onto the
+// ticket's existing event_id relation rather than the custom-answers table.
+export enum TicketCustomFieldType {
+  TEXT = 'text',
+  TEXTAREA = 'textarea',
+  SELECT = 'select',
+  MULTISELECT = 'multiselect',
+  CHECKBOX = 'checkbox',
+  NUMBER = 'number',
+  DATE = 'date',
+  EVENT_REFERENCE = 'event_reference',
+  // Member picks one of THEIR purchases (membership/shop/event/world-finals),
+  // with 30-day refund eligibility surfaced. Member-only.
+  PURCHASE_REFERENCE = 'purchase_reference',
+  // Member picks a member of the support/staff team (live list).
+  STAFF_REFERENCE = 'staff_reference',
+}
+
 // =============================================================================
 // Judge & Event Director System Enums
 // =============================================================================
@@ -545,6 +564,7 @@ export const TicketStatusSchema = z.nativeEnum(TicketStatus);
 export const TicketPrioritySchema = z.nativeEnum(TicketPriority);
 export const TicketCategorySchema = z.nativeEnum(TicketCategory);
 export const TicketDepartmentSchema = z.nativeEnum(TicketDepartment);
+export const TicketCustomFieldTypeSchema = z.nativeEnum(TicketCustomFieldType);
 
 // Judge & Event Director Schemas
 export const ApplicationStatusSchema = z.nativeEnum(ApplicationStatus);

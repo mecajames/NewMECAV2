@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support Ticket System Setup Guide - MECA Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f8fafc;
+        }
+        @media print {
+            body { background: white; padding: 20px; }
+            .page-break { page-break-before: always; }
+        }
+        h1 {
+            text-align: center;
+            color: #ea580c;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #ea580c;
+            padding-bottom: 15px;
+        }
+        .subtitle { text-align: center; color: #64748b; font-size: 1.1rem; margin-bottom: 40px; }
+        h2 {
+            color: #0f172a;
+            font-size: 1.8rem;
+            margin: 40px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white;
+            border-radius: 8px;
+        }
+        h3 { color: #334155; font-size: 1.3rem; margin: 30px 0 15px 0; border-left: 4px solid #ea580c; padding-left: 15px; }
+        h4 { color: #475569; font-size: 1.1rem; margin: 20px 0 10px 0; }
+        p { margin-bottom: 15px; color: #475569; }
+        .workflow-container { background: white; border-radius: 12px; padding: 30px; margin: 20px 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .step { display: flex; align-items: flex-start; margin: 20px 0; position: relative; }
+        .step-number {
+            background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+            color: white; width: 40px; height: 40px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 1.2rem; flex-shrink: 0; margin-right: 20px;
+        }
+        .step-content { flex: 1; background: #f1f5f9; padding: 20px; border-radius: 8px; border-left: 4px solid #ea580c; }
+        .step-title { font-weight: bold; color: #0f172a; font-size: 1.1rem; margin-bottom: 10px; }
+        .step-details { color: #475569; }
+        .step-details ul { margin-left: 20px; margin-top: 10px; }
+        .step-details li { margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        th { background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); color: white; padding: 15px; text-align: left; font-weight: 600; }
+        td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+        tr:nth-child(even) { background: #f8fafc; }
+        tr:hover { background: #fef3c7; }
+        .info-box { background: #eff6ff; border: 1px solid #3b82f6; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .info-box.warning { background: #fef3c7; border-color: #f59e0b; }
+        .info-box.success { background: #dcfce7; border-color: #22c55e; }
+        .info-box.danger { background: #fee2e2; border-color: #ef4444; }
+        .info-box h4 { color: #1e40af; margin-bottom: 10px; margin-top: 0; }
+        .info-box.warning h4 { color: #92400e; }
+        .info-box.success h4 { color: #166534; }
+        .info-box.danger h4 { color: #991b1b; }
+        .toc { background: white; border-radius: 12px; padding: 25px; margin: 30px 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .toc h3 { margin-top: 0; border-left: none; padding-left: 0; }
+        .toc ul { list-style: none; margin-top: 15px; }
+        .toc li { padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+        .toc li:last-child { border-bottom: none; }
+        .toc a { color: #ea580c; text-decoration: none; font-weight: 500; }
+        .toc a:hover { text-decoration: underline; }
+        .nav-path { background: #f1f5f9; padding: 10px 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9rem; margin: 10px 0; color: #ea580c; display: inline-block; }
+        footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 2px solid #e2e8f0; color: #64748b; }
+        ul, ol { margin-left: 20px; margin-bottom: 15px; }
+        li { margin: 8px 0; color: #475569; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 0.9em; color: #ea580c; }
+        .flow-diagram { background: #f1f5f9; border-radius: 8px; padding: 20px; margin: 20px 0; font-family: 'Courier New', monospace; font-size: 0.9rem; overflow-x: auto; white-space: pre; color: #334155; border: 1px solid #e2e8f0; text-align: center; }
+        a { color: #ea580c; text-decoration: none; font-weight: 500; }
+        a:hover { text-decoration: underline; }
+        strong { color: #0f172a; }
+        .lead { background: #fef3c7; border-left: 4px solid #f97316; padding: 14px 18px; border-radius: 6px; margin: 20px 0 28px 0; color: #78350f; font-size: 0.95rem; }
+        .docs-nav { margin-bottom: 24px; font-size: 0.9rem; }
+        .docs-nav a { color: #64748b; margin-right: 12px; }
+        .docs-nav a:hover { color: #ea580c; }
+        .pill { display:inline-block; background:#f1f5f9; color:#ea580c; font-family:'Courier New',monospace; font-size:0.8rem; padding:2px 8px; border-radius:4px; }
+    </style>
+</head>
+<body>
+    <nav class="docs-nav">
+        <a href="index.html">← Documentation Index</a>
+        <a href="Admin-Support-Tickets-Guide.html">Support Tickets (day-to-day) →</a>
+    </nav>
+
+    <h1>Support Ticket System — Setup Guide</h1>
+    <p class="subtitle">How to build and configure the dynamic support form, step by step</p>
+
+    <p><span class="nav-path">/admin/tickets → Setup Guide</span></p>
+
+    <div class="info-box">
+        <h4>Who this is for</h4>
+        <p>This guide is written for MECA admins — <strong>including non-technical admins</strong> — who set up the support
+        ticket system. It explains, in plain English, every tab on the <strong>/admin/tickets</strong> page and the exact order
+        to configure them in. You do <strong>not</strong> need to write any code. If you can fill in a form, you can set this up.</p>
+    </div>
+
+    <div class="lead">
+        <strong>The big idea:</strong> the support form asks the member <strong>one question at a time</strong>. They pick a
+        <strong>Department</strong> → then a <strong>Category</strong> that belongs to that department → and then the form
+        automatically shows any <strong>extra fields</strong> you've attached to that category. You control all of it from the
+        tabs along the top of the Support Tickets page — no developer needed.
+    </div>
+
+    <div class="toc">
+        <h3>Contents</h3>
+        <ul>
+            <li><a href="#big-picture">1. How the support form works (the big picture)</a></li>
+            <li><a href="#order">2. The order to set things up in</a></li>
+            <li><a href="#departments">3. Step 1 — Departments (the teams)</a></li>
+            <li><a href="#categories">4. Step 2 — Categories (the topics under each department)</a></li>
+            <li><a href="#routing">5. Step 3 — Routing rules (auto-assign &amp; priority)</a></li>
+            <li><a href="#custom-fields">6. Step 4 — Custom Fields (extra questions)</a></li>
+            <li><a href="#conditional">7. Step 5 — Conditional fields (show a field only when…)</a></li>
+            <li><a href="#refunds">8. Step 6 — Refund requests (the "My Purchase" field &amp; refund panel)</a></li>
+            <li><a href="#staff-picker">9. Step 7 — The "Staff Member" picker</a></li>
+            <li><a href="#auto-close">10. Step 8 — Auto-close inactive tickets</a></li>
+            <li><a href="#example">11. Full worked example: Events → Points / Results / Staff</a></li>
+            <li><a href="#faq">12. Tips, gotchas &amp; FAQ</a></li>
+        </ul>
+    </div>
+
+    <h2 id="big-picture">1. How the support form works (the big picture)</h2>
+    <p>When a member (or a guest) opens "Create Support Ticket", they fill it out top to bottom. Each choice can reveal the next
+    thing to fill in. Here is the flow:</p>
+
+    <div class="flow-diagram">Subject
+   │
+   ▼
+Department   ◄── you create these in the "Departments" tab (e.g. Events, Billing, Membership)
+   │
+   ▼
+Category     ◄── you create these in the "Categories" tab; each belongs to a department
+   │              (e.g. under "Events": Points, Results, Staff)
+   ▼
+Extra fields ◄── you create these in the "Custom Fields" tab and attach them to categories
+   │              (e.g. "Related Event", "My Purchase", "Staff Member", a dropdown, a date…)
+   ▼
+Description + Screenshots
+   │
+   ▼
+Submit  ──►  Routing rules decide which staff / priority  ──►  lands in the Ticket Queue</div>
+
+    <div class="info-box success">
+        <h4>What's automatic vs. what you choose</h4>
+        <p>The member only ever picks a <strong>Department</strong> and a <strong>Category</strong>. They never choose a staff
+        member to route to — the <strong>Routing rules</strong> do that behind the scenes. Everything the member sees on the form
+        is something <strong>you</strong> turned on in these tabs.</p>
+    </div>
+
+    <h2 id="order">2. The order to set things up in</h2>
+    <p>Set the tabs up in this order. Each step builds on the one before it, so doing them out of order makes things harder.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Departments</div><div class="step-details">Create the teams (Events, Billing, Membership, Technical…). This is the first thing the member picks.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Categories</div><div class="step-details">Under each department, create the topics (e.g. Events → Points, Results, Staff). This is the second thing the member picks.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Staff &amp; Routing</div><div class="step-details">Add your support staff, then write routing rules so tickets land with the right person at the right priority.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Custom Fields</div><div class="step-details">Add the extra questions that appear for specific categories — including the special "Related Event", "My Purchase", and "Staff Member" fields.</div></div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Settings</div><div class="step-details">Turn on auto-close for inactive tickets and other global options.</div></div></div>
+    </div>
+
+    <h2 id="departments">3. Step 1 — Departments (the teams)</h2>
+    <p><span class="nav-path">Support Tickets → Departments</span></p>
+    <p>A <strong>department</strong> is a team that handles a kind of request. It is the <strong>first</strong> thing the member
+    chooses on the form. Examples: <em>General Support, Membership Services, Event Operations, Billing, Score &amp; Points,
+    Event Disputes</em>.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Open the Departments tab</div><div class="step-details">You'll see your existing departments listed.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Click "Add Department" (or edit an existing one)</div><div class="step-details">Give it a clear <strong>name</strong> the member will understand (e.g. "Events"). Add a short description if helpful.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Set one department as the Default</div><div class="step-details">If a ticket ever can't be matched to a team, it goes to the default. "General Support" is a good default.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">The department now appears in the first dropdown on the support form.</div></div></div>
+    </div>
+    <div class="info-box">
+        <h4>Tip</h4>
+        <p>Keep the number of departments small and obvious to members (5–8 is plenty). You can have lots of <strong>categories</strong>
+        underneath each one — that's where detail belongs.</p>
+    </div>
+
+    <h2 id="categories">4. Step 2 — Categories (the topics under each department)</h2>
+    <p><span class="nav-path">Support Tickets → Categories</span></p>
+    <p>A <strong>category</strong> is a topic that lives <strong>inside one department</strong>. After the member picks a department,
+    the form shows only that department's categories. Example: under the <strong>Events</strong> department you might create
+    <strong>Points</strong>, <strong>Results</strong>, and <strong>Staff</strong>.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Open the Categories tab and click "Add Category"</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Fill in the fields</div><div class="step-details">
+            <ul>
+                <li><strong>Label</strong> — what the member sees (e.g. "Points").</li>
+                <li><strong>Key</strong> — auto-fills from the label (e.g. <code>points</code>). It's the behind-the-scenes name. <strong>Leave it as suggested.</strong> It can't be changed after you save.</li>
+                <li><strong>Department</strong> — choose which department this topic belongs to (e.g. Events).</li>
+                <li><strong>Display order</strong> — lower numbers show first.</li>
+                <li><strong>Active</strong> — leave ticked so it appears on the form.</li>
+            </ul>
+        </div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">Repeat for every topic under each department.</div></div></div>
+    </div>
+    <div class="info-box warning">
+        <h4>Why the "Key" matters</h4>
+        <p>The <strong>Key</strong> is how Custom Fields and Routing rules find this category. When you build a custom field later,
+        you'll tick which categories it appears under — those use the Key. So pick a sensible label up front; the key follows it.</p>
+    </div>
+
+    <h2 id="routing">5. Step 3 — Routing rules (auto-assign &amp; priority)</h2>
+    <p><span class="nav-path">Support Tickets → Staff</span> &nbsp;then&nbsp; <span class="nav-path">Support Tickets → Routing</span></p>
+    <p>First add your support people on the <strong>Staff</strong> tab (and tick "can be assigned tickets"). Then, on the
+    <strong>Routing</strong> tab, you write rules that automatically send a new ticket to the right team member and set its
+    priority — so nobody has to triage by hand.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Add staff (Staff tab)</div><div class="step-details">Add each support team member and make sure "can be assigned tickets" is on for anyone who should receive tickets.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Add a routing rule (Routing tab → "Add Rule")</div><div class="step-details">Give it a name (e.g. "Points questions → Jane").</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Set the conditions</div><div class="step-details">Pick the <strong>Category</strong> (and optionally keywords or member status) that should trigger this rule.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Set the actions</div><div class="step-details">Choose which staff member it assigns to and/or the priority to set. Save.</div></div></div>
+    </div>
+    <div class="info-box">
+        <h4>Good to know</h4>
+        <p>Because the member already chose a department, the ticket starts in that department automatically. Routing rules let you
+        get more specific — for example, "Results questions go to the head scorer at High priority." Higher-priority rules are
+        checked first; the first matching rule wins. Use the <strong>Test</strong> button on the Routing tab to preview where a
+        sample ticket would land.</p>
+    </div>
+
+    <h2 id="custom-fields">6. Step 4 — Custom Fields (extra questions)</h2>
+    <p><span class="nav-path">Support Tickets → Custom Fields</span></p>
+    <p>Custom fields are the extra questions that appear on the form <strong>based on the category the member picked</strong>.
+    This is how you collect exactly the info your team needs for each kind of request.</p>
+
+    <h3>Creating a field</h3>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Click "Add Field"</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Fill in the basics</div><div class="step-details">
+            <ul>
+                <li><strong>Label</strong> — the question the member sees (e.g. "Which class?").</li>
+                <li><strong>Field key</strong> — auto-fills; leave it. Can't change after saving.</li>
+                <li><strong>Field type</strong> — see the table below.</li>
+                <li><strong>Help text</strong> — optional hint shown under the field.</li>
+            </ul>
+        </div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Choose "Shown for categories"</div><div class="step-details">Tick every category this field should appear under. (A field can appear under several.)</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Set the toggles</div><div class="step-details">
+            <ul>
+                <li><strong>Required (when shown)</strong> — the member must answer it (only enforced while the field is actually visible).</li>
+                <li><strong>Visible to submitter</strong> — leave on for member-facing fields; turn off for internal/admin-only fields.</li>
+                <li><strong>Active</strong> — leave on to use it.</li>
+            </ul>
+        </div></div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">Pick the matching category on the live form to see your field appear.</div></div></div>
+    </div>
+
+    <h3>The field types</h3>
+    <table>
+        <tr><th>Type</th><th>What it does</th><th>Good for</th></tr>
+        <tr><td><strong>Single-line text</strong></td><td>A short text box.</td><td>Order number, name, short answer.</td></tr>
+        <tr><td><strong>Paragraph text</strong></td><td>A larger multi-line box.</td><td>Longer explanations.</td></tr>
+        <tr><td><strong>Dropdown</strong></td><td>Pick one option from a list you define.</td><td>"Issue type", "Which class".</td></tr>
+        <tr><td><strong>Multi-select</strong></td><td>Pick several options.</td><td>"Which days affected".</td></tr>
+        <tr><td><strong>Checkbox</strong></td><td>A single yes/no tick box.</td><td>"I've read the policy".</td></tr>
+        <tr><td><strong>Number</strong></td><td>A numbers-only box.</td><td>Amount, quantity.</td></tr>
+        <tr><td><strong>Date</strong></td><td>A date picker.</td><td>"Date of the issue".</td></tr>
+        <tr><td><strong>Related Event</strong></td><td>A dropdown of events. The chosen event links to the ticket.</td><td>Anything about a specific event.</td></tr>
+        <tr><td><strong>My Purchase</strong></td><td>Shows the member <em>their own</em> purchases (memberships, shop orders, registrations) with refund eligibility. <a href="#refunds">See refunds →</a></td><td>Refund / billing requests.</td></tr>
+        <tr><td><strong>Staff Member</strong></td><td>A dropdown of your support/staff team.</td><td>"Which staff member is this about".</td></tr>
+    </table>
+    <div class="info-box warning">
+        <h4>Dropdown &amp; multi-select need options</h4>
+        <p>If you pick "Dropdown" or "Multi-select", an <strong>Options</strong> section appears. Add each choice (type the label;
+        the value fills in for you). You need at least one option before you can save.</p>
+    </div>
+
+    <h2 id="conditional">7. Step 5 — Conditional fields (show a field only when…)</h2>
+    <p>This is the most powerful part. Any field can be set to appear <strong>only when another field has a certain answer</strong>.
+    A hidden field is never required, so members only ever see what's relevant to them.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Edit the field you want to hide/show</div><div class="step-details">e.g. a "Refund amount" field.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Tick "Only show this field when another field matches"</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Choose the controlling field, the operator, and the value</div><div class="step-details">
+            <ul>
+                <li><strong>Controlling field</strong> — another dropdown / checkbox / multi-select in the same category.</li>
+                <li><strong>Operator:</strong></li>
+                <li>&nbsp;&nbsp;• <strong>is</strong> — show when the other field equals a specific value.</li>
+                <li>&nbsp;&nbsp;• <strong>is one of</strong> — show when it matches any of several values.</li>
+                <li>&nbsp;&nbsp;• <strong>is checked</strong> — show when a checkbox is ticked.</li>
+                <li>&nbsp;&nbsp;• <strong>has any value</strong> — show as soon as the other field is filled in.</li>
+                <li><strong>Value(s)</strong> — pick which answer(s) trigger it.</li>
+            </ul>
+        </div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Save</div><div class="step-details">The field now appears only when the rule is satisfied — live, as the member fills the form.</div></div></div>
+    </div>
+    <div class="info-box success">
+        <h4>Example</h4>
+        <p>Make an "Issue type" dropdown with options <em>Refund, Question, Other</em>. Then add a "My Purchase" field and set it to
+        <strong>"Only show when Issue type <em>is</em> Refund."</strong> Now the purchase list only appears when someone is actually
+        asking for a refund.</p>
+    </div>
+    <div class="info-box warning">
+        <h4>Order matters for conditions</h4>
+        <p>The controlling field must already exist and share a category with the field you're hiding. Create the
+        controlling field (the dropdown/checkbox) <strong>first</strong>, then create the field that depends on it.</p>
+    </div>
+
+    <h2 id="refunds">8. Step 6 — Refund requests (the "My Purchase" field &amp; refund panel)</h2>
+    <p>The <strong>My Purchase</strong> field type turns the support form into a refund-request tool, and gives your staff a
+    one-click refund button right on the ticket.</p>
+
+    <h3>What the member sees</h3>
+    <p>When you add a <strong>My Purchase</strong> field to a category, a logged-in member sees a list of <strong>their own</strong>
+    purchases — memberships, shop orders, event registrations, and World Finals pre-registrations — each showing the amount, date,
+    and a badge:</p>
+    <ul>
+        <li><strong>"Within 30-day refund window"</strong> (green) — eligible per policy.</li>
+        <li><strong>"Outside 30-day refund window"</strong> (amber) — past policy. The member still sees a note linking to the
+        <a href="https://www.mecacaraudio.com/terms-and-conditions#section-1" target="_blank" rel="noopener">Refund Policy</a>,
+        and <strong>can still submit</strong> — your team decides what to do.</li>
+    </ul>
+
+    <h3>What staff see (the refund panel)</h3>
+    <p>On the ticket detail page, staff see a <strong>Referenced Purchase</strong> panel showing the item, purchase date, amount,
+    payment method (Stripe/PayPal), transaction id, and the eligibility badge. There is an <strong>Issue Refund</strong> button:</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Click "Issue Refund"</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Choose full or partial</div><div class="step-details">Tick "Partial refund" and enter a dollar amount for a partial; leave it unticked for a full refund.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Enter a reason and confirm</div><div class="step-details">The refund is processed through the original payment provider (Stripe or PayPal) and the record is updated.</div></div></div>
+    </div>
+    <div class="info-box danger">
+        <h4>Important: older PayPal purchases</h4>
+        <p>PayPal refunds work automatically only for purchases made <strong>after this system was deployed</strong> (when the
+        PayPal reference started being saved). For an older PayPal purchase, the panel will tell you to issue the refund in the
+        <strong>PayPal dashboard</strong> instead. All <strong>Stripe</strong> purchases — old or new — refund inline.</p>
+    </div>
+
+    <h2 id="staff-picker">9. Step 7 — The "Staff Member" picker</h2>
+    <p>The <strong>Staff Member</strong> field type shows the member a dropdown of your support/staff team. Use it for categories
+    like "Staff" where a member's request is <em>about</em> a particular team member.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Make sure your team is on the Staff tab</div><div class="step-details">Only active staff with "can be assigned tickets" appear in the picker.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Add a "Staff Member" custom field to the right category</div><div class="step-details">e.g. attach it to "Staff" under the Events department, and set it to show only when needed (see conditional fields).</div></div></div>
+    </div>
+
+    <h2 id="auto-close">10. Step 8 — Auto-close inactive tickets</h2>
+    <p><span class="nav-path">Support Tickets → Settings → Automation</span></p>
+    <p>The <strong>Auto-Close Inactive Tickets</strong> setting closes tickets that are waiting on the member and never get a reply,
+    so your queue stays clean.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Set "days awaiting customer reply"</div><div class="step-details">Enter the number of days, e.g. <strong>2</strong>. Set it to <strong>0</strong> to turn the feature off.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">What happens</div><div class="step-details">
+            <ul>
+                <li>When staff have replied but the member hasn't responded for that many days, the member gets an email: <em>"…will automatically close within 24 hours."</em></li>
+                <li>If they still don't reply, the ticket auto-closes ~24 hours later.</li>
+                <li>If the member replies at any point, the timer resets — it won't close.</li>
+            </ul>
+        </div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Click "Save Changes"</div></div></div>
+    </div>
+
+    <h2 id="example">11. Full worked example: Events → Points / Results / Staff</h2>
+    <p>Here's how to build the example flow end to end. Follow it once and the rest will click.</p>
+    <div class="workflow-container">
+        <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Department</div><div class="step-details">On the <strong>Departments</strong> tab, make sure you have an <strong>Events</strong> department.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Categories</div><div class="step-details">On the <strong>Categories</strong> tab, add three categories under Events: <strong>Points</strong>, <strong>Results</strong>, and <strong>Staff</strong>.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">"Related Event" field for Points &amp; Results</div><div class="step-details">On <strong>Custom Fields</strong>, add (or edit the existing) <strong>Related Event</strong> field. Tick the categories <strong>Points</strong> and <strong>Results</strong>. Mark it <strong>Required</strong>. Now picking Points or Results shows the event picker.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">"Staff Member" field for Staff</div><div class="step-details">Add a <strong>Staff Member</strong> field and tick only the <strong>Staff</strong> category. Now picking "Staff" shows the team dropdown.</div></div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Routing</div><div class="step-details">On <strong>Routing</strong>, add rules: Points/Results → your scorer; Staff → a manager. Set priorities if you like.</div></div></div>
+        <div class="step"><div class="step-number">6</div><div class="step-content"><div class="step-title">Test it</div><div class="step-details">Open the public support form, pick Events → Points, and confirm the Related Event field appears and is required. Switch to Staff and confirm the team dropdown appears instead.</div></div></div>
+    </div>
+
+    <h2 id="faq">12. Tips, gotchas &amp; FAQ</h2>
+    <div class="info-box">
+        <h4>"I changed a setting but the form didn't update."</h4>
+        <p>Reload the support form page. The form fetches departments, categories, and fields fresh each time it opens.</p>
+    </div>
+    <div class="info-box">
+        <h4>"A field isn't showing up."</h4>
+        <p>Check three things: (1) the field is <strong>Active</strong>, (2) <strong>Visible to submitter</strong> is on, and
+        (3) it's ticked for the <strong>category</strong> the member selected. If it has a "show only when…" rule, make sure the
+        controlling field's answer matches.</p>
+    </div>
+    <div class="info-box">
+        <h4>"Can guests use these fields?"</h4>
+        <p>Yes — the Department → Category → custom field flow works on the public guest form too. The only exception is the
+        <strong>My Purchase</strong> field, which needs a logged-in member account to list purchases.</p>
+    </div>
+    <div class="info-box">
+        <h4>"Do I have to make Category or Department required?"</h4>
+        <p>They already are — the member must choose a department and then a category before they can submit.</p>
+    </div>
+    <div class="info-box success">
+        <h4>Rule of thumb</h4>
+        <p>Departments = a handful of broad teams. Categories = the specific topics under each. Custom fields = the exact details
+        you need for each topic. Conditional rules = only ask for a detail when it's relevant.</p>
+    </div>
+
+    <footer>
+        <p>MECA Admin Documentation · For platform administrators only — members do not have access to these guides.</p>
+        <p><a href="index.html">← Back to Documentation Index</a></p>
+    </footer>
+</body>
+</html>

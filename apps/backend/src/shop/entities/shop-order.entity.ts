@@ -55,6 +55,10 @@ export class ShopOrder {
   @Property({ type: 'text', nullable: true, fieldName: 'stripe_charge_id' })
   stripeChargeId?: string;
 
+  // PayPal capture id (set at PayPal fulfillment) — enables in-app refunds.
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id' })
+  paypalCaptureId?: string;
+
   // Cross-reference to billing Order (created after payment for financial records)
   @Property({ type: 'uuid', nullable: true, fieldName: 'billing_order_id' })
   billingOrderId?: string;

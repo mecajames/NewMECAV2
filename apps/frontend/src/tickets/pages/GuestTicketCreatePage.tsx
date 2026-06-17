@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Ticket,
   Tag,
+  Building,
   AlertTriangle,
   Send,
   Loader2,
@@ -13,21 +14,19 @@ import {
   X,
 } from 'lucide-react';
 import * as guestApi from '../ticket-guest.api-client';
+import { eventsApi } from '@/events';
+import { TicketCustomField, TicketDepartmentResponse, TicketCategoryConfig } from '@newmeca/shared';
+import { listPublicDepartments } from '../ticket-admin.api-client';
+import { listCategoriesForDepartment } from '../ticket-categories.api-client';
+import { listCustomFieldsForCategory, listStaffForPicker } from '../ticket-custom-fields.api-client';
+import {
+  TicketCustomFieldInputs,
+  getMissingRequiredFields,
+  buildCustomFieldAnswers,
+  CustomFieldValues,
+} from '../components/TicketCustomFieldInputs';
 
-type TicketCategory = 'general' | 'membership' | 'event_registration' | 'payment' | 'technical' | 'competition_results' | 'event_hosting' | 'account' | 'other';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
-
-const categoryOptions: { value: TicketCategory; label: string; description: string }[] = [
-  { value: 'general', label: 'General', description: 'General questions or inquiries' },
-  { value: 'membership', label: 'Membership', description: 'Membership status, renewals, or benefits' },
-  { value: 'event_registration', label: 'Event Registration', description: 'Issues with registering for events' },
-  { value: 'payment', label: 'Payment', description: 'Payment processing or billing issues' },
-  { value: 'technical', label: 'Technical', description: 'Website or app technical issues' },
-  { value: 'competition_results', label: 'Competition Results', description: 'Questions about competition scores or results' },
-  { value: 'event_hosting', label: 'Event Hosting', description: 'Hosting or organizing MECA events' },
-  { value: 'account', label: 'Account', description: 'Account access or profile issues' },
-  { value: 'other', label: 'Other', description: 'Anything not covered above' },
-];
 
 const priorityOptions: { value: TicketPriority; label: string; className: string }[] = [
   { value: 'low', label: 'Low', className: 'border-blue-500 bg-blue-500/10' },
@@ -51,14 +50,65 @@ export function GuestTicketCreatePage() {
     guest_name: '',
     title: '',
     description: '',
-    category: 'general' as TicketCategory,
+    category: '',
     priority: 'medium' as TicketPriority,
   });
+  const [departmentId, setDepartmentId] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdTicket, setCreatedTicket] = useState<guestApi.GuestTicket | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+
+  const [departments, setDepartments] = useState<TicketDepartmentResponse[]>([]);
+  const [categories, setCategories] = useState<TicketCategoryConfig[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [customFields, setCustomFields] = useState<TicketCustomField[]>([]);
+  const [customValues, setCustomValues] = useState<CustomFieldValues>({});
+  const [loadingFields, setLoadingFields] = useState(false);
+  const [events, setEvents] = useState<{ id: string; title: string }[]>([]);
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+
+  // Events + staff for any event_reference / staff_reference field (public lists).
+  useEffect(() => {
+    eventsApi.getAll(1, 100).then(setEvents).catch(() => setEvents([]));
+    listStaffForPicker().then(setStaff).catch(() => setStaff([]));
+  }, []);
+
+  // Departments for the first dropdown (skipped for account-help, which is
+  // forced to the Account category server-side).
+  useEffect(() => {
+    if (!_verified || isAccountHelp) return;
+    listPublicDepartments().then(setDepartments).catch(() => setDepartments([]));
+  }, [_verified, isAccountHelp]);
+
+  const handleDepartmentChange = async (deptId: string) => {
+    setDepartmentId(deptId);
+    setFormData((prev) => ({ ...prev, category: '' }));
+    setCategories([]);
+    if (!deptId) return;
+    setLoadingCategories(true);
+    try {
+      setCategories(await listCategoriesForDepartment(deptId));
+    } catch {
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  // Load the chosen category's fields (also fires when account_help forces 'account').
+  useEffect(() => {
+    if (!_verified || !formData.category) return;
+    let active = true;
+    setLoadingFields(true);
+    setCustomValues({});
+    listCustomFieldsForCategory(formData.category)
+      .then((f) => { if (active) setCustomFields(f); })
+      .catch(() => { if (active) setCustomFields([]); })
+      .finally(() => { if (active) setLoadingFields(false); });
+    return () => { active = false; };
+  }, [formData.category, _verified]);
 
   const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files || []);
@@ -120,6 +170,21 @@ export function GuestTicketCreatePage() {
       setSubmitError('Please describe your issue');
       return;
     }
+    if (!isAccountHelp) {
+      if (!departmentId) {
+        setSubmitError('Please choose a department');
+        return;
+      }
+      if (!formData.category) {
+        setSubmitError('Please choose a category');
+        return;
+      }
+    }
+    const missing = getMissingRequiredFields(customFields, customValues);
+    if (missing.length > 0) {
+      setSubmitError(`Please complete required field(s): ${missing.map((f) => f.label).join(', ')}`);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -128,8 +193,10 @@ export function GuestTicketCreatePage() {
         guest_name: formData.guest_name,
         title: formData.title,
         description: formData.description,
-        category: formData.category,
+        category: isAccountHelp ? 'account' : formData.category,
+        department_id: isAccountHelp ? undefined : departmentId,
         priority: formData.priority,
+        custom_field_answers: buildCustomFieldAnswers(customFields, customValues),
       });
       // Upload any screenshots now that the ticket (and its access token) exists.
       for (const file of files) {
@@ -309,65 +376,97 @@ export function GuestTicketCreatePage() {
             />
           </div>
 
-          {/* Category & Priority */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Department & Category */}
+          {isAccountHelp ? (
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 <Tag className="w-4 h-4 inline mr-1" />
                 Category
               </label>
-              {isAccountHelp ? (
-                <>
-                  <div className="w-full px-4 py-3 bg-slate-700/60 border border-slate-600 rounded-lg text-gray-300">
-                    Account / Login Issue
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    This request is for account access and login problems only.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as TicketCategory })}
-                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    {categoryOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {categoryOptions.find((c) => c.value === formData.category)?.description}
-                  </p>
-                </>
-              )}
+              <div className="w-full px-4 py-3 bg-slate-700/60 border border-slate-600 rounded-lg text-gray-300">
+                Account / Login Issue
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                This request is for account access and login problems only.
+              </p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                <AlertTriangle className="w-4 h-4 inline mr-1" />
-                Priority
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {priorityOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, priority: opt.value })}
-                    className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      formData.priority === opt.value
-                        ? `${opt.className} border-2`
-                        : 'border-slate-600 bg-slate-700 text-gray-300 hover:bg-slate-600'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Building className="w-4 h-4 inline mr-1" />
+                  Department <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={departmentId}
+                  onChange={(e) => handleDepartmentChange(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Select a department…</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <Tag className="w-4 h-4 inline mr-1" />
+                  Category <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  disabled={!departmentId || loadingCategories}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60"
+                >
+                  <option value="">
+                    {!departmentId ? 'Choose a department first' : loadingCategories ? 'Loading…' : 'Select a category…'}
+                  </option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
+          )}
+
+          {/* Priority */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Priority
+            </label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {priorityOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, priority: opt.value })}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    formData.priority === opt.value
+                      ? `${opt.className} border-2`
+                      : 'border-slate-600 bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Category-specific fields */}
+          {loadingFields && <p className="text-sm text-gray-400">Loading additional fields…</p>}
+          {!loadingFields && customFields.length > 0 && (
+            <div className="space-y-4 p-4 bg-slate-900/40 rounded-lg border border-slate-700">
+              <TicketCustomFieldInputs
+                fields={customFields}
+                values={customValues}
+                onChange={(id, val) => setCustomValues((prev) => ({ ...prev, [id]: val }))}
+                events={events}
+                staff={staff}
+              />
+            </div>
+          )}
 
           {/* Description */}
           <div>
