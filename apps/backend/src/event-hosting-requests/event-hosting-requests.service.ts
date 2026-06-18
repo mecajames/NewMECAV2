@@ -9,6 +9,8 @@ import { Event } from '../events/events.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsService } from '../events/events.service';
+import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class EventHostingRequestsService {
@@ -17,6 +19,8 @@ export class EventHostingRequestsService {
     private readonly em: EntityManager,
     private readonly notificationsService: NotificationsService,
     private readonly eventsService: EventsService,
+    private readonly adminNotificationsService: AdminNotificationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(
@@ -163,6 +167,27 @@ export class EventHostingRequestsService {
 
     const request = em.create(EventHostingRequest, transformedData);
     await em.persistAndFlush(request);
+
+    // Alert admins (email + in-app bell) that a new hosting request came in.
+    // notifyNewHostingRequest swallows its own errors, so a notification failure
+    // never blocks the submission.
+    await this.adminNotificationsService.notifyNewHostingRequest({
+      requestId: request.id,
+      eventName: request.eventName,
+      requesterName:
+        [request.firstName, request.lastName].filter(Boolean).join(' ') ||
+        request.businessName ||
+        request.email ||
+        'Someone',
+      requesterEmail: request.email,
+      businessName: request.businessName,
+      city: request.city,
+      state: request.state,
+      eventStartDate: request.eventStartDate,
+      eventType: request.eventType,
+      phone: request.phone,
+    });
+
     return request;
   }
 
@@ -353,6 +378,20 @@ export class EventHostingRequestsService {
       link: `/dashboard?tab=hosting-requests&id=${requestId}`,
     } as any);
 
+    // Email the assigned Event Director (best-effort — never block the assignment).
+    if (eventDirector.email) {
+      const frontend = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+      await this.emailService
+        .sendHostingRequestAssignedEmail({
+          to: eventDirector.email,
+          edName: eventDirector.full_name,
+          eventName: request.eventName,
+          notes,
+          dashboardUrl: `${frontend}/dashboard?tab=hosting-requests&id=${requestId}`,
+        })
+        .catch(() => undefined);
+    }
+
     return request;
   }
 
@@ -493,18 +532,13 @@ export class EventHostingRequestsService {
 
     await em.flush();
 
-    // Notify admins
-    const admins = await em.find(Profile, adminRecipientWhere() as any);
-    for (const admin of admins) {
-      await this.notificationsService.create({
-        user: admin.id,
-        fromUser: profileId,
-        title: 'Event Director Accepted Request',
-        message: `Event Director has accepted to manage: ${request.eventName}`,
-        type: 'info',
-        link: `/admin/hosting-requests?id=${requestId}`,
-      } as any);
-    }
+    // Notify + email admins that the ED accepted.
+    await this.adminNotificationsService.notifyHostingRequestEdResponded({
+      requestId,
+      eventName: request.eventName,
+      edName: eventDirector.user?.full_name,
+      accepted: true,
+    });
 
     return request;
   }
@@ -545,18 +579,14 @@ export class EventHostingRequestsService {
 
     await em.flush();
 
-    // Notify admins (but NOT the requestor)
-    const admins = await em.find(Profile, adminRecipientWhere() as any);
-    for (const admin of admins) {
-      await this.notificationsService.create({
-        user: admin.id,
-        fromUser: profileId,
-        title: 'Event Director Declined Request',
-        message: `Event Director has declined to manage: ${request.eventName}. Reason: ${reason}`,
-        type: 'alert',
-        link: `/admin/hosting-requests?id=${requestId}`,
-      } as any);
-    }
+    // Notify + email admins that the ED declined.
+    await this.adminNotificationsService.notifyHostingRequestEdResponded({
+      requestId,
+      eventName: request.eventName,
+      edName: eventDirector.user?.full_name,
+      accepted: false,
+      reason,
+    });
 
     return request;
   }
@@ -724,6 +754,46 @@ export class EventHostingRequestsService {
         type: finalStatus === FinalApprovalStatus.APPROVED ? 'info' : 'alert',
         link: `/my-hosting-requests?id=${requestId}`,
       } as any);
+    }
+
+    // Email the submitter + assigned ED on a final decision (approved or rejected).
+    const isApproved =
+      finalStatus === FinalApprovalStatus.APPROVED ||
+      finalStatus === FinalApprovalStatus.APPROVED_PENDING_INFO;
+    const isRejected = finalStatus === FinalApprovalStatus.REJECTED;
+    if (isApproved || isRejected) {
+      const frontend = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
+      const recipients = new Map<string, { name?: string; url: string }>();
+      if (request.email) {
+        recipients.set(request.email.toLowerCase(), {
+          name:
+            [request.firstName, request.lastName].filter(Boolean).join(' ') ||
+            request.businessName ||
+            undefined,
+          url: `${frontend}/my-hosting-requests?id=${requestId}`,
+        });
+      }
+      if (request.assignedEventDirectorId) {
+        const assignedEd = await em.findOne(Profile, { id: request.assignedEventDirectorId });
+        if (assignedEd?.email && !recipients.has(assignedEd.email.toLowerCase())) {
+          recipients.set(assignedEd.email.toLowerCase(), {
+            name: assignedEd.full_name,
+            url: `${frontend}/dashboard?tab=hosting-requests&id=${requestId}`,
+          });
+        }
+      }
+      for (const [email, info] of recipients) {
+        await this.emailService
+          .sendHostingRequestDecisionEmail({
+            to: email,
+            recipientName: info.name,
+            eventName: request.eventName,
+            approved: isApproved,
+            reason,
+            dashboardUrl: info.url,
+          })
+          .catch(() => undefined);
+      }
     }
 
     return request;

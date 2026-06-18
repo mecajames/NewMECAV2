@@ -922,6 +922,102 @@ export class AdminNotificationsService {
     }
   }
 
+  /**
+   * Fired when a user or event director submits an event-hosting request
+   * ("want to host an event"). Emails every admin + drops an in-app alert.
+   */
+  async notifyNewHostingRequest(args: {
+    requestId: string;
+    eventName?: string | null;
+    requesterName: string;
+    requesterEmail?: string | null;
+    businessName?: string | null;
+    city?: string | null;
+    state?: string | null;
+    eventStartDate?: Date | string | null;
+    eventType?: string | null;
+    phone?: string | null;
+  }): Promise<void> {
+    try {
+      const location = [args.city, args.state].filter(Boolean).join(', ');
+      const dashboardPath = `/admin/hosting-requests?id=${args.requestId}`;
+      const eventLabel = args.eventName || 'an event';
+
+      await this.notifyAllAdmins(
+        'New Event Hosting Request',
+        `${args.requesterName} submitted a request to host ${eventLabel}${location ? ` in ${location}` : ''}.`,
+        dashboardPath,
+      );
+
+      const fields: Array<{ label: string; value: string }> = [
+        { label: 'Event', value: args.eventName || 'N/A' },
+        { label: 'Requested by', value: args.requesterName },
+      ];
+      if (args.businessName) fields.push({ label: 'Business', value: args.businessName });
+      if (args.requesterEmail) fields.push({ label: 'Email', value: args.requesterEmail });
+      if (args.phone) fields.push({ label: 'Phone', value: args.phone });
+      if (location) fields.push({ label: 'Location', value: location });
+      if (args.eventType) fields.push({ label: 'Event Type', value: String(args.eventType) });
+      if (args.eventStartDate) {
+        const d = new Date(args.eventStartDate);
+        if (!isNaN(d.getTime())) fields.push({ label: 'Proposed Date', value: this.formatDate(d) });
+      }
+      fields.push({ label: 'Submitted', value: this.formatDate(new Date()) });
+
+      await this.sendAlertToAllAdmins({
+        title: `New Hosting Request: ${args.eventName || args.requesterName}`,
+        subtitle: location ? `${args.requesterName} · ${location}` : args.requesterName,
+        fields,
+        dashboardPath,
+        dashboardLabel: 'View Hosting Request',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send new-hosting-request admin notification: ${error}`);
+    }
+  }
+
+  /**
+   * Fired when an event director accepts or declines an assigned hosting request.
+   * Emails every admin + drops an in-app alert (replaces the old inline in-app loop).
+   */
+  async notifyHostingRequestEdResponded(args: {
+    requestId: string;
+    eventName?: string | null;
+    edName?: string | null;
+    accepted: boolean;
+    reason?: string | null;
+  }): Promise<void> {
+    try {
+      const who = args.edName || 'An event director';
+      const dashboardPath = `/admin/hosting-requests?id=${args.requestId}`;
+      const verb = args.accepted ? 'accepted' : 'declined';
+
+      await this.notifyAllAdmins(
+        `Event Director ${args.accepted ? 'Accepted' : 'Declined'} Request`,
+        `${who} ${verb} the assignment to manage ${args.eventName || 'an event'}${!args.accepted && args.reason ? ` — Reason: ${args.reason}` : ''}.`,
+        dashboardPath,
+      );
+
+      const fields: Array<{ label: string; value: string }> = [
+        { label: 'Event', value: args.eventName || 'N/A' },
+        { label: 'Event Director', value: who },
+        { label: 'Response', value: args.accepted ? 'Accepted' : 'Declined' },
+      ];
+      if (!args.accepted && args.reason) fields.push({ label: 'Reason', value: args.reason });
+      fields.push({ label: 'Date', value: this.formatDate(new Date()) });
+
+      await this.sendAlertToAllAdmins({
+        title: `Hosting Request ${args.accepted ? 'Accepted' : 'Declined'} by Event Director`,
+        subtitle: args.eventName || undefined,
+        fields,
+        dashboardPath,
+        dashboardLabel: 'View Hosting Request',
+      });
+    } catch (error) {
+      this.logger.error(`Failed to send ED-response admin notification: ${error}`);
+    }
+  }
+
   // ── Weekly Digest ──────────────────────────────────────────────────────────
 
   @Cron('0 9 * * 1') // Monday at 9 AM

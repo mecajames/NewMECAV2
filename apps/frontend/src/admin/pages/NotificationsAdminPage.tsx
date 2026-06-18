@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bell, ArrowLeft, Mail, AlertTriangle, Info, MessageSquare,
   Check, X, Trash2, User, Calendar, Eye, EyeOff, Filter,
-  Send, Search, Plus, Users, Loader2, ExternalLink
+  Send, Search, Plus, Users, Loader2, ExternalLink, Megaphone
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { profilesApi } from '@/profiles';
 import { seasonsApi, Season } from '@/seasons';
 import Pagination from '@/shared/components/Pagination';
+import AnnouncementsManager from '@/announcements/AnnouncementsManager';
 
 interface NotificationItem {
   id: string;
@@ -50,6 +51,7 @@ interface MemberOption {
 
 export default function NotificationsAdminPage() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'notifications' | 'announcements'>('notifications');
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [total, setTotal] = useState(0);
@@ -504,13 +506,15 @@ export default function NotificationsAdminPage() {
             <p className="text-gray-400 mt-2">View and manage all member notifications</p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={() => setShowSendModal(true)}
-              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
-            >
-              <Send className="h-4 w-4" />
-              Send Notification
-            </button>
+            {activeTab === 'notifications' && (
+              <button
+                onClick={() => setShowSendModal(true)}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
+              >
+                <Send className="h-4 w-4" />
+                Send Notification
+              </button>
+            )}
             <button
               onClick={() => navigate('/dashboard/admin')}
               className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 flex items-center gap-2"
@@ -521,6 +525,34 @@ export default function NotificationsAdminPage() {
           </div>
         </div>
 
+        {/* Tabs: existing notifications view vs the new announcement-banner manager */}
+        <div className="flex gap-2 mb-8 border-b border-slate-700">
+          {[
+            { id: 'notifications' as const, label: 'Notifications', icon: Bell },
+            { id: 'announcements' as const, label: 'Announcement Banners', icon: Megaphone },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 -mb-px border-b-2 flex items-center gap-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-orange-500 text-white'
+                    : 'border-transparent text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === 'announcements' && <AnnouncementsManager />}
+
+        {activeTab === 'notifications' && (
+        <>
         {/* Analytics Cards */}
         {analytics && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
@@ -897,6 +929,8 @@ export default function NotificationsAdminPage() {
               itemsPerPageOptions={[25, 50, 100, 250]}
             />
           </div>
+        )}
+        </>
         )}
       </div>
 

@@ -131,7 +131,7 @@ type CheckoutStep = 'info' | 'payment' | 'confirmation';
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
-  const { user, profile, signUp, signIn } = useAuth();
+  const { user, profile, signUp, signIn, resetPassword } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
   const [couponCode, setCouponCode] = useState('');
@@ -164,6 +164,13 @@ export default function MembershipCheckoutPage() {
   //                 profile by email and their password is untouched
   //   'blocked'   — account that cannot log in (banned) → contact support
   const [existingAccount, setExistingAccount] = useState<'active' | 'renewable' | 'blocked' | null>(null);
+
+  // For ACTIVE accounts we never let a guest set a password on a live membership
+  // (account-takeover risk). Instead we email a secure sign-in / password-reset
+  // link to the address on file so the real owner gets in from their own inbox.
+  const [sendingSignInLink, setSendingSignInLink] = useState(false);
+  const [signInLinkSent, setSignInLinkSent] = useState(false);
+  const [signInLinkError, setSignInLinkError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -240,8 +247,13 @@ export default function MembershipCheckoutPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    // Editing the email invalidates any prior account classification.
-    if (name === 'email' && existingAccount) setExistingAccount(null);
+    // Editing the email invalidates any prior account classification + any
+    // "sign-in link sent" confirmation tied to the old address.
+    if (name === 'email') {
+      if (existingAccount) setExistingAccount(null);
+      if (signInLinkSent) setSignInLinkSent(false);
+      if (signInLinkError) setSignInLinkError(null);
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -260,6 +272,29 @@ export default function MembershipCheckoutPage() {
   const handleEmailBlur = async () => {
     if (user) return;
     setExistingAccount(await classifyGuestEmail());
+  };
+
+  // Active accounts: email the owner a secure sign-in / password-reset link
+  // (reuses the standard Forgot Password mechanism — the link lands on
+  // /reset-password and signs them in). We never set a password in the open on
+  // a live membership.
+  const handleSendSignInLink = async () => {
+    const email = formData.email.trim();
+    if (!email) return;
+    setSendingSignInLink(true);
+    setSignInLinkError(null);
+    try {
+      const { error: resetErr } = await resetPassword(email);
+      if (resetErr) {
+        setSignInLinkError("We couldn't send the link just now. Please try again in a moment.");
+      } else {
+        setSignInLinkSent(true);
+      }
+    } catch {
+      setSignInLinkError("We couldn't send the link just now. Please try again in a moment.");
+    } finally {
+      setSendingSignInLink(false);
+    }
   };
 
   const validateInfoStep = (): boolean => {
@@ -785,20 +820,45 @@ export default function MembershipCheckoutPage() {
                   {existingAccount === 'active' && (
                     <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500 rounded-lg">
                       <p className="text-orange-300 text-sm font-medium mb-1">
-                        You already have an active membership
+                        We found your MECA account
                       </p>
                       <p className="text-orange-200/90 text-sm">
-                        The account for <span className="font-semibold">{formData.email}</span> has an
-                        active membership. Please{' '}
-                        <Link to="/login" className="underline font-semibold hover:text-white">
-                          log in
-                        </Link>{' '}
-                        and renew from your My MECA dashboard. Forgot your password? Use{' '}
-                        <Link to="/login" className="underline font-semibold hover:text-white">
-                          Forgot password
-                        </Link>{' '}
-                        on the login page to set a new one.
+                        There's already an active MECA membership for{' '}
+                        <span className="font-semibold">{formData.email}</span>. To keep your
+                        account secure, we'll email a sign-in link to that address — open it to
+                        access your account, where you can manage or renew your membership.
                       </p>
+                      {signInLinkSent ? (
+                        <p className="mt-3 text-green-300 text-sm font-medium">
+                          ✓ Check your inbox — we've emailed a secure sign-in link to{' '}
+                          <span className="font-semibold">{formData.email}</span>. It can take a
+                          minute to arrive (check your spam folder too).
+                        </p>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleSendSignInLink}
+                            disabled={sendingSignInLink}
+                            className="mt-3 inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {sendingSignInLink ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Sending…
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Email me a secure sign-in link
+                              </>
+                            )}
+                          </button>
+                          {signInLinkError && (
+                            <p className="mt-2 text-red-300 text-sm">{signInLinkError}</p>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1240,20 +1300,25 @@ export default function MembershipCheckoutPage() {
                     </label>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={creatingPaymentIntent}
-                    className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {creatingPaymentIntent ? (
-                      <span className="flex items-center justify-center">
-                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                        Initializing Payment...
-                      </span>
-                    ) : (
-                      'Continue to Payment'
-                    )}
-                  </button>
+                  {/* Active/blocked accounts can't proceed with a guest purchase
+                      (active → emailed sign-in link; blocked → contact support),
+                      so hide the dead Continue button for them. */}
+                  {existingAccount !== 'active' && existingAccount !== 'blocked' && (
+                    <button
+                      type="submit"
+                      disabled={creatingPaymentIntent}
+                      className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {creatingPaymentIntent ? (
+                        <span className="flex items-center justify-center">
+                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                          Initializing Payment...
+                        </span>
+                      ) : (
+                        'Continue to Payment'
+                      )}
+                    </button>
+                  )}
                 </form>
               )}
 
