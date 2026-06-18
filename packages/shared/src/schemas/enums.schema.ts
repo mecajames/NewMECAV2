@@ -38,6 +38,15 @@ export enum EventStatus {
   NOT_PUBLIC = 'not_public',
 }
 
+// Severity/category of a site-wide announcement banner. Drives the default
+// color scheme + icon (admins can still override the colors per announcement).
+export enum AnnouncementType {
+  WARNING = 'warning',
+  NOTIFICATION = 'notification',
+  INFO = 'info',
+  MAINTENANCE = 'maintenance',
+}
+
 export enum PaymentStatus {
   PENDING = 'pending',
   PAID = 'paid',

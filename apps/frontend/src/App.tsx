@@ -6,6 +6,7 @@ import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTim
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
+import AnnouncementBanner from '@/announcements/AnnouncementBanner';
 import { usePageTracking } from '@/shared/hooks/usePageTracking';
 import { useMemberPageTracking } from '@/shared/hooks/useMemberPageTracking';
 // Static pages — kept static for first-paint critical routes only.
@@ -246,6 +247,7 @@ function App() {
                   <RecoveryRedirect />
                   <PageTracker />
           <ImpersonationBanner />
+          <AnnouncementBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
             <IdleTimeoutGuard>

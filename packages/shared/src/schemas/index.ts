@@ -46,6 +46,9 @@ export * from "./shop.schema.js";
 // Banners
 export * from "./banners.schema.js";
 
+// Announcement Banners
+export * from "./announcements.schema.js";
+
 // Points Configuration
 export * from "./points-configuration.schema.js";
 

@@ -78,7 +78,12 @@ export class SeoController {
   @Public()
   @Get('prerender/*')
   @Header('Content-Type', 'text/html')
-  @Header('Cache-Control', 'public, max-age=3600')
+  // This response is User-Agent dependent: crawlers get this lightweight stub,
+  // real browsers get the SPA (nginx decides by UA). A shared cache like Cloudflare
+  // keyed on URL alone would cache the bot stub and serve it to everyone, breaking
+  // the page for real users. So it must NEVER be stored by a shared cache.
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Vary', 'User-Agent')
   async prerender(@Req() req: Request): Promise<string> {
     const originalPath = req.path.replace(/^\/prerender/, '') || '/';
     return this.prerenderService.renderPage(originalPath);

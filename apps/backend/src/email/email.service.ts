@@ -4630,6 +4630,55 @@ ${this.getEmailFooterHtml()}
     });
   }
 
+  /** Sent to an Event Director when an admin assigns them a hosting request to review. */
+  async sendHostingRequestAssignedEmail(dto: {
+    to: string;
+    edName?: string;
+    eventName?: string;
+    notes?: string;
+    dashboardUrl?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const eventLabel = dto.eventName || 'an event';
+    const subject = `New hosting request assigned: ${eventLabel}`;
+    const html = `
+${this.getEmailHeaderHtml('New Hosting Request Assigned', eventLabel, 'A hosting request needs your review')}
+    <p style="font-size: 16px; font-family: Arial, sans-serif;">Hi ${dto.edName || 'there'},</p>
+    <p style="font-family: Arial, sans-serif;">You've been assigned a MECA event hosting request to review: <strong>${eventLabel}</strong>. Please review the details and accept or decline the assignment.</p>
+    ${dto.notes ? `<p style="font-family: Arial, sans-serif; background:#f8fafc; border:1px solid #e2e8f0; padding:12px;"><em>Note from the admin:</em> ${dto.notes}</p>` : ''}
+    ${dto.dashboardUrl ? this.getEmailButton('Review Request', dto.dashboardUrl) : ''}
+${this.getEmailFooterHtml()}
+    `.trim();
+    return this.sendEmail({ to: dto.to, subject, html, from: this.fromAddresses.events });
+  }
+
+  /** Sent to the requestor / assigned ED when an admin approves or rejects a hosting request. */
+  async sendHostingRequestDecisionEmail(dto: {
+    to: string;
+    recipientName?: string;
+    eventName?: string;
+    approved: boolean;
+    reason?: string;
+    dashboardUrl?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const eventLabel = dto.eventName || 'your event';
+    const headline = dto.approved ? 'Hosting Request Approved' : 'Hosting Request Update';
+    const subject = dto.approved
+      ? `Your hosting request was approved: ${eventLabel}`
+      : `Update on your hosting request: ${eventLabel}`;
+    const body = dto.approved
+      ? `Great news — your request to host <strong>${eventLabel}</strong> has been approved!`
+      : `There's an update on your request to host <strong>${eventLabel}</strong>: it was not approved.`;
+    const html = `
+${this.getEmailHeaderHtml(headline, eventLabel, headline)}
+    <p style="font-size: 16px; font-family: Arial, sans-serif;">Hi ${dto.recipientName || 'there'},</p>
+    <p style="font-family: Arial, sans-serif;">${body}</p>
+    ${dto.reason ? `<p style="font-family: Arial, sans-serif; background:#f8fafc; border:1px solid #e2e8f0; padding:12px;">${dto.reason}</p>` : ''}
+    ${dto.dashboardUrl ? this.getEmailButton('View Request', dto.dashboardUrl) : ''}
+${this.getEmailFooterHtml()}
+    `.trim();
+    return this.sendEmail({ to: dto.to, subject, html, from: this.fromAddresses.events });
+  }
+
   async sendAdminWeeklyDigestEmail(dto: {
     to: string;
     dateRange: string;
