@@ -369,6 +369,12 @@ export const ticketsApi = {
     return response.data;
   },
 
+  // Staff: set (hours > 0) or clear (hours = 0) the per-reply auto-close timer.
+  setAutoCloseTimer: async (id: string, hours: number): Promise<Ticket> => {
+    const response = await axios.post(`/api/tickets/${id}/auto-close-timer`, { hours });
+    return response.data;
+  },
+
   hold: async (id: string): Promise<Ticket> => {
     const response = await axios.post(`/api/tickets/${id}/hold`);
     return response.data;

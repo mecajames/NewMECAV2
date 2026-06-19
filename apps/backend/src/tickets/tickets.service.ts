@@ -997,6 +997,27 @@ export class TicketsService {
   }
 
   /**
+   * Staff-set per-reply auto-close countdown. Sets auto_close_at = now + hours so
+   * the hourly TicketAutoCloseService closes the ticket if the customer doesn't
+   * reply first (a customer reply clears it). hours <= 0 clears the timer.
+   */
+  async setAutoCloseTimer(id: string, hours: number): Promise<Ticket> {
+    const em = this.em.fork();
+    const ticket = await em.findOne(Ticket, { id });
+    if (!ticket) {
+      throw new NotFoundException(`Ticket with ID ${id} not found`);
+    }
+    if (!hours || hours <= 0) {
+      ticket.autoCloseAt = undefined;
+    } else {
+      const capped = Math.min(Math.floor(hours), 24 * 30); // cap at 30 days
+      ticket.autoCloseAt = new Date(Date.now() + capped * 60 * 60 * 1000);
+    }
+    await em.flush();
+    return this.findById(id);
+  }
+
+  /**
    * Admin-only "Change Status" path. Validates the transition against
    * TICKET_STATUS_TRANSITIONS (the same matrix the UI dropdown uses) and
    * stamps resolved_at / closed_at when moving to those terminal-ish states.
@@ -1073,6 +1094,19 @@ export class TicketsService {
       throw new NotFoundException(`Ticket with ID ${data.ticket_id} not found`);
     }
 
+    // Customers must reopen a resolved/closed ticket before replying (staff and
+    // internal notes are exempt). The client hides the composer for these
+    // statuses; this is the server-side backstop.
+    if (
+      !isStaffReply &&
+      !data.is_internal &&
+      (ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CLOSED)
+    ) {
+      throw new BadRequestException(
+        `This ticket is ${ticket.status}. Please reopen it before replying.`,
+      );
+    }
+
     // Get author info
     const author = await em.findOne(Profile, { id: data.author_id });
 
@@ -1099,6 +1133,11 @@ export class TicketsService {
       // in the branches below (or the unconditional flush at the end).
       const hadWarning = !!ticket.autoCloseWarningAt;
       if (hadWarning) ticket.autoCloseWarningAt = undefined;
+      // Any reply also cancels a staff-set auto-close countdown (the customer
+      // responded, or staff is replying again). The "Reply + auto-close" flow
+      // re-sets a fresh timer via a follow-up call after this.
+      const hadTimer = !!ticket.autoCloseAt;
+      if (hadTimer) ticket.autoCloseAt = undefined;
 
       // Statuses where comment activity should auto-shift the workflow.
       // ON_HOLD / RESOLVED / CLOSED require explicit admin moves.
@@ -1129,8 +1168,8 @@ export class TicketsService {
         }
       }
 
-      // Persist the cleared warning if no status-change branch flushed it.
-      if (hadWarning) await em.flush();
+      // Persist the cleared warning/timer if no status-change branch flushed it.
+      if (hadWarning || hadTimer) await em.flush();
     }
 
     // Send reply notification email (only for non-internal comments)
