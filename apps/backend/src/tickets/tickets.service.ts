@@ -1190,15 +1190,35 @@ export class TicketsService {
     return comment;
   }
 
-  async updateComment(id: string, data: UpdateTicketCommentDto): Promise<TicketComment> {
+  async updateComment(
+    id: string,
+    data: UpdateTicketCommentDto,
+    editor?: { editorId: string; isStaff: boolean },
+  ): Promise<TicketComment> {
     const em = this.em.fork();
-    const comment = await em.findOne(TicketComment, { id });
+    const comment = await em.findOne(TicketComment, { id }, { populate: ['author'] });
 
     if (!comment) {
       throw new NotFoundException(`Comment with ID ${id} not found`);
     }
 
-    if (data.content !== undefined) comment.content = data.content;
+    // Authorization: a staff member may edit ONLY their own reply. We never let
+    // anyone edit another person's words (another agent's, or the customer's)
+    // from here. editor is optional so internal/system callers can still update.
+    if (editor) {
+      const authorId = comment.author?.id;
+      if (!editor.isStaff || !authorId || authorId !== editor.editorId) {
+        throw new ForbiddenException('You can only edit your own staff replies.');
+      }
+    }
+
+    if (data.content !== undefined) {
+      // Re-run the SAME sanitizer the create path uses, so an edit can't slip
+      // raw HTML past the allowlist — and so the entity/&nbsp; handling applies
+      // to edits too. Plain-text (customer) comments are stored as-is.
+      comment.content =
+        comment.contentFormat === 'html' ? sanitizeSignatureHtml(data.content) : data.content;
+    }
     if (data.is_internal !== undefined) comment.isInternal = data.is_internal;
 
     await em.flush();
