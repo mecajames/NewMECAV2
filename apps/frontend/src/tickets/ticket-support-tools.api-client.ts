@@ -94,6 +94,41 @@ export interface UpdateCannedResponseDto {
   sort_order?: number;
 }
 
+export interface TicketQuickLink {
+  id: string;
+  user_id: string | null;
+  label: string;
+  url: string;
+  category: string | null;
+  is_global: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  is_owner: boolean;
+  owner: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+}
+
+export interface CreateQuickLinkDto {
+  label: string;
+  url: string;
+  category?: string | null;
+  is_global?: boolean;
+  sort_order?: number;
+}
+
+export interface UpdateQuickLinkDto {
+  label?: string;
+  url?: string;
+  category?: string | null;
+  is_global?: boolean;
+  sort_order?: number;
+}
+
 /**
  * Hardcoded standard filter returned by the backend. The criteria
  * may contain the placeholder string '$me' which resolves to the
@@ -167,6 +202,24 @@ export const systemFiltersApi = {
   list: async (): Promise<SystemFilter[]> => {
     const { data } = await axios.get<SystemFilter[]>('/api/ticket-tools/system-filters');
     return data;
+  },
+};
+
+export const quickLinksApi = {
+  list: async (): Promise<TicketQuickLink[]> => {
+    const { data } = await axios.get<TicketQuickLink[]>('/api/ticket-tools/quick-links');
+    return data;
+  },
+  create: async (dto: CreateQuickLinkDto): Promise<TicketQuickLink> => {
+    const { data } = await axios.post<TicketQuickLink>('/api/ticket-tools/quick-links', dto);
+    return data;
+  },
+  update: async (id: string, dto: UpdateQuickLinkDto): Promise<TicketQuickLink> => {
+    const { data } = await axios.patch<TicketQuickLink>(`/api/ticket-tools/quick-links/${id}`, dto);
+    return data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await axios.delete(`/api/ticket-tools/quick-links/${id}`);
   },
 };
 

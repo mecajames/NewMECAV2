@@ -495,8 +495,9 @@ export class TicketGuestService {
     // and are intentionally not auto-transitioned by guest comments.
 
     // A guest reply restarts the inactivity clock → cancel any pending
-    // auto-close warning (mirrors the authenticated createComment path).
+    // auto-close warning + staff-set countdown (mirrors createComment).
     ticket.autoCloseWarningAt = undefined;
+    ticket.autoCloseAt = undefined;
 
     await em.persistAndFlush([comment, ticket]);
 

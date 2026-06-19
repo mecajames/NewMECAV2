@@ -55,8 +55,9 @@ import {
   cannedResponsesApi,
   CannedResponse,
   resolveCannedResponse,
+  quickLinksApi,
+  TicketQuickLink,
 } from '../ticket-support-tools.api-client';
-import { TICKET_QUICK_LINKS, TicketQuickLink } from '../ticketQuickLinks';
 import { TicketStaffResponse, TicketDepartmentResponse, TICKET_STATUS_TRANSITIONS } from '@newmeca/shared';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
@@ -192,6 +193,10 @@ export function TicketDetail({
   // reply. Source list is the curated TICKET_QUICK_LINKS constant.
   const [quickLinkOpen, setQuickLinkOpen] = useState(false);
   const quickLinkRef = useRef<HTMLDivElement>(null);
+  // Insert-link entries (global + this tech's personal) loaded from the API.
+  const [quickLinks, setQuickLinks] = useState<TicketQuickLink[]>([]);
+  // Focused after a customer reopens a ticket so they can type their reply.
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
   // "Save this reply as a canned response" flow (staff only). When the
   // checkbox is on we surface a small panel for the template title /
   // category / visibility flag, and on submit we POST the reply body to
@@ -229,6 +234,7 @@ export function TicketDetail({
   // option only appears when the move is allowed from the current status.
   type AdminSubmitChoice =
     | 'reply'
+    | 'reply_auto_close'
     | 'resolve'
     | 'close'
     | 'hold'
@@ -242,6 +248,8 @@ export function TicketDetail({
   const [adminSubmitChoice, setAdminSubmitChoice] = useState<AdminSubmitChoice | null>(null);
   const [adminSubmitReassignId, setAdminSubmitReassignId] = useState('');
   const [adminSubmitDepartmentId, setAdminSubmitDepartmentId] = useState('');
+  // Hours for the "Reply + auto-close timer" choice (default 24).
+  const [adminSubmitAutoCloseHours, setAdminSubmitAutoCloseHours] = useState(24);
   // Header status pill click-to-change menu (the no-reply housekeeping path).
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
@@ -336,6 +344,9 @@ export function TicketDetail({
     cannedResponsesApi.list()
       .then(setCannedResponses)
       .catch(() => { /* non-fatal */ });
+    quickLinksApi.list()
+      .then(setQuickLinks)
+      .catch(() => { /* non-fatal — the picker just stays empty */ });
   }, [isStaff]);
 
   // Close the canned picker on outside click.
@@ -633,7 +644,8 @@ export function TicketDetail({
     | { kind: 'status'; status: TicketStatus }
     | { kind: 'reassign'; assigneeId: string }
     | { kind: 'escalate_reassign'; assigneeId: string }
-    | { kind: 'department'; departmentId: string };
+    | { kind: 'department'; departmentId: string }
+    | { kind: 'auto_close'; hours: number };
 
   const handleSubmitComment = async (
     e: React.FormEvent,
@@ -759,6 +771,10 @@ export function TicketDetail({
             updated = await ticketsApi.update(ticketId, {
               department_id: adminAction.departmentId,
             });
+          } else if (adminAction.kind === 'auto_close') {
+            // The reply already shifted status to Pending Customer; now arm the
+            // countdown so the ticket auto-closes if they don't respond in time.
+            updated = await ticketsApi.setAutoCloseTimer(ticketId, adminAction.hours);
           }
           if (updated) setTicket(updated);
         } catch (actionErr: any) {
@@ -845,6 +861,8 @@ export function TicketDetail({
     try {
       const updated = await ticketsApi.reopen(ticketId);
       setTicket(updated);
+      // Reopened → the reply box now renders; focus it so they can type.
+      setTimeout(() => replyTextareaRef.current?.focus(), 50);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Failed to reopen ticket';
       alert(msg);
@@ -1325,7 +1343,7 @@ export function TicketDetail({
                   <div className="mb-4 p-4 bg-slate-800 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <p className="text-gray-300 text-sm">
                       {canReopen
-                        ? `This ticket is ${stateWord}. Still need help?`
+                        ? `This ticket is ${stateWord}. Reopen it to add a reply.`
                         : `This ticket was ${stateWord} more than 7 days ago. Please open a new ticket if you still need help.`}
                     </p>
                     {canReopen && (
@@ -1343,8 +1361,11 @@ export function TicketDetail({
                 );
               })()}
 
-            {/* New Comment Form */}
-            {ticket.status !== 'closed' && (
+            {/* New Comment Form. Customers can only reply to active tickets — on
+                resolved/closed they must use the Reopen panel above first. Staff
+                keep replying (hidden only on closed). The backend enforces the
+                same rule for customer replies. */}
+            {(isStaff ? ticket.status !== 'closed' : (ticket.status !== 'closed' && ticket.status !== 'resolved')) && (
               <form onSubmit={handleSubmitComment} className="space-y-3">
                 {/* Canned response picker (staff only). Click "Insert
                     canned response" to open the dropdown; pick a row
@@ -1410,18 +1431,23 @@ export function TicketDetail({
                       </button>
                       {quickLinkOpen && (
                         <div className="absolute z-30 top-full left-0 mt-1 w-80 max-h-80 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
-                          {(() => {
+                          {quickLinks.length === 0 ? (
+                            <div className="px-3 py-3 text-sm text-gray-400">
+                              No links yet. Add some in My Tools → Insert Links.
+                            </div>
+                          ) : (() => {
                             const grouped = new Map<string, TicketQuickLink[]>();
-                            for (const l of TICKET_QUICK_LINKS) {
-                              if (!grouped.has(l.group)) grouped.set(l.group, []);
-                              grouped.get(l.group)!.push(l);
+                            for (const l of quickLinks) {
+                              const cat = l.category || 'Uncategorized';
+                              if (!grouped.has(cat)) grouped.set(cat, []);
+                              grouped.get(cat)!.push(l);
                             }
                             return Array.from(grouped.entries()).map(([group, items]) => (
                               <div key={group}>
                                 <div className="px-3 py-1 text-xs text-gray-500 uppercase tracking-wider bg-slate-900/50">{group}</div>
                                 {items.map(l => (
                                   <button
-                                    key={l.url}
+                                    key={l.id}
                                     type="button"
                                     onClick={() => handleInsertQuickLink(l)}
                                     className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 border-b border-slate-700/50"
@@ -1439,6 +1465,7 @@ export function TicketDetail({
                   </div>
                 )}
                 <textarea
+                  ref={replyTextareaRef}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   onPaste={handlePaste}
@@ -2291,10 +2318,12 @@ export function TicketDetail({
         const needsAssignee =
           adminSubmitChoice === 'reassign' || adminSubmitChoice === 'escalate_reassign';
         const needsDepartment = adminSubmitChoice === 'department';
+        const needsHours = adminSubmitChoice === 'reply_auto_close';
         const canSubmit =
           !!adminSubmitChoice &&
           (!needsAssignee || !!adminSubmitReassignId) &&
           (!needsDepartment || !!adminSubmitDepartmentId) &&
+          (!needsHours || adminSubmitAutoCloseHours > 0) &&
           !submittingComment;
         // Allowed status moves from the current ticket state — drives which
         // "Reply & X" cards appear so we never offer an invalid transition.
@@ -2376,6 +2405,12 @@ export function TicketDetail({
                   <Send className="w-4 h-4 text-orange-400" />,
                   `${Noun} only`,
                   `Post the ${noun}. Status auto-shifts to Pending Customer on active tickets.`,
+                )}
+                {!isInternal && choiceOption(
+                  'reply_auto_close',
+                  <Clock className="w-4 h-4 text-amber-400" />,
+                  'Reply + auto-close timer',
+                  'Post the reply and auto-close the ticket if the customer does not respond within the set hours. Their reply cancels the timer.',
                 )}
                 {canMoveTo('resolved') && choiceOption(
                   'resolve',
@@ -2476,6 +2511,38 @@ export function TicketDetail({
                   </select>
                 </div>
               )}
+              {needsHours && (
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                    Auto-close after (hours)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={adminSubmitAutoCloseHours}
+                      onChange={(e) => setAdminSubmitAutoCloseHours(Math.max(1, Number(e.target.value) || 0))}
+                      className="w-28 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <div className="flex gap-1">
+                      {[24, 48, 72].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => setAdminSubmitAutoCloseHours(h)}
+                          className={`px-2 py-1 text-xs rounded border ${adminSubmitAutoCloseHours === h ? 'border-orange-500 bg-orange-500/10 text-white' : 'border-slate-600 text-gray-300 hover:border-slate-500'}`}
+                        >
+                          {h}h
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Auto-closes {adminSubmitAutoCloseHours}h from now unless the customer replies first.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6 flex items-center justify-end gap-3">
                 <button
@@ -2523,6 +2590,9 @@ export function TicketDetail({
                         break;
                       case 'department':
                         action = { kind: 'department', departmentId: adminSubmitDepartmentId };
+                        break;
+                      case 'reply_auto_close':
+                        action = { kind: 'auto_close', hours: adminSubmitAutoCloseHours };
                         break;
                       case 'reply':
                       default:

@@ -64,15 +64,44 @@ export class TicketAutoCloseService {
    * it on demand later. No-op when the setting is 0/unset (disabled).
    */
   async run(): Promise<{ warned: number; closed: number }> {
+    // Per-ticket staff-set countdowns close independently of the global
+    // inactivity setting (a separate feature, always active).
+    const closedByTimer = await this.closeExpiredTimerTickets();
+
     const days = await this.settingsService.getNumber('auto_close_inactive_days', 0);
     if (!days || days <= 0) {
-      return { warned: 0, closed: 0 };
+      return { warned: 0, closed: closedByTimer };
     }
     // Close already-warned tickets first, then warn newly-stale ones (a ticket
     // warned this run has warning_at = now, so it can't also be closed this run).
     const closed = await this.closeExpiredWarnedTickets();
     const warned = await this.warnStaleTickets(days);
-    return { warned, closed };
+    return { warned, closed: closed + closedByTimer };
+  }
+
+  /**
+   * Phase 0 — close tickets whose staff-set per-reply countdown (auto_close_at)
+   * has elapsed. auto_close_at is set only on a staff reply that chose a timer
+   * and is cleared on any non-internal reply, so a non-null, expired value means
+   * the customer never responded.
+   */
+  private async closeExpiredTimerTickets(): Promise<number> {
+    const em = this.em.fork();
+    const now = new Date();
+    return em.nativeUpdate(
+      Ticket,
+      {
+        autoCloseAt: { $lte: now },
+        status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED] },
+      },
+      {
+        status: TicketStatus.CLOSED,
+        closedAt: now,
+        autoCloseAt: null,
+        autoCloseWarningAt: null,
+        updatedAt: now,
+      },
+    );
   }
 
   /** Phase 1 — email a 24h warning for tickets stale X days, stamp warning_at. */

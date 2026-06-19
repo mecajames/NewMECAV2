@@ -369,6 +369,21 @@ export class TicketsController {
   }
 
   /**
+   * Admin-only: set (hours > 0) or clear (hours <= 0) a per-reply auto-close
+   * countdown. The ticket auto-closes after `hours` if the customer doesn't
+   * reply first (a customer reply clears it).
+   */
+  @Post(':id/auto-close-timer')
+  async setAutoCloseTimer(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { hours: number },
+  ): Promise<Ticket> {
+    await this.requireAdmin(authHeader);
+    return this.ticketsService.setAutoCloseTimer(id, Number(body?.hours) || 0);
+  }
+
+  /**
    * Admin-only "Change Status" endpoint backing the status dropdown on the
    * ticket detail page. The service validates the transition against
    * TICKET_STATUS_TRANSITIONS and stamps resolved_at / closed_at as needed.

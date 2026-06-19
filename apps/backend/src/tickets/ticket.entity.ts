@@ -100,6 +100,12 @@ export class Ticket {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'auto_close_warning_at', serializedName: 'auto_close_warning_at' })
   autoCloseWarningAt?: Date;
 
+  // Staff-set per-reply countdown. If set and reached before the customer
+  // replies, TicketAutoCloseService closes the ticket. Set when a staff reply
+  // chooses "auto-close in N hours"; cleared on any non-internal reply.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'auto_close_at', serializedName: 'auto_close_at' })
+  autoCloseAt?: Date;
+
   // Reporter-only fields captured when the member closes their own ticket
   // via "Close & rate". Optional — admin-closed tickets leave these null.
   @Property({ type: 'smallint', nullable: true, fieldName: 'customer_rating', serializedName: 'customer_rating' })
@@ -149,6 +155,7 @@ export class Ticket {
       resolved_at: this.resolvedAt?.toISOString() || null,
       closed_at: this.closedAt?.toISOString() || null,
       auto_close_warning_at: this.autoCloseWarningAt?.toISOString() || null,
+      auto_close_at: this.autoCloseAt?.toISOString() || null,
       customer_rating: this.customerRating ?? null,
       customer_feedback: this.customerFeedback ?? null,
       created_at: this.createdAt.toISOString(),

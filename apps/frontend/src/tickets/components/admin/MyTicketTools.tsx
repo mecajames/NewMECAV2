@@ -1,5 +1,6 @@
 import { StaffSignatureEditor } from '@/tickets/pages/admin/StaffSignatureSettingsPage';
 import { CannedResponsesManager } from '@/tickets/pages/admin/CannedResponsesSettingsPage';
+import { QuickLinksManager } from '@/tickets/pages/admin/QuickLinksSettingsPage';
 
 /**
  * "My Tools" tab for the ticket admin. A per-tech settings area that
@@ -16,6 +17,9 @@ export function MyTicketTools() {
       </section>
       <section className="bg-slate-800/40 rounded-xl border border-slate-700 p-6">
         <CannedResponsesManager />
+      </section>
+      <section className="bg-slate-800/40 rounded-xl border border-slate-700 p-6">
+        <QuickLinksManager />
       </section>
     </div>
   );
