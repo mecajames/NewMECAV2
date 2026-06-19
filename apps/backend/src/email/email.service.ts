@@ -270,6 +270,7 @@ export interface SendTicketReplyEmailDto {
   ticketNumber: string;
   ticketTitle: string;
   replyContent: string;
+  contentFormat?: 'text' | 'html';
   replierName: string;
   isStaffReply: boolean;
   viewTicketUrl: string;
@@ -2650,12 +2651,16 @@ Fun, Fair, Loud and Clear!
 
   private getTicketReplyEmailTemplate(dto: SendTicketReplyEmailDto, greeting: string): string {
     const replyLabel = dto.isStaffReply ? 'MECA Support' : 'Customer';
-    // Escape user-provided content so HTML in the reply doesn't render and
-    // break layout / open XSS. Preserve newlines via white-space:pre-wrap.
-    const escapedReply = (dto.replyContent || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    // Plain-text replies are HTML-escaped (newlines preserved via pre-wrap).
+    // HTML replies (staff rich-text) are ALREADY sanitized server-side before
+    // they reach here (TicketsService.createComment → sanitizeSignatureHtml),
+    // so they're inserted as-is.
+    const escapedReply = dto.contentFormat === 'html'
+      ? (dto.replyContent || '')
+      : (dto.replyContent || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
 
     return `
 ${this.getEmailHeaderHtml('New Reply on Your Ticket', 'Ticket ' + dto.ticketNumber, `${dto.replierName} replied to your MECA support ticket ${dto.ticketNumber}`)}
@@ -2686,6 +2691,20 @@ ${this.getEmailFooterHtml()}
 
   private getTicketReplyEmailText(dto: SendTicketReplyEmailDto, greeting: string): string {
     const replyLabel = dto.isStaffReply ? 'MECA Support' : 'Customer';
+    // Strip tags + decode basic entities so an HTML reply reads cleanly in the
+    // plain-text email part.
+    const plainReply = dto.contentFormat === 'html'
+      ? (dto.replyContent || '')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+      : dto.replyContent;
 
     return `
 ${greeting},
@@ -2694,7 +2713,7 @@ There is a new reply on your support ticket "${dto.ticketTitle}" (${dto.ticketNu
 
 FROM: ${dto.replierName} (${replyLabel})
 -----------------------------------------
-${dto.replyContent}
+${plainReply}
 ${dto.signaturePlainText ? `\n${dto.signaturePlainText}\n` : ''}-----------------------------------------
 
 View the full conversation: ${dto.viewTicketUrl}

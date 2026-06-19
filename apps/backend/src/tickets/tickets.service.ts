@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, ForbiddenException, forwardRef, 
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
+import { sanitizeSignatureHtml } from './staff-signatures.service';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { TicketDepartment as TicketDepartmentEntity } from './entities/ticket-department.entity';
 import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
@@ -1110,10 +1111,17 @@ export class TicketsService {
     // Get author info
     const author = await em.findOne(Profile, { id: data.author_id });
 
+    // Staff replies are authored in a rich-text editor → stored as sanitized
+    // HTML (sanitizeSignatureHtml = the same strict allowlist used for email
+    // signatures). Customer/guest replies stay plain text. content_format drives
+    // both the in-thread render and the outbound email rendering.
+    const isHtmlReply = isStaffReply;
+    const safeContent = isHtmlReply ? sanitizeSignatureHtml(data.content) : data.content;
     const commentData: any = {
       ticket: Reference.createFromPK(Ticket, data.ticket_id),
       author: Reference.createFromPK(Profile, data.author_id),
-      content: data.content,
+      content: safeContent,
+      contentFormat: isHtmlReply ? 'html' : 'text',
       isInternal: data.is_internal || false,
     };
 
@@ -1174,7 +1182,7 @@ export class TicketsService {
 
     // Send reply notification email (only for non-internal comments)
     if (!data.is_internal && author) {
-      this.sendTicketReplyEmail(ticket, data.content, author, isStaffReply, skipSignature).catch(err => {
+      this.sendTicketReplyEmail(ticket, safeContent, author, isStaffReply, skipSignature).catch(err => {
         this.logger.error(`Failed to send ticket reply email: ${err.message}`);
       });
     }
@@ -1869,6 +1877,7 @@ export class TicketsService {
           ticketNumber: ticket.ticketNumber,
           ticketTitle: ticket.title,
           replyContent,
+          contentFormat: 'html',
           replierName,
           isStaffReply: true,
           viewTicketUrl,

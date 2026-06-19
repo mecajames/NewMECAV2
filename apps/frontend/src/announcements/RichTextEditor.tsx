@@ -1,10 +1,11 @@
-import { useRef, useEffect, type ReactNode } from 'react';
+import { useRef, useEffect, type ReactNode, type ClipboardEvent } from 'react';
 import { Bold, Italic, Underline, Link as LinkIcon } from 'lucide-react';
 
 interface Props {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  onPaste?: (e: ClipboardEvent<HTMLDivElement>) => void;
 }
 
 /**
@@ -13,7 +14,7 @@ interface Props {
  * deprecated but universally supported and dependency-free, which is plenty for a
  * short admin-authored announcement body.
  */
-export default function RichTextEditor({ value, onChange, placeholder }: Props) {
+export default function RichTextEditor({ value, onChange, placeholder, onPaste }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   // Push the external value in only when it actually differs, so we never clobber
@@ -63,6 +64,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: Props) 
         contentEditable
         suppressContentEditableWarning
         onInput={() => ref.current && onChange(ref.current.innerHTML)}
+        onPaste={onPaste}
         data-placeholder={placeholder || 'Write your announcement…'}
         className="min-h-[100px] px-3 py-2 text-white text-sm focus:outline-none [&_a]:text-orange-300 [&_a]:underline empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500"
       />

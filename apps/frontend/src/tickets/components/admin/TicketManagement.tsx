@@ -29,6 +29,7 @@ import {
   X,
   Share2,
   Bolt,
+  Pencil,
 } from 'lucide-react';
 import {
   ticketsApi,
@@ -428,6 +429,45 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     }
   };
 
+  // Rename an owned saved filter in place.
+  const handleRenamePreset = async (preset: SavedTicketFilter) => {
+    if (!preset.is_owner) return;
+    const name = window.prompt('Rename this filter:', preset.name);
+    if (name === null) return;
+    const trimmed = name.trim().slice(0, 60);
+    if (!trimmed || trimmed === preset.name) return;
+    try {
+      const updated = await savedTicketFiltersApi.update(preset.id, { name: trimmed });
+      setPresets((prev) => prev.map((p) => p.id === preset.id ? updated : p));
+      setSavedFilterMsg(`Renamed to "${updated.name}"`);
+      setTimeout(() => setSavedFilterMsg(null), 2000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to rename');
+    }
+  };
+
+  // Overwrite an owned saved filter's criteria with the current filter selections.
+  const handleUpdatePresetCriteria = async (preset: SavedTicketFilter) => {
+    if (!preset.is_owner) return;
+    if (!window.confirm(`Update "${preset.name}" to match the current filter selections?`)) return;
+    try {
+      const updated = await savedTicketFiltersApi.update(preset.id, {
+        criteria: {
+          status: statusFilter,
+          priority: priorityFilter,
+          department: departmentFilter,
+          assigned_to_id: assigneeFilter,
+          last_reply_by: lastReplyFilter || undefined,
+        },
+      });
+      setPresets((prev) => prev.map((p) => p.id === preset.id ? updated : p));
+      setSavedFilterMsg(`Updated "${updated.name}" to current filters`);
+      setTimeout(() => setSavedFilterMsg(null), 2000);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to update preset');
+    }
+  };
+
   useEffect(() => {
     setPage(1);
   }, [activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, waitingOnFilter]);
@@ -770,6 +810,22 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                 </button>
                 {preset.is_owner && (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => handleRenamePreset(preset)}
+                      title="Rename this filter"
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-white transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePresetCriteria(preset)}
+                      title="Update this filter to the current selections"
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-green-400 transition-colors"
+                    >
+                      <Save className="w-3 h-3" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleToggleShare(preset.id)}
