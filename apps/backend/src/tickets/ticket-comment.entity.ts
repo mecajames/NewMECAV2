@@ -18,6 +18,11 @@ export class TicketComment {
   @Property({ type: 'text' })
   content!: string;
 
+  // 'text' (plain — render with line breaks) or 'html' (sanitized rich text from
+  // the staff reply editor). Drives in-thread + email rendering. Null = legacy text.
+  @Property({ type: 'text', nullable: true, fieldName: 'content_format' })
+  contentFormat?: string;
+
   @Property({ type: 'boolean', fieldName: 'is_internal', default: false })
   isInternal: boolean = false;
 
@@ -47,6 +52,7 @@ export class TicketComment {
         role: this.author.role || null,
       } : null,
       content: this.content,
+      content_format: this.contentFormat || 'text',
       is_internal: this.isInternal,
       guest_author_name: this.guestAuthorName || null,
       is_guest_comment: this.isGuestComment,

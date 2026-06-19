@@ -98,6 +98,7 @@ export interface TicketComment {
   ticket_id: string;
   author_id: string;
   content: string;
+  content_format?: 'text' | 'html';
   is_internal: boolean;
   created_at: string;
   updated_at: string;

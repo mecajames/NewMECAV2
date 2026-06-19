@@ -61,6 +61,8 @@ import {
 import { TicketStaffResponse, TicketDepartmentResponse, TICKET_STATUS_TRANSITIONS } from '@newmeca/shared';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { useDraftStorage } from '@/shared/hooks/useDraftStorage';
+import RichTextEditor from '@/announcements/RichTextEditor';
+import { sanitizeAnnouncementHtml } from '@/announcements/sanitize';
 import { TicketAttachmentImage } from './TicketAttachmentImage';
 import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
@@ -373,11 +375,16 @@ export function TicketDetail({
     return () => document.removeEventListener('mousedown', onDown);
   }, [quickLinkOpen]);
 
+  // Escape plain text + convert newlines to <br> for insertion into the
+  // rich-text (HTML) staff reply editor.
+  const escapeForReplyHtml = (text: string): string =>
+    text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
   /**
    * Build the substitution context from the current ticket and the
    * viewing agent's name (passed in via props). Then resolve and
-   * insert the template body into the reply textarea, preserving any
-   * existing content the agent already typed.
+   * insert the template body into the reply editor, preserving any
+   * existing content the agent already typed. Staff compose in HTML.
    */
   const handleInsertCannedResponse = (response: CannedResponse) => {
     if (!ticket) return;
@@ -393,7 +400,8 @@ export function TicketDetail({
       ticketSubject: ticket.title,
       agentName: null, // resolved server-side from auth user when known; left as placeholder otherwise
     });
-    setNewComment((prev) => prev ? `${prev}\n\n${resolved}` : resolved);
+    const html = escapeForReplyHtml(resolved);
+    setNewComment((prev) => prev ? `${prev}<br><br>${html}` : html);
     setCannedOpen(false);
   };
 
@@ -402,8 +410,9 @@ export function TicketDetail({
    * plain text, so the label keeps the bare URL readable in context.
    */
   const handleInsertQuickLink = (link: TicketQuickLink) => {
-    const snippet = `${link.label}: ${link.url}`;
-    setNewComment((prev) => prev ? `${prev}\n${snippet}` : snippet);
+    const safeUrl = link.url.replace(/"/g, '%22');
+    const snippet = `<a href="${safeUrl}">${escapeForReplyHtml(link.label)}</a>`;
+    setNewComment((prev) => prev ? `${prev}&nbsp;${snippet}` : snippet);
     setQuickLinkOpen(false);
   };
 
@@ -546,7 +555,7 @@ export function TicketDetail({
 
   // Paste handler — turns screenshots from Win+Shift+S / Cmd+Ctrl+Shift+4
   // into attachments without forcing the user to save-then-pick.
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles: File[] = [];
@@ -1322,7 +1331,14 @@ export function TicketDetail({
                       </div>
                       <span className="text-xs text-gray-500">{formatDate(comment.created_at)}</span>
                     </div>
-                    <p className="text-gray-300 whitespace-pre-wrap pl-10">{comment.content}</p>
+                    {comment.content_format === 'html' ? (
+                      <div
+                        className="text-gray-300 pl-10 break-words [&_a]:text-orange-400 [&_a]:underline [&_p]:my-1"
+                        dangerouslySetInnerHTML={{ __html: sanitizeAnnouncementHtml(comment.content) }}
+                      />
+                    ) : (
+                      <p className="text-gray-300 whitespace-pre-wrap pl-10">{comment.content}</p>
+                    )}
                   </div>
                 ))
               )}
@@ -1464,15 +1480,24 @@ export function TicketDetail({
                     </div>
                   </div>
                 )}
-                <textarea
-                  ref={replyTextareaRef}
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onPaste={handlePaste}
-                  placeholder="Write a comment... (you can paste screenshots directly with Ctrl+V)"
-                  rows={3}
-                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-y min-h-[88px]"
-                />
+                {isStaff ? (
+                  <RichTextEditor
+                    value={newComment}
+                    onChange={setNewComment}
+                    onPaste={handlePaste}
+                    placeholder="Write a reply… (Bold / Italic / Underline + links in the toolbar; paste screenshots with Ctrl+V)"
+                  />
+                ) : (
+                  <textarea
+                    ref={replyTextareaRef}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onPaste={handlePaste}
+                    placeholder="Write a comment... (you can paste screenshots directly with Ctrl+V)"
+                    rows={3}
+                    className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-y min-h-[88px]"
+                  />
+                )}
 
                 {/* Pending attachment previews */}
                 {pendingAttachments.length > 0 && (
