@@ -364,6 +364,29 @@ export class ScheduledTasksService {
     }
   }
 
+  /**
+   * True when this membership row has been SUPERSEDED by a newer paid term for
+   * the same user — i.e. the member already renewed. Renewals create a brand-new
+   * Membership row (see PaymentFulfillmentService.fulfillMembershipPayment →
+   * createMembership); the prior term's row is left `paid` with a now-past
+   * endDate. Because the expiration crons evaluate membership rows individually,
+   * that stale row keeps matching the +1/+7/+14/+30 expired cadence and emails an
+   * already-renewed member "your membership has expired." Skipping superseded
+   * rows fixes that for every renewer. (Surfaced by Sierra Quick / MECA-20260609-0005.)
+   */
+  private async isSupersededByNewerMembership(em: EntityManager, membership: Membership): Promise<boolean> {
+    const userId = membership.user?.id;
+    if (!userId || !membership.endDate) return false;
+    const newer = await em.findOne(Membership, {
+      user: userId,
+      id: { $ne: membership.id },
+      paymentStatus: PaymentStatus.PAID,
+      cancelledAt: null,
+      endDate: { $gt: membership.endDate },
+    });
+    return !!newer;
+  }
+
   private async sendExpiringWarnings(em: EntityManager, targetDate: Date, daysRemaining: number) {
     // Query for memberships expiring on the target date
     const startOfDay = new Date(targetDate);
@@ -393,6 +416,12 @@ export class ScheduledTasksService {
     for (const membership of memberships) {
       if (!membership.user?.email) {
         this.logger.warn(`Skipping membership ${membership.id} - no email address`);
+        continue;
+      }
+
+      // Skip rows the member has already renewed past — a newer paid term exists.
+      if (await this.isSupersededByNewerMembership(em, membership)) {
+        this.logger.log(`Skipping ${daysRemaining}-day expiration email for ${membership.id} — superseded by a newer paid membership (already renewed)`);
         continue;
       }
 
@@ -465,6 +494,12 @@ export class ScheduledTasksService {
     for (const membership of memberships) {
       if (!membership.user?.email) {
         this.logger.warn(`Skipping membership ${membership.id} - no email address`);
+        continue;
+      }
+
+      // Skip rows the member has already renewed past — a newer paid term exists.
+      if (await this.isSupersededByNewerMembership(em, membership)) {
+        this.logger.log(`Skipping +${daysPast}d expired email for ${membership.id} — superseded by a newer paid membership (already renewed)`);
         continue;
       }
 
@@ -1002,6 +1037,10 @@ export class ScheduledTasksService {
 
     for (const m of expired) {
       if (!m.user?.email) {
+        skipped++;
+        continue;
+      }
+      if (await this.isSupersededByNewerMembership(em, m)) {
         skipped++;
         continue;
       }
