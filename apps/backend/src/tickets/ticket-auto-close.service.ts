@@ -92,7 +92,10 @@ export class TicketAutoCloseService {
       Ticket,
       {
         autoCloseAt: { $lte: now },
-        status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED] },
+        // on_hold is an intentional pause ("neither party is on the hook"), so a
+        // pending staff-set countdown must NOT close a ticket that was later put
+        // on hold. Mirrors the exclusion the inactivity sweep already applies.
+        status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED, TicketStatus.ON_HOLD] },
       },
       {
         status: TicketStatus.CLOSED,

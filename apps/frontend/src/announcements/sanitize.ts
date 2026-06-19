@@ -8,7 +8,12 @@ import DOMPurify from 'dompurify';
  * (javascript:, data:) from hrefs by default.
  */
 const CONFIG = {
-  ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 's', 'a', 'br', 'p', 'span', 'ul', 'ol', 'li'],
+  // Includes block tags (div, h2-h4) that the staff reply editor (contentEditable
+  // + execCommand) emits for line breaks. Without div here, DOMPurify strips the
+  // wrapper but keeps the text, collapsing multi-line staff replies onto one line
+  // in the thread (while the email — which allows div — kept the breaks). Kept in
+  // sync with the backend storage allowlist in staff-signatures.service.ts.
+  ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 's', 'a', 'br', 'p', 'div', 'span', 'ul', 'ol', 'li', 'h2', 'h3', 'h4'],
   ALLOWED_ATTR: ['href', 'target', 'rel'],
 };
 

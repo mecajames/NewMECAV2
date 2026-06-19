@@ -853,7 +853,20 @@ export class StripeService implements OnApplicationBootstrap {
   async createSubscriptionCheckoutSession(params: {
     customerId?: string;
     customerEmail?: string;
-    priceId: string;
+    /** A pre-existing Stripe Price id (used when the membership type has a configured Stripe product). */
+    priceId?: string;
+    /**
+     * Inline recurring price for membership types with NO pre-created Stripe
+     * product/price. Stripe creates an ad-hoc product+recurring price from this,
+     * so auto-renewal works without any manual Stripe product setup. Exactly one
+     * of priceId / priceData must be provided.
+     */
+    priceData?: {
+      unitAmount: number; // cents
+      currency?: string;
+      interval: 'month' | 'year';
+      productName: string;
+    };
     successUrl: string;
     cancelUrl: string;
     metadata?: Record<string, string>;
@@ -861,15 +874,25 @@ export class StripeService implements OnApplicationBootstrap {
     await this.assertStripeEnabled();
     const stripe = this.getStripeClient();
 
+    if (!params.priceId && !params.priceData) {
+      throw new BadRequestException('A price or price data is required to create a subscription checkout.');
+    }
+
     try {
+      const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = params.priceId
+        ? { price: params.priceId, quantity: 1 }
+        : {
+            quantity: 1,
+            price_data: {
+              currency: params.priceData!.currency || 'usd',
+              unit_amount: params.priceData!.unitAmount,
+              recurring: { interval: params.priceData!.interval },
+              product_data: { name: params.priceData!.productName },
+            },
+          };
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         mode: 'subscription',
-        line_items: [
-          {
-            price: params.priceId,
-            quantity: 1,
-          },
-        ],
+        line_items: [lineItem],
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,
         metadata: params.metadata,
