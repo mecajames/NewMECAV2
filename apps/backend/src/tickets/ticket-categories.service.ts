@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { EntityManager } from '@mikro-orm/core';
 import { CreateTicketCategoryDto, UpdateTicketCategoryDto } from '@newmeca/shared';
 import { TicketCategoryEntity } from './entities/ticket-category.entity';
+import { TicketAudienceViewer, isVisibleToViewer } from './ticket-audience.util';
 
 @Injectable()
 export class TicketCategoriesService {
@@ -20,11 +21,15 @@ export class TicketCategoriesService {
    * Active categories for a department (public — drives the form's second
    * dropdown). Pass no department to get all active categories.
    */
-  async findForForm(departmentId?: string): Promise<TicketCategoryEntity[]> {
+  async findForForm(departmentId?: string, viewer?: TicketAudienceViewer): Promise<TicketCategoryEntity[]> {
     const em = this.em.fork();
     const where: Record<string, unknown> = { isActive: true };
     if (departmentId) where.departmentId = departmentId;
-    return em.find(TicketCategoryEntity, where, { orderBy: { displayOrder: 'ASC', label: 'ASC' } });
+    const cats = await em.find(TicketCategoryEntity, where, { orderBy: { displayOrder: 'ASC', label: 'ASC' } });
+    // When a viewer is supplied (public form), hide categories that don't match
+    // their audience/role. Admin callers pass none → see everything.
+    if (!viewer) return cats;
+    return cats.filter((c) => isVisibleToViewer(c.audience, c.requiredRoles, viewer));
   }
 
   async findById(id: string): Promise<TicketCategoryEntity> {
@@ -45,6 +50,8 @@ export class TicketCategoriesService {
       description: dto.description ?? undefined,
       displayOrder: dto.display_order ?? 0,
       isActive: dto.is_active ?? true,
+      audience: dto.audience ?? 'all',
+      requiredRoles: dto.required_roles?.length ? dto.required_roles : undefined,
     } as any);
     await em.persistAndFlush(cat);
     return cat;
@@ -64,6 +71,10 @@ export class TicketCategoriesService {
     if (dto.description !== undefined) cat.description = dto.description ?? undefined;
     if (dto.display_order !== undefined) cat.displayOrder = dto.display_order;
     if (dto.is_active !== undefined) cat.isActive = dto.is_active;
+    if (dto.audience !== undefined) cat.audience = dto.audience;
+    if (dto.required_roles !== undefined) {
+      cat.requiredRoles = dto.required_roles?.length ? dto.required_roles : undefined;
+    }
     await em.flush();
     return cat;
   }

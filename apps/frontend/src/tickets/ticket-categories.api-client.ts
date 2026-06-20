@@ -4,14 +4,23 @@ import {
   CreateTicketCategoryDto,
   UpdateTicketCategoryDto,
 } from '@newmeca/shared';
+import { TicketFormViewer } from './ticket-admin.api-client';
 
 const API_BASE = '/api/tickets/admin';
 
-// Public — drives the form's Category dropdown for a chosen department.
-export async function listCategoriesForDepartment(departmentId?: string): Promise<TicketCategoryConfig[]> {
-  const { data } = await axios.get(`${API_BASE}/categories/public`, {
-    params: departmentId ? { department_id: departmentId } : {},
-  });
+// Public — drives the form's Category dropdown for a chosen department, filtered
+// by the viewer's audience/role.
+export async function listCategoriesForDepartment(
+  departmentId?: string,
+  viewer?: TicketFormViewer,
+): Promise<TicketCategoryConfig[]> {
+  const params: Record<string, string> = {};
+  if (departmentId) params.department_id = departmentId;
+  if (viewer) {
+    params.audience = viewer.audience;
+    if (viewer.roles?.length) params.roles = viewer.roles.join(',');
+  }
+  const { data } = await axios.get(`${API_BASE}/categories/public`, { params });
   return data;
 }
 

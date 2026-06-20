@@ -27,6 +27,16 @@ export class TicketDepartment {
   @Property({ type: 'integer', fieldName: 'display_order', serializedName: 'display_order', default: 0 })
   displayOrder: number = 0;
 
+  // Form visibility: 'all' (guests + members), 'members' (logged-in only),
+  // 'guests' (not-logged-in only). See ticket-audience.util.ts.
+  @Property({ type: 'varchar', length: 20, fieldName: 'audience', serializedName: 'audience', default: 'all' })
+  audience: string = 'all';
+
+  // When non-empty, only members whose role is in this list see this department
+  // (implies members-only). Used for Event Director / Judge departments.
+  @Property({ type: 'json', fieldName: 'required_roles', serializedName: 'required_roles', nullable: true })
+  requiredRoles?: string[];
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
 

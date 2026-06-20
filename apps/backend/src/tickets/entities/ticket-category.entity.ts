@@ -31,6 +31,14 @@ export class TicketCategoryEntity {
   @Property({ type: 'boolean', default: true, fieldName: 'is_active' })
   isActive: boolean = true;
 
+  // Form visibility: 'all' | 'members' | 'guests'. See ticket-audience.util.ts.
+  @Property({ type: 'text', default: 'all' })
+  audience: string = 'all';
+
+  // When non-empty, only members holding one of these roles see this category.
+  @Property({ type: 'json', nullable: true, fieldName: 'required_roles' })
+  requiredRoles?: string[];
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();
 
@@ -46,6 +54,8 @@ export class TicketCategoryEntity {
       description: this.description ?? null,
       display_order: this.displayOrder,
       is_active: this.isActive,
+      audience: this.audience ?? 'all',
+      required_roles: this.requiredRoles ?? null,
       created_at: this.createdAt.toISOString(),
       updated_at: this.updatedAt.toISOString(),
     };

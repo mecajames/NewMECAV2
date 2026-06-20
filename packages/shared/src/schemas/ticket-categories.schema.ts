@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TicketAudienceSchema } from './ticket-admin.schema.js';
 
 // =============================================================================
 // Managed, department-scoped ticket categories.
@@ -22,6 +23,8 @@ export const CreateTicketCategorySchema = z.object({
   description: z.string().max(500).optional().nullable(),
   display_order: z.number().int().default(0),
   is_active: z.boolean().default(true),
+  audience: TicketAudienceSchema.default('all'),
+  required_roles: z.array(z.string()).optional().nullable(),
 });
 export type CreateTicketCategoryDto = z.infer<typeof CreateTicketCategorySchema>;
 
@@ -36,6 +39,8 @@ export const TicketCategoryConfigSchema = z.object({
   description: z.string().nullable(),
   display_order: z.number(),
   is_active: z.boolean(),
+  audience: TicketAudienceSchema.default('all'),
+  required_roles: z.array(z.string()).nullable().optional(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
 });

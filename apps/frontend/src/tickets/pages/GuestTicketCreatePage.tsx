@@ -79,7 +79,8 @@ export function GuestTicketCreatePage() {
   // forced to the Account category server-side).
   useEffect(() => {
     if (!_verified || isAccountHelp) return;
-    listPublicDepartments().then(setDepartments).catch(() => setDepartments([]));
+    // Guest flow → only guest-visible departments (audience 'all' | 'guests').
+    listPublicDepartments({ audience: 'guest' }).then(setDepartments).catch(() => setDepartments([]));
   }, [_verified, isAccountHelp]);
 
   const handleDepartmentChange = async (deptId: string) => {
@@ -89,7 +90,7 @@ export function GuestTicketCreatePage() {
     if (!deptId) return;
     setLoadingCategories(true);
     try {
-      setCategories(await listCategoriesForDepartment(deptId));
+      setCategories(await listCategoriesForDepartment(deptId, { audience: 'guest' }));
     } catch {
       setCategories([]);
     } finally {

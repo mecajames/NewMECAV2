@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, ConflictException } from '@nestj
 import { EntityManager } from '@mikro-orm/core';
 import { TicketDepartment } from './entities/ticket-department.entity';
 import { CreateTicketDepartmentDto, UpdateTicketDepartmentDto } from '@newmeca/shared';
+import { TicketAudienceViewer, isVisibleToViewer } from './ticket-audience.util';
 
 @Injectable()
 export class TicketDepartmentsService {
@@ -26,6 +27,16 @@ export class TicketDepartmentsService {
     return em.find(TicketDepartment, { isActive: true, isPrivate: false }, {
       orderBy: { displayOrder: 'ASC', name: 'ASC' },
     });
+  }
+
+  /**
+   * Public departments filtered for who's asking — guests vs logged-in members,
+   * and role-gated departments (Event Director / Judge) for members who hold a
+   * required role. Drives the ticket form's Department dropdown.
+   */
+  async findForForm(viewer: TicketAudienceViewer): Promise<TicketDepartment[]> {
+    const departments = await this.findPublic();
+    return departments.filter((d) => isVisibleToViewer(d.audience, d.requiredRoles, viewer));
   }
 
   async findById(id: string): Promise<TicketDepartment> {
@@ -74,6 +85,8 @@ export class TicketDepartmentsService {
       isPrivate: data.is_private ?? false,
       isDefault: data.is_default ?? false,
       displayOrder: data.display_order ?? 0,
+      audience: data.audience ?? 'all',
+      requiredRoles: data.required_roles?.length ? data.required_roles : undefined,
     } as any);
 
     await em.persistAndFlush(department);
@@ -125,6 +138,10 @@ export class TicketDepartmentsService {
     if (data.is_private !== undefined) department.isPrivate = data.is_private;
     if (data.is_default !== undefined) department.isDefault = data.is_default;
     if (data.display_order !== undefined) department.displayOrder = data.display_order;
+    if (data.audience !== undefined) department.audience = data.audience;
+    if (data.required_roles !== undefined) {
+      department.requiredRoles = data.required_roles?.length ? data.required_roles : undefined;
+    }
 
     await em.flush();
     return department;

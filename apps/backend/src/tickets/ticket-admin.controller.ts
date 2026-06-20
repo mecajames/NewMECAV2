@@ -21,6 +21,7 @@ import { TicketRoutingService } from './ticket-routing.service';
 import { TicketSettingsService } from './ticket-settings.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketCategoriesService } from './ticket-categories.service';
+import { viewerFromQuery } from './ticket-audience.util';
 import { TicketRefundService, RefundablePurchaseType } from './ticket-refund.service';
 import { TicketStaff } from './entities/ticket-staff.entity';
 import { TicketsService } from './tickets.service';
@@ -89,9 +90,15 @@ export class TicketAdminController {
 
   @Public()
   @Get('departments/public')
-  async listPublicDepartments() {
-    // Public endpoint - used by guest ticket form to show department options
-    return this.departmentsService.findPublic();
+  async listPublicDepartments(
+    @Query('audience') audience?: string,
+    @Query('roles') roles?: string,
+  ) {
+    // Public endpoint — drives the ticket form's Department dropdown. The form
+    // passes audience=guest|member (+ the member's roles) so we can hide
+    // member-only / role-gated departments from guests. Filtering only controls
+    // what's OFFERED, so trusting the client-supplied roles here is safe.
+    return this.departmentsService.findForForm(viewerFromQuery(audience, roles));
   }
 
   @Get('departments/:id')
@@ -347,10 +354,14 @@ export class TicketAdminController {
 
   @Public()
   @Get('categories/public')
-  async listPublicCategories(@Query('department_id') departmentId?: string) {
-    // Public — drives the form's Category dropdown (active categories, optionally
-    // filtered to the chosen department).
-    return this.categoriesService.findForForm(departmentId);
+  async listPublicCategories(
+    @Query('department_id') departmentId?: string,
+    @Query('audience') audience?: string,
+    @Query('roles') roles?: string,
+  ) {
+    // Public — drives the form's Category dropdown (active categories for the
+    // chosen department), filtered by the viewer's audience/role.
+    return this.categoriesService.findForForm(departmentId, viewerFromQuery(audience, roles));
   }
 
   @Get('categories')
