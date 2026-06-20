@@ -454,8 +454,15 @@ export class TicketsController {
     @Param('commentId') commentId: string,
     @Body() data: UpdateTicketCommentDto,
   ): Promise<TicketComment> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.updateComment(commentId, data);
+    const user = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    // Pass the editor's identity so the service can enforce that staff edit
+    // only their OWN replies (and re-sanitize the HTML).
+    return this.ticketsService.updateComment(commentId, data, {
+      editorId: user.id,
+      isStaff: isAdminUser(profile),
+    });
   }
 
   @Delete('comments/:commentId')

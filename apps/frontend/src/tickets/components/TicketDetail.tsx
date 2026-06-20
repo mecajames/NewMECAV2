@@ -185,6 +185,12 @@ export function TicketDetail({
   );
   const [isInternal, setIsInternal] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  // Inline edit of a staff member's OWN posted reply (staff can only edit their
+  // own comments — enforced on the backend too).
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentValue, setEditCommentValue] = useState('');
+  const [savingCommentEdit, setSavingCommentEdit] = useState(false);
+  const [editCommentError, setEditCommentError] = useState<string | null>(null);
   // Canned responses (reply templates) for staff. Fetched once on
   // mount when the viewer is a staff member. Click to expand the
   // picker, click a row to insert the resolved body into the textarea.
@@ -414,6 +420,39 @@ export function TicketDetail({
     const snippet = `<a href="${safeUrl}">${escapeForReplyHtml(link.label)}</a>`;
     setNewComment((prev) => prev ? `${prev}&nbsp;${snippet}` : snippet);
     setQuickLinkOpen(false);
+  };
+
+  // ── Inline edit of an existing staff reply ────────────────────────────────
+  const startEditComment = (c: TicketComment) => {
+    setEditCommentError(null);
+    setEditingCommentId(c.id);
+    setEditCommentValue(c.content);
+  };
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditCommentValue('');
+    setEditCommentError(null);
+  };
+
+  const saveEditComment = async (commentId: string) => {
+    if (!ticketId) return;
+    setSavingCommentEdit(true);
+    setEditCommentError(null);
+    try {
+      await ticketsApi.updateComment(commentId, { content: editCommentValue });
+      // Re-fetch so we show the server-sanitized version of what we saved.
+      const refreshed = await ticketsApi.getComments(ticketId, isStaff);
+      setComments(refreshed);
+      setEditingCommentId(null);
+      setEditCommentValue('');
+    } catch (err: any) {
+      setEditCommentError(
+        err?.response?.data?.message || 'Failed to save your edit. Please try again.',
+      );
+    } finally {
+      setSavingCommentEdit(false);
+    }
   };
 
   // Fetch staff list when modal opens
@@ -1329,9 +1368,56 @@ export function TicketDetail({
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-500">{formatDate(comment.created_at)}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500">{formatDate(comment.created_at)}</span>
+                        {isStaff && comment.author_id === currentUserId && editingCommentId !== comment.id && (
+                          <button
+                            type="button"
+                            onClick={() => startEditComment(comment)}
+                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-orange-400 transition-colors"
+                            title="Edit your reply"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {comment.content_format === 'html' ? (
+                    {editingCommentId === comment.id ? (
+                      <div className="pl-10">
+                        {comment.content_format === 'html' ? (
+                          <RichTextEditor value={editCommentValue} onChange={setEditCommentValue} />
+                        ) : (
+                          <textarea
+                            value={editCommentValue}
+                            onChange={(e) => setEditCommentValue(e.target.value)}
+                            rows={4}
+                            className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white resize-y focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        )}
+                        {editCommentError && (
+                          <p className="mt-2 text-sm text-red-400">{editCommentError}</p>
+                        )}
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => saveEditComment(comment.id)}
+                            disabled={savingCommentEdit}
+                            className="px-3 py-1.5 text-sm bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                          >
+                            {savingCommentEdit ? 'Saving…' : 'Save changes'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditComment}
+                            disabled={savingCommentEdit}
+                            className="px-3 py-1.5 text-sm bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : comment.content_format === 'html' ? (
                       <div
                         className="text-gray-300 pl-10 break-words [&_a]:text-orange-400 [&_a]:underline [&_p]:my-1"
                         dangerouslySetInnerHTML={{ __html: sanitizeAnnouncementHtml(comment.content) }}
@@ -1913,6 +1999,19 @@ export function TicketDetail({
                         <UserPlus className="w-3 h-3" />
                       )}
                       Assign to me
+                    </button>
+                  )}
+                  {/* Staff: reassign to ANY team member without posting a reply
+                      (opens the standalone Assign modal). */}
+                  {isStaff && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignModal(true)}
+                      title="Reassign this ticket to another team member"
+                      className="text-xs px-2 py-0.5 rounded bg-slate-600/60 text-gray-200 border border-slate-500 hover:bg-slate-600 flex items-center gap-1 flex-shrink-0"
+                    >
+                      <Users className="w-3 h-3" />
+                      {ticket.assigned_to ? 'Change' : 'Assign'}
                     </button>
                   )}
                 </span>

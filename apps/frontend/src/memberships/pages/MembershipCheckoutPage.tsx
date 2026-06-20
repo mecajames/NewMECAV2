@@ -1,6 +1,6 @@
 import { useState, useEffect, Suspense } from 'react';
 import { lazyWithReload as lazy } from '@/shared/lazyWithReload';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import axios from '@/lib/axios';
 import {
   ArrowLeft,
@@ -82,6 +82,42 @@ function containsTeamWord(name: string): boolean {
   return false;
 }
 
+/**
+ * Pick the current active plan that best replaces a retired (deactivated) one,
+ * so a member whose checkout link points at an old plan is routed to today's
+ * equivalent instead of dead-ending at a 400. Narrows by category, then the
+ * same manufacturer tier, then matching team-inclusion, then closest price.
+ * Returns null when there is no active plan in the category to fall back to.
+ */
+function pickEquivalentActivePlan(
+  retired: MembershipTypeConfig,
+  candidates: MembershipTypeConfig[],
+): MembershipTypeConfig | null {
+  // Same category, standalone-purchasable (exclude upgrade-only add-ons), active.
+  let pool = candidates.filter(
+    (c) => c.isActive && !c.isUpgradeOnly && c.category === retired.category && c.id !== retired.id,
+  );
+  if (pool.length === 0) return null;
+
+  // Prefer the same manufacturer tier when the retired plan had one
+  // (undefined === undefined for the non-tiered categories).
+  const sameTier = pool.filter((c) => (c.tier ?? null) === (retired.tier ?? null));
+  if (sameTier.length > 0) pool = sameTier;
+
+  // Prefer matching team-inclusion so "Competitor w/Team" maps to a w/Team plan
+  // rather than a plain Competitor plan.
+  const sameTeam = pool.filter((c) => !!c.includesTeam === !!retired.includesTeam);
+  if (sameTeam.length > 0) pool = sameTeam;
+
+  // Closest price wins; tie-break by display order then name for a stable pick.
+  return [...pool].sort((a, b) => {
+    const priceDiff = Math.abs(a.price - retired.price) - Math.abs(b.price - retired.price);
+    if (priceDiff !== 0) return priceDiff;
+    if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder;
+    return a.name.localeCompare(b.name);
+  })[0];
+}
+
 interface FormData {
   // Contact Info
   email: string;
@@ -131,6 +167,10 @@ type CheckoutStep = 'info' | 'payment' | 'confirmation';
 export default function MembershipCheckoutPage() {
   const { membershipId } = useParams<{ membershipId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set when we auto-route off a retired plan (see fetchMembership) so we can
+  // explain the plan-name change instead of silently swapping it under them.
+  const routedFromRetiredPlan = (location.state as { retiredPlanName?: string } | null)?.retiredPlanName;
   const { user, profile, signUp, signIn, resetPassword } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
@@ -212,6 +252,35 @@ export default function MembershipCheckoutPage() {
       try {
         setLoading(true);
         const data = await membershipTypeConfigsApi.getById(membershipId);
+
+        // A retired (deactivated) plan still loads via getById — admins need to
+        // view inactive configs — but create-payment-intent rejects it with a
+        // 400 "This membership type is not available", which surfaced as the
+        // cryptic "Request failed with status code 400" renewal tickets. Route
+        // the member to today's equivalent active plan instead of dead-ending.
+        if (!data.isActive) {
+          let equivalent: MembershipTypeConfig | null = null;
+          try {
+            const candidates = await membershipTypeConfigsApi.getByCategory(data.category);
+            equivalent = pickEquivalentActivePlan(data, candidates);
+          } catch (lookupErr) {
+            console.error('Could not look up a replacement for retired plan:', lookupErr);
+          }
+          if (equivalent) {
+            // Re-navigate to the active plan; the effect re-runs with the new
+            // id and loads it. Carry the old name so we can explain the swap.
+            navigate(`/membership/checkout/${equivalent.id}`, {
+              replace: true,
+              state: { retiredPlanName: data.name },
+            });
+          } else {
+            setError(
+              'This membership plan is no longer available, and we couldn’t find a current equivalent. Please choose a plan from the memberships page.',
+            );
+          }
+          return;
+        }
+
         setMembership(data);
 
         // Pre-fill form from user profile if logged in
@@ -504,9 +573,19 @@ export default function MembershipCheckoutPage() {
       }
       setClientSecret(secret);
       setStep('payment');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating payment intent:', err);
-      setError(err instanceof Error ? err.message : 'Failed to initialize payment. Please try again.');
+      // Surface the backend's ACTUAL reason (e.g. "This membership type is not
+      // available" for a retired plan, or a Stripe rejection). Previously this
+      // used err.message — axios's opaque "Request failed with status code 400"
+      // — which left members and support with no idea what actually failed.
+      // NestJS validation errors return `message` as a string OR a string[].
+      const backendMessage = err?.response?.data?.message;
+      setError(
+        (Array.isArray(backendMessage) ? backendMessage.join(' ') : backendMessage) ||
+          (err instanceof Error ? err.message : null) ||
+          'Failed to initialize payment. Please try again.',
+      );
     } finally {
       setCreatingPaymentIntent(false);
     }
@@ -814,6 +893,17 @@ export default function MembershipCheckoutPage() {
                   {error && (
                     <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
                       <p className="text-red-500 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  {routedFromRetiredPlan && (
+                    <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/40 rounded-lg">
+                      <p className="text-blue-200 text-sm">
+                        The plan you came in for (<span className="font-semibold">{routedFromRetiredPlan}</span>) is
+                        no longer offered. We&apos;ve switched you to our current{' '}
+                        <span className="font-semibold">{membership.name}</span> plan
+                        {' '}(${membership.price.toFixed(2)}/year).
+                      </p>
                     </div>
                   )}
 

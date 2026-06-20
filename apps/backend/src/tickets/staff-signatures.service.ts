@@ -159,6 +159,20 @@ const ALLOWED_CSS_PROPS = new Set([
  * grow significantly, switch to `sanitize-html` or a real HTML
  * parser.
  */
+/**
+ * Escape a run of text content for safe HTML embedding, while leaving
+ * well-formed HTML entity references intact (&name; / &#nnn; / &#xHH;) so
+ * things like &nbsp; survive. A bare "&" (e.g. "Tom & Jerry") still becomes
+ * &amp;. Entities in text are inert (rendered as their character, never parsed
+ * as markup), so preserving them introduces no XSS surface — tags/attributes
+ * are handled separately by the allowlist below.
+ */
+function escapeTextRun(text: string): string {
+  return text
+    .replace(/&(?![a-zA-Z][a-zA-Z0-9]*;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;')
+    .replace(/</g, '&lt;');
+}
+
 export function sanitizeSignatureHtml(input: string): string {
   if (!input) return '';
   // Hard kill any CR/LF escapes that could confuse downstream email
@@ -170,13 +184,16 @@ export function sanitizeSignatureHtml(input: string): string {
   while (i < cleaned.length) {
     const ch = cleaned[i];
     if (ch !== '<') {
-      // Text node - escape angles / amps proactively so any literal
-      // angle-bracket in user-typed signature doesn't break later.
-      // Don't touch already-escaped entities.
-      out += ch
-        .replace(/&(?!(amp|lt|gt|quot|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
-        .replace(/</g, '&lt;');
-      i++;
+      // Text node - escape a bare '&' proactively, but leave already-formed
+      // HTML entities (&nbsp; &amp; &#160; …) intact. We escape the WHOLE text
+      // run up to the next '<' at once: the previous code escaped char-by-char,
+      // which meant the entity-preserving lookahead could never see past the
+      // lone '&' and so double-escaped EVERY entity — turning the &nbsp; that
+      // contentEditable emits for spaces into a literal "&nbsp;" in the reply.
+      const nextTag = cleaned.indexOf('<', i);
+      const end = nextTag === -1 ? cleaned.length : nextTag;
+      out += escapeTextRun(cleaned.slice(i, end));
+      i = end;
       continue;
     }
 

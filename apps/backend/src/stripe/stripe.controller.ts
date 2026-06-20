@@ -211,9 +211,18 @@ export class StripeController {
       throw new BadRequestException('This membership type is not available');
     }
 
-    // Verify user is allowed to purchase this membership type
+    // Verify user is allowed to purchase this membership type. allowEarlyRenewal
+    // lets an active Retailer/Manufacturer member renew BEFORE expiry (the new
+    // term stacks onto their current end date via computeRenewalEndDate, and the
+    // prior active row is superseded at fulfillment) instead of being blocked
+    // with "you already have an active membership". Competitors are unlimited
+    // and expired members already pass, so this only unblocks active retail/mfr.
     if (data.userId) {
-      const eligibility = await this.membershipsService.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
+      const eligibility = await this.membershipsService.canPurchaseMembership(
+        data.userId,
+        data.membershipTypeConfigId,
+        { allowEarlyRenewal: true },
+      );
       if (!eligibility.allowed) {
         throw new BadRequestException(eligibility.reason || 'You are not eligible to purchase this membership type');
       }
@@ -770,18 +779,37 @@ export class StripeController {
       throw new BadRequestException('Membership type not found');
     }
 
-    if (!membershipConfig.stripeProductId) {
-      throw new BadRequestException('This membership type is not configured for recurring billing. Please contact support.');
-    }
-
-    // Get or create a recurring price for this product
+    // Build the recurring price for this membership. Membership types are NOT
+    // pre-configured with a Stripe product in this app (stripeProductId is
+    // null), which previously hard-blocked auto-renewal with a 400. When a
+    // product IS configured we reuse a Price tied to it (cleaner Stripe
+    // reporting); otherwise we pass an inline recurring price so Stripe mints an
+    // ad-hoc product+price on the fly — exactly how the one-time payment-intent
+    // path already works without pre-created products.
     const priceInCents = Math.round(membershipConfig.price * 100);
-    const price = await this.stripeService.getOrCreateRecurringPrice({
-      productId: membershipConfig.stripeProductId,
-      unitAmount: priceInCents,
-      interval: 'year', // Memberships are annual
-      currency: membershipConfig.currency || 'usd',
-    });
+    const currency = membershipConfig.currency || 'usd';
+
+    let priceId: string | undefined;
+    let priceData:
+      | { unitAmount: number; currency: string; interval: 'year'; productName: string }
+      | undefined;
+
+    if (membershipConfig.stripeProductId) {
+      const price = await this.stripeService.getOrCreateRecurringPrice({
+        productId: membershipConfig.stripeProductId,
+        unitAmount: priceInCents,
+        interval: 'year', // Memberships are annual
+        currency,
+      });
+      priceId = price.id;
+    } else {
+      priceData = {
+        unitAmount: priceInCents,
+        currency,
+        interval: 'year',
+        productName: membershipConfig.name,
+      };
+    }
 
     // Find or create Stripe customer
     const customerName = [data.billingFirstName, data.billingLastName].filter(Boolean).join(' ') || undefined;
@@ -801,7 +829,8 @@ export class StripeController {
     // Create checkout session
     const session = await this.stripeService.createSubscriptionCheckoutSession({
       customerId: customer.id,
-      priceId: price.id,
+      priceId,
+      priceData,
       successUrl: data.successUrl,
       cancelUrl: data.cancelUrl,
       metadata,

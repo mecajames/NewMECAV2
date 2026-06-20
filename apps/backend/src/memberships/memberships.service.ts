@@ -452,8 +452,15 @@ export class MembershipsService {
       if (existing) return existing;
     }
 
-    // Check if purchase is allowed (before transaction)
-    const canPurchase = await this.canPurchaseMembership(data.userId, data.membershipTypeConfigId);
+    // Check if purchase is allowed (before transaction). This runs AFTER payment
+    // (client-side create + webhook fulfillment both land here), so allow early
+    // renewal — rejecting a paid renewal would orphan the payment. The active
+    // prior row is superseded below and the term stacks via computeRenewalEndDate.
+    const canPurchase = await this.canPurchaseMembership(
+      data.userId,
+      data.membershipTypeConfigId,
+      { allowEarlyRenewal: true },
+    );
     if (!canPurchase.allowed) {
       throw new BadRequestException(canPurchase.reason);
     }
