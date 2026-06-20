@@ -703,11 +703,17 @@ export class JudgesService {
 
     if (!application.user.email) return;
 
+    const statusBody = `
+      <p style="margin:0 0 16px 0;font-size:16px;">Dear ${application.fullName},</p>
+      <p style="margin:0 0 16px 0;">${statusMessages[application.status]}</p>
+      <p style="margin:0;">Thank you for your interest in MECA.</p>`;
     await this.emailService.sendEmail({
       to: application.user.email,
       subject: `MECA Judge Application - ${application.status.charAt(0).toUpperCase() + application.status.slice(1)}`,
-      html: `<p>Dear ${application.fullName},</p><p>${statusMessages[application.status]}</p><p>Thank you for your interest in MECA.</p><p>Best regards,<br/>MECA Team</p>`,
-      text: `Dear ${application.fullName},\n\n${statusMessages[application.status]}\n\nThank you for your interest in MECA.\n\nBest regards,\nMECA Team`,
+      html: this.emailService.buildBrandedHtml('Judge Application Update', statusBody, {
+        preheader: statusMessages[application.status],
+      }),
+      text: `Dear ${application.fullName},\n\n${statusMessages[application.status]}\n\nThank you for your interest in MECA.\n\nFun, Fair, Loud and Clear!\n— MECA Team`,
       from: 'events@mecacaraudio.com',
     });
   }
@@ -957,11 +963,16 @@ export class JudgesService {
       cancelled: `Your assignment for ${eventName} on ${eventDate} has been cancelled.`,
     };
 
+    const assignmentBody = `
+      <p style="margin:0 0 16px 0;font-size:16px;">Dear ${judgeName},</p>
+      <p style="margin:0;">${messages[type]}</p>`;
     await this.emailService.sendEmail({
       to: judgeEmail,
       subject: subjects[type],
-      html: `<p>Dear ${judgeName},</p><p>${messages[type]}</p><p>Best regards,<br/>MECA Team</p>`,
-      text: `Dear ${judgeName},\n\n${messages[type]}\n\nBest regards,\nMECA Team`,
+      html: this.emailService.buildBrandedHtml(subjects[type], assignmentBody, {
+        preheader: messages[type],
+      }),
+      text: `Dear ${judgeName},\n\n${messages[type]}\n\nFun, Fair, Loud and Clear!\n— MECA Team`,
       from: 'events@mecacaraudio.com',
     });
   }

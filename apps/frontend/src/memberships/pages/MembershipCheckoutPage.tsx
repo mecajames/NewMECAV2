@@ -171,7 +171,7 @@ export default function MembershipCheckoutPage() {
   // Set when we auto-route off a retired plan (see fetchMembership) so we can
   // explain the plan-name change instead of silently swapping it under them.
   const routedFromRetiredPlan = (location.state as { retiredPlanName?: string } | null)?.retiredPlanName;
-  const { user, profile, signUp, signIn, resetPassword } = useAuth();
+  const { user, profile, signUp, signIn } = useAuth();
 
   const { taxRate, calculateTax } = useTaxRate();
   const [couponCode, setCouponCode] = useState('');
@@ -196,21 +196,15 @@ export default function MembershipCheckoutPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // Classification of the entered guest email against existing accounts:
-  //   'active'    — account with an ACTIVE membership → must log in and renew
-  //                 from the My MECA dashboard (checkout blocked)
-  //   'renewable' — account without an active membership (expired, or never a
-  //                 member) → proceed WITHOUT creating an account; payment
-  //                 fulfillment attaches the membership to the existing
-  //                 profile by email and their password is untouched
+  //   'active'    — account with a CURRENT active membership → they can log in,
+  //                 so we send them to log in and renew from My MECA (no password
+  //                 set inline — that would be account takeover on a live account)
+  //   'renewable' — EXPIRED account (or one with no current membership) → they
+  //                 CANNOT log in (the expired-login gate signs them out), so we
+  //                 renew inline and SET A NEW PASSWORD on their existing account.
+  //                 We never email a reset link — an expired account can't reset.
   //   'blocked'   — account that cannot log in (banned) → contact support
   const [existingAccount, setExistingAccount] = useState<'active' | 'renewable' | 'blocked' | null>(null);
-
-  // For ACTIVE accounts we never let a guest set a password on a live membership
-  // (account-takeover risk). Instead we email a secure sign-in / password-reset
-  // link to the address on file so the real owner gets in from their own inbox.
-  const [sendingSignInLink, setSendingSignInLink] = useState(false);
-  const [signInLinkSent, setSignInLinkSent] = useState(false);
-  const [signInLinkError, setSignInLinkError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -316,12 +310,9 @@ export default function MembershipCheckoutPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    // Editing the email invalidates any prior account classification + any
-    // "sign-in link sent" confirmation tied to the old address.
+    // Editing the email invalidates any prior account classification.
     if (name === 'email') {
       if (existingAccount) setExistingAccount(null);
-      if (signInLinkSent) setSignInLinkSent(false);
-      if (signInLinkError) setSignInLinkError(null);
     }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -341,29 +332,6 @@ export default function MembershipCheckoutPage() {
   const handleEmailBlur = async () => {
     if (user) return;
     setExistingAccount(await classifyGuestEmail());
-  };
-
-  // Active accounts: email the owner a secure sign-in / password-reset link
-  // (reuses the standard Forgot Password mechanism — the link lands on
-  // /reset-password and signs them in). We never set a password in the open on
-  // a live membership.
-  const handleSendSignInLink = async () => {
-    const email = formData.email.trim();
-    if (!email) return;
-    setSendingSignInLink(true);
-    setSignInLinkError(null);
-    try {
-      const { error: resetErr } = await resetPassword(email);
-      if (resetErr) {
-        setSignInLinkError("We couldn't send the link just now. Please try again in a moment.");
-      } else {
-        setSignInLinkSent(true);
-      }
-    } catch {
-      setSignInLinkError("We couldn't send the link just now. Please try again in a moment.");
-    } finally {
-      setSendingSignInLink(false);
-    }
   };
 
   const validateInfoStep = (): boolean => {
@@ -910,59 +878,33 @@ export default function MembershipCheckoutPage() {
                   {existingAccount === 'active' && (
                     <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500 rounded-lg">
                       <p className="text-orange-300 text-sm font-medium mb-1">
-                        We found your MECA account
+                        You already have an active membership
                       </p>
                       <p className="text-orange-200/90 text-sm">
                         There's already an active MECA membership for{' '}
-                        <span className="font-semibold">{formData.email}</span>. To keep your
-                        account secure, we'll email a sign-in link to that address — open it to
-                        access your account, where you can manage or renew your membership.
+                        <span className="font-semibold">{formData.email}</span>. Please log in to
+                        renew or manage it from your dashboard.
                       </p>
-                      {signInLinkSent ? (
-                        <p className="mt-3 text-green-300 text-sm font-medium">
-                          ✓ Check your inbox — we've emailed a secure sign-in link to{' '}
-                          <span className="font-semibold">{formData.email}</span>. It can take a
-                          minute to arrive (check your spam folder too).
-                        </p>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleSendSignInLink}
-                            disabled={sendingSignInLink}
-                            className="mt-3 inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {sendingSignInLink ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                Sending…
-                              </>
-                            ) : (
-                              <>
-                                <Mail className="h-4 w-4 mr-2" />
-                                Email me a secure sign-in link
-                              </>
-                            )}
-                          </button>
-                          {signInLinkError && (
-                            <p className="mt-2 text-red-300 text-sm">{signInLinkError}</p>
-                          )}
-                        </>
-                      )}
+                      <Link
+                        to="/login"
+                        className="mt-3 inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                      >
+                        Log in
+                      </Link>
                     </div>
                   )}
 
                   {existingAccount === 'renewable' && (
                     <div className="mb-6 p-4 bg-green-500/10 border border-green-500 rounded-lg">
                       <p className="text-green-300 text-sm font-medium mb-1">
-                        Welcome back!
+                        We located your account
                       </p>
                       <p className="text-green-200/90 text-sm">
-                        We found your MECA account for{' '}
-                        <span className="font-semibold">{formData.email}</span>. This renews your
-                        existing membership — no new account needed. Your password didn't carry over
-                        from the old site, so just set one below to finish. You'll use it to sign in
-                        from now on.
+                        We've located an expired account under{' '}
+                        <span className="font-semibold">{formData.email}</span>. Please continue
+                        filling out the form below to renew your membership, and we'll set a new
+                        password on your account so you can sign in from now on. (No password reset
+                        needed — just choose a new password below.)
                       </p>
                     </div>
                   )}

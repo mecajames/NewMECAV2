@@ -777,11 +777,16 @@ export class EventDirectorsService {
       cancelled: `Your assignment for ${eventName} on ${eventDate} has been cancelled.`,
     };
 
+    const edBody = `
+      <p style="margin:0 0 16px 0;font-size:16px;">Dear ${edName},</p>
+      <p style="margin:0;">${messages[type]}</p>`;
     await this.emailService.sendEmail({
       to: edEmail,
       subject: subjects[type],
-      html: `<p>Dear ${edName},</p><p>${messages[type]}</p><p>Best regards,<br/>MECA Team</p>`,
-      text: `Dear ${edName},\n\n${messages[type]}\n\nBest regards,\nMECA Team`,
+      html: this.emailService.buildBrandedHtml(subjects[type], edBody, {
+        preheader: messages[type],
+      }),
+      text: `Dear ${edName},\n\n${messages[type]}\n\nFun, Fair, Loud and Clear!\n— MECA Team`,
       from: 'events@mecacaraudio.com',
     });
   }

@@ -1076,22 +1076,20 @@ export class ScheduledTasksService {
    */
   async sendTestEmail(toEmail: string): Promise<{ success: boolean; message: string }> {
     try {
+      const testBody = `
+        <p style="margin:0 0 16px 0;">This is a test email to verify your email configuration is working correctly.</p>
+        <p style="margin:0 0 16px 0;">If you received this email, your email settings are configured properly!</p>
+        <p style="color:#64748b;font-size:12px;margin:0;">
+          Sent at: ${new Date().toISOString()}<br>
+          Provider: ${this.emailService.getProvider() || 'Not configured'}
+        </p>`;
       const result = await this.emailService.sendEmail({
         to: toEmail,
         subject: 'MECA Test Email',
         from: 'noreply@mecacaraudio.com',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #ea580c;">Test Email from MECA</h1>
-            <p>This is a test email to verify your email configuration is working correctly.</p>
-            <p>If you received this email, your email settings are configured properly!</p>
-            <hr style="border: 1px solid #e2e8f0; margin: 20px 0;">
-            <p style="color: #64748b; font-size: 12px;">
-              Sent at: ${new Date().toISOString()}<br>
-              Provider: ${this.emailService.getProvider() || 'Not configured'}
-            </p>
-          </div>
-        `,
+        html: this.emailService.buildBrandedHtml('Test Email', testBody, {
+          preheader: 'MECA email configuration test',
+        }),
         text: 'This is a test email from MECA to verify your email configuration is working correctly.',
       });
 
@@ -1251,19 +1249,18 @@ export class ScheduledTasksService {
       const emailLines = byEmail.map(e => `${e.email}: ${e.count} attempts`).join('<br>');
       const ipLines = byIp.map(e => `${e.ip_address}: ${e.count} attempts`).join('<br>');
 
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #dc2626;">Security Alert: Suspicious Login Activity</h2>
-          <p>The following accounts/IPs have had 5+ failed login attempts in the last 15 minutes:</p>
-          ${byEmail.length > 0 ? `<h3>By Email:</h3><p>${emailLines}</p>` : ''}
-          ${byIp.length > 0 ? `<h3>By IP Address:</h3><p>${ipLines}</p>` : ''}
-          <hr style="border: 1px solid #e2e8f0; margin: 20px 0;">
-          <p style="color: #64748b; font-size: 12px;">
+      const alertBody = `
+          <p style="margin:0 0 16px 0;">The following accounts/IPs have had 5+ failed login attempts in the last 15 minutes:</p>
+          ${byEmail.length > 0 ? `<h3 style="margin:0 0 6px 0;">By Email:</h3><p style="margin:0 0 16px 0;">${emailLines}</p>` : ''}
+          ${byIp.length > 0 ? `<h3 style="margin:0 0 6px 0;">By IP Address:</h3><p style="margin:0 0 16px 0;">${ipLines}</p>` : ''}
+          <p style="color: #64748b; font-size: 12px; margin:0;">
             This is an automated alert from the MECA login monitoring system.<br>
             Time: ${new Date().toISOString()}
-          </p>
-        </div>
-      `;
+          </p>`;
+      const html = this.emailService.buildBrandedHtml('Security Alert', alertBody, {
+        subtitle: 'Suspicious Login Activity',
+        preheader: 'Suspicious login activity detected on MECA',
+      });
 
       // Get admin email from site settings or use default
       const adminEmailSetting = await this.siteSettingsService.findByKey('admin_alert_email');
