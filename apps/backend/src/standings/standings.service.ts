@@ -53,6 +53,11 @@ export interface TeamMemberInfo {
   representativeName: string;
   firstName: string;
   lastName: string;
+  // The member's real team record (teams table) when one exists. Used to
+  // recover the team NAME when the membership's team_name is blank (the old-site
+  // import left many blank), and to link the standings row to the real team
+  // profile instead of the synthesized membership placeholder.
+  linkedTeamId?: string;
 }
 
 // Format standings summary
@@ -269,7 +274,9 @@ export class StandingsService {
 
       if (!teamAggregates.has(teamKey)) {
         teamAggregates.set(teamKey, {
-          teamId: teamInfo.memberId, // membership_id from getTeamMembersFromMemberships
+          // Link to the real team profile when the member has one; otherwise
+          // fall back to the membership_id (membership-synthesized team).
+          teamId: teamInfo.linkedTeamId || teamInfo.memberId,
           teamName: teamInfo.teamName,
           teamType: teamInfo.teamType,
           representativeName: teamInfo.representativeName,
@@ -335,10 +342,25 @@ export class StandingsService {
         p.first_name,
         p.last_name,
         p.full_name,
-        p.meca_id as profile_meca_id
+        p.meca_id as profile_meca_id,
+        lt.linked_team_id,
+        lt.linked_team_name
       FROM memberships m
       JOIN membership_type_configs mtc ON mtc.id = m.membership_type_config_id
       LEFT JOIN profiles p ON p.id = m.user_id
+      -- Recover the member's real team (teams table) so a blank membership
+      -- team_name falls back to it instead of synthesizing a "_not_populated"
+      -- placeholder. Prefer a team linked directly to THIS membership, else one
+      -- the member captains; newest active wins.
+      LEFT JOIN LATERAL (
+        SELECT t.id AS linked_team_id, t.name AS linked_team_name
+        FROM teams t
+        WHERE t.is_active = true
+          AND t.name IS NOT NULL AND btrim(t.name) <> ''
+          AND (t.membership_id = m.id OR t.captain_id = m.user_id)
+        ORDER BY (t.membership_id = m.id) DESC, t.created_at DESC NULLS LAST
+        LIMIT 1
+      ) lt ON true
       WHERE m.status = 'active'
       AND (
         mtc.category = 'retail'
@@ -363,25 +385,34 @@ export class StandingsService {
       const lastName = m.last_name || '';
       const fullName = m.full_name || `${firstName} ${lastName}`.trim();
 
+      // The member's real team record (teams table), when one exists. Used to
+      // recover a blank membership team_name and to link to the real profile.
+      const linkedTeamName = (m.linked_team_name && String(m.linked_team_name).trim()) || '';
+      const linkedTeamId = (m.linked_team_id && String(m.linked_team_id)) || undefined;
+
       if (m.membership_category === 'retail') {
         // Retailer: team name is business name, representative is the person
-        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamName = m.business_name || m.team_name || linkedTeamName || m.competitor_name || fullName;
         teamType = 'retailer';
         representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
       } else if (m.membership_category === 'manufacturer') {
         // Manufacturer: team name is business name, representative is the person
-        teamName = m.business_name || m.team_name || m.competitor_name || fullName;
+        teamName = m.business_name || m.team_name || linkedTeamName || m.competitor_name || fullName;
         teamType = 'manufacturer';
         representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
       } else {
-        // Team Membership or has_team_addon: use team_name or generate placeholder
+        // Team Membership or has_team_addon: use team_name, else the linked team
+        // record, else a placeholder.
         teamType = 'competitor_team';
         representativeName = (firstName && lastName) ? `${firstName} ${lastName}` : fullName;
 
         if (m.team_name && m.team_name.trim()) {
           teamName = m.team_name.trim();
+        } else if (linkedTeamName) {
+          // Blank membership team_name (import gap) → use the real team's name.
+          teamName = linkedTeamName;
         } else {
-          // Generate placeholder: first_last_team_not_populated
+          // Genuinely no team on record → placeholder.
           const safeName = `${firstName}_${lastName}`.replace(/\s+/g, '_').toLowerCase();
           teamName = `${safeName}_team_not_populated`;
         }
@@ -395,6 +426,7 @@ export class StandingsService {
         representativeName,
         firstName,
         lastName,
+        linkedTeamId,
       });
     }
 

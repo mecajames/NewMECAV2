@@ -14,6 +14,15 @@ export enum TicketStaffPermission {
 export const TicketStaffPermissionSchema = z.nativeEnum(TicketStaffPermission);
 
 // =============================================================================
+// Audience / role gating (shared by departments + categories)
+// =============================================================================
+
+// Who sees a department/category on the public ticket form. 'all' = guests +
+// members; 'members' = logged-in only; 'guests' = not-logged-in only.
+export const TicketAudienceSchema = z.enum(['all', 'members', 'guests']);
+export type TicketAudience = z.infer<typeof TicketAudienceSchema>;
+
+// =============================================================================
 // Ticket Department Schemas
 // =============================================================================
 
@@ -24,6 +33,10 @@ export const CreateTicketDepartmentSchema = z.object({
   is_private: z.boolean().default(false),
   is_default: z.boolean().default(false),
   display_order: z.number().int().default(0),
+  audience: TicketAudienceSchema.default('all'),
+  // When non-empty, only members holding one of these roles see this department
+  // (e.g. ['event_director','judge']). Implies members-only.
+  required_roles: z.array(z.string()).optional().nullable(),
 });
 export type CreateTicketDepartmentDto = z.infer<typeof CreateTicketDepartmentSchema>;
 
@@ -41,6 +54,8 @@ export const TicketDepartmentResponseSchema = z.object({
   is_private: z.boolean(),
   is_default: z.boolean(),
   display_order: z.number(),
+  audience: TicketAudienceSchema.default('all'),
+  required_roles: z.array(z.string()).nullable().optional(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
 });

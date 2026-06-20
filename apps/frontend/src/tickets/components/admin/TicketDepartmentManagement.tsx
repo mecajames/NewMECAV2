@@ -14,6 +14,7 @@ import {
 import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { reportError } from './error-helper';
 import { TicketDepartmentResponse } from '@newmeca/shared';
+import { AudienceRoleFields, AudienceBadge } from './AudienceRoleFields';
 
 export function TicketDepartmentManagement() {
   const [departments, setDepartments] = useState<TicketDepartmentResponse[]>([]);
@@ -31,6 +32,8 @@ export function TicketDepartmentManagement() {
     is_default: false,
     display_order: 0,
     is_active: true,
+    audience: 'all',
+    required_roles: [] as string[],
   });
 
   const fetchDepartments = async () => {
@@ -62,6 +65,8 @@ export function TicketDepartmentManagement() {
         is_private: formData.is_private,
         is_default: formData.is_default,
         display_order: formData.display_order,
+        audience: formData.audience as any,
+        required_roles: formData.required_roles,
       });
       setShowCreateForm(false);
       resetForm();
@@ -81,6 +86,8 @@ export function TicketDepartmentManagement() {
         is_default: formData.is_default,
         display_order: formData.display_order,
         is_active: formData.is_active,
+        audience: formData.audience as any,
+        required_roles: formData.required_roles,
       });
       setEditingId(null);
       resetForm();
@@ -110,6 +117,8 @@ export function TicketDepartmentManagement() {
       is_default: dept.is_default,
       display_order: dept.display_order,
       is_active: dept.is_active,
+      audience: (dept as any).audience || 'all',
+      required_roles: (dept as any).required_roles || [],
     });
   };
 
@@ -122,6 +131,8 @@ export function TicketDepartmentManagement() {
       is_default: false,
       display_order: 0,
       is_active: true,
+      audience: 'all',
+      required_roles: [],
     });
   };
 
@@ -234,6 +245,13 @@ export function TicketDepartmentManagement() {
                 Default
               </label>
             </div>
+            <div className="md:col-span-2">
+              <AudienceRoleFields
+                audience={formData.audience}
+                requiredRoles={formData.required_roles}
+                onChange={(next) => setFormData({ ...formData, audience: next.audience, required_roles: next.required_roles })}
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <button
@@ -273,6 +291,7 @@ export function TicketDepartmentManagement() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Name</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Slug</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Visibility</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Flags</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
               </tr>
@@ -316,6 +335,13 @@ export function TicketDepartmentManagement() {
                           />
                           <span className="text-sm text-gray-300">Active</span>
                         </label>
+                      </td>
+                      <td className="px-4 py-3 min-w-[16rem]">
+                        <AudienceRoleFields
+                          audience={formData.audience}
+                          requiredRoles={formData.required_roles}
+                          onChange={(next) => setFormData({ ...formData, audience: next.audience, required_roles: next.required_roles })}
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -381,6 +407,12 @@ export function TicketDepartmentManagement() {
                         }`}>
                           {dept.is_active ? 'Active' : 'Inactive'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <AudienceBadge
+                          audience={(dept as any).audience}
+                          requiredRoles={(dept as any).required_roles}
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

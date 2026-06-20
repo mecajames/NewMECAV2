@@ -9,8 +9,9 @@ import {
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { eventsApi } from '@/events';
 import { TicketCustomField, TicketDepartmentResponse, TicketCategoryConfig, TicketPurchase } from '@newmeca/shared';
-import { listPublicDepartments } from '../ticket-admin.api-client';
+import { listPublicDepartments, TicketFormViewer } from '../ticket-admin.api-client';
 import { listCategoriesForDepartment } from '../ticket-categories.api-client';
+import { useAuth } from '@/auth/contexts/AuthContext';
 import { listCustomFieldsForCategory, getMyPurchases, listStaffForPicker } from '../ticket-custom-fields.api-client';
 import {
   TicketCustomFieldInputs,
@@ -49,6 +50,14 @@ export function CreateTicketForm({
   reporterId,
   preselectedEventId,
 }: CreateTicketFormProps) {
+  // This form is for logged-in members. Pass the member's role so role-gated
+  // departments/categories (Event Director / Judge) appear for those who qualify.
+  const { profile } = useAuth();
+  const viewer: TicketFormViewer = {
+    audience: 'member',
+    roles: profile?.role ? [profile.role] : [],
+  };
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [departmentId, setDepartmentId] = useState('');
@@ -104,7 +113,7 @@ export function CreateTicketForm({
     setError(null);
     setFiles([]);
 
-    listPublicDepartments().then(setDepartments).catch((err) => console.error('Failed to load departments:', err));
+    listPublicDepartments(viewer).then(setDepartments).catch((err) => console.error('Failed to load departments:', err));
     getMyPurchases().then(setPurchases).catch(() => setPurchases([]));
     listStaffForPicker().then(setStaff).catch(() => setStaff([]));
 
@@ -126,7 +135,7 @@ export function CreateTicketForm({
     if (!deptId) return;
     setLoadingCategories(true);
     try {
-      setCategories(await listCategoriesForDepartment(deptId));
+      setCategories(await listCategoriesForDepartment(deptId, viewer));
     } catch (err) {
       console.error('Failed to load categories:', err);
       setCategories([]);

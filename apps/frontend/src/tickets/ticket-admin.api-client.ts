@@ -27,8 +27,21 @@ export async function listDepartments(includeInactive = false): Promise<TicketDe
   return data;
 }
 
-export async function listPublicDepartments(): Promise<TicketDepartmentResponse[]> {
-  const { data } = await axios.get(`${API_BASE}/departments/public`);
+/** Who's viewing the public ticket form — drives audience/role filtering. */
+export interface TicketFormViewer {
+  audience: 'guest' | 'member';
+  roles?: string[];
+}
+
+function viewerParams(viewer?: TicketFormViewer): Record<string, string> {
+  if (!viewer) return {};
+  const p: Record<string, string> = { audience: viewer.audience };
+  if (viewer.roles?.length) p.roles = viewer.roles.join(',');
+  return p;
+}
+
+export async function listPublicDepartments(viewer?: TicketFormViewer): Promise<TicketDepartmentResponse[]> {
+  const { data } = await axios.get(`${API_BASE}/departments/public`, { params: viewerParams(viewer) });
   return data;
 }
 

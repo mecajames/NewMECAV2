@@ -8,6 +8,7 @@ import {
 import * as categoriesApi from '../../ticket-categories.api-client';
 import { listDepartments } from '../../ticket-admin.api-client';
 import { reportError } from './error-helper';
+import { AudienceRoleFields, AudienceBadge } from './AudienceRoleFields';
 
 type Draft = CreateTicketCategoryDto;
 
@@ -21,6 +22,8 @@ const emptyDraft = (): Draft => ({
   description: '',
   display_order: 0,
   is_active: true,
+  audience: 'all',
+  required_roles: [],
 });
 
 export function TicketCategoriesManagement() {
@@ -65,6 +68,8 @@ export function TicketCategoriesManagement() {
       description: c.description ?? '',
       display_order: c.display_order,
       is_active: c.is_active,
+      audience: c.audience ?? 'all',
+      required_roles: c.required_roles ?? [],
     });
     setKeyTouched(true);
     setShowForm(true);
@@ -190,6 +195,11 @@ export function TicketCategoriesManagement() {
               placeholder="Optional helper text"
             />
           </div>
+          <AudienceRoleFields
+            audience={draft.audience ?? 'all'}
+            requiredRoles={draft.required_roles ?? []}
+            onChange={(next) => setDraft((d) => ({ ...d, audience: next.audience as Draft['audience'], required_roles: next.required_roles }))}
+          />
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input
               type="checkbox"
@@ -234,6 +244,7 @@ export function TicketCategoriesManagement() {
                         <span className="text-white text-sm font-medium">{c.label}</span>
                         <code className="text-xs text-gray-500">{c.key}</code>
                         {!c.is_active && <span className="text-xs text-gray-500">(inactive)</span>}
+                        <AudienceBadge audience={c.audience} requiredRoles={c.required_roles} />
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={() => startEdit(c)} className="p-2 text-gray-400 hover:text-white hover:bg-slate-700 rounded-lg">
