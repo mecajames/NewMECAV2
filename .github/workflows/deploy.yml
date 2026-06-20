@@ -86,6 +86,46 @@ jobs:
           docker rm "$tmp"
           touch deploy/.legacy-assets/.gitkeep
 
+      # Lightsail caps a container service at 150 stored images. Once the cap
+      # is hit, push-container-image fails with a bare "exit code 255" (the real
+      # "Maximum number of container service images" message is swallowed).
+      # Prune to the newest 40 before pushing so we never reach the cap. The
+      # live deployment's images are always among the newest, but we exclude
+      # them explicitly as a safety net.
+      - name: Prune old Lightsail images
+        run: |
+          KEEP=40
+          live=$(aws lightsail get-container-services \
+            --service-name "${{ env.SERVICE_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'containerServices[0].currentDeployment.containers.*.image' \
+            --output text | tr '\t' '\n')
+
+          # All stored images, sorted newest-first by trailing build number.
+          mapfile -t all < <(aws lightsail get-container-images \
+            --service-name "${{ env.SERVICE_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'containerImages[].image' --output text \
+            | tr '\t' '\n' | sed -E 's/.*\.([0-9]+)$/\1 &/' | sort -rn -k1,1 | cut -d' ' -f2-)
+
+          echo "Stored images: ${#all[@]} (keeping newest $KEEP)"
+          if [ "${#all[@]}" -le "$KEEP" ]; then
+            echo "Under threshold; nothing to prune."
+            exit 0
+          fi
+
+          for img in "${all[@]:$KEEP}"; do
+            if printf '%s\n' "$live" | grep -qxF "$img"; then
+              echo "skip (live): $img"
+              continue
+            fi
+            echo "deleting: $img"
+            aws lightsail delete-container-image \
+              --service-name "${{ env.SERVICE_NAME }}" \
+              --region "${{ env.AWS_REGION }}" \
+              --image "$img"
+          done
+
       - name: Push backend image to Lightsail
         id: push-backend
         run: |
