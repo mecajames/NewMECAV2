@@ -691,26 +691,26 @@ export class EmailService {
     to: string;
     resetUrl: string;
     firstName?: string;
+    mecaId?: string | number | null;
   }): Promise<{ success: boolean; error?: string }> {
     const greeting = dto.firstName ? `Hi ${dto.firstName},` : 'Hi,';
-    const html = `
-      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937;">
-        <div style="background:#0f172a; padding:20px 24px; border-radius:8px 8px 0 0;">
-          <h1 style="color:#f97316; margin:0; font-size:20px;">MECA</h1>
-        </div>
-        <div style="border:1px solid #e5e7eb; border-top:none; padding:24px; border-radius:0 0 8px 8px;">
-          <p style="margin:0 0 12px;">${greeting}</p>
-          <p style="margin:0 0 16px;">We received a request to reset the password for your MECA account. Click the button below to choose a new password. This link will expire in 1 hour.</p>
-          <p style="text-align:center; margin:24px 0;">
-            <a href="${dto.resetUrl}" style="background:#f97316; color:#ffffff; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:bold; display:inline-block;">Reset Password</a>
-          </p>
-          <p style="margin:0 0 8px; font-size:13px; color:#6b7280;">If the button doesn't work, copy and paste this link into your browser:</p>
-          <p style="margin:0 0 16px; font-size:12px; word-break:break-all;"><a href="${dto.resetUrl}" style="color:#2563eb;">${dto.resetUrl}</a></p>
-          <p style="margin:0; font-size:13px; color:#6b7280;">If you didn't request this, you can safely ignore this email — your password won't change.</p>
-        </div>
-      </div>`;
+    const accountLine = dto.mecaId
+      ? `Account: <strong>${dto.to}</strong> &nbsp;·&nbsp; MECA ID <strong>${dto.mecaId}</strong>`
+      : `Account: <strong>${dto.to}</strong>`;
+    const body = `
+      <p style="margin: 0 0 16px 0; font-size: 16px;">${greeting}</p>
+      <p style="margin: 0 0 12px 0;">We received a request to reset the password for your MECA account. Click the button below to choose a new password.</p>
+      <p style="margin: 0 0 4px 0; font-size: 14px; color: #475569;">${accountLine}</p>
+      ${this.getEmailButton('Reset Password', dto.resetUrl)}
+      <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b;">This link expires in <strong>1 hour</strong>. If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="margin: 0 0 16px 0; font-size: 12px; word-break: break-all;"><a href="${dto.resetUrl}" style="color: #2563eb;">${dto.resetUrl}</a></p>
+      <p style="margin: 0; font-size: 13px; color: #64748b;">If you didn't request this, you can safely ignore this email — your password won't change.</p>`;
+    const html = this.buildBrandedHtml('Reset Your Password', body, {
+      preheader: 'Reset your MECA password — this link expires in 1 hour',
+    });
     const text =
-      `${greeting}\n\nWe received a request to reset the password for your MECA account. ` +
+      `${greeting}\n\nWe received a request to reset the password for your MECA account (${dto.to}` +
+      `${dto.mecaId ? `, MECA ID ${dto.mecaId}` : ''}). ` +
       `Open the link below to choose a new password (expires in 1 hour):\n\n${dto.resetUrl}\n\n` +
       `If you didn't request this, you can safely ignore this email.`;
 
@@ -760,23 +760,24 @@ export class EmailService {
       : `MECA: Action required — your ${dto.membershipType} renewal payment failed`;
 
     const intro = isFinal
-      ? `<p>${greeting},</p><p>We were unable to collect payment for your ${dto.membershipType} renewal after multiple attempts. Your membership has been <strong>suspended</strong>.</p>`
-      : `<p>${greeting},</p><p>We tried to collect $${dto.amountDue} for your ${dto.membershipType} renewal but the charge was declined. Please update your payment method to keep your benefits active.</p>`;
+      ? `<p style="margin:0 0 16px 0;font-size:16px;">${greeting},</p><p style="margin:0 0 16px 0;">We were unable to collect payment for your <strong>${dto.membershipType}</strong> renewal after multiple attempts. Your membership has been <strong>suspended</strong>.</p>`
+      : `<p style="margin:0 0 16px 0;font-size:16px;">${greeting},</p><p style="margin:0 0 16px 0;">We tried to collect <strong>$${dto.amountDue}</strong> for your <strong>${dto.membershipType}</strong> renewal but the charge was declined. Please update your payment method to keep your benefits active.</p>`;
 
-    const html = `
-      <html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1f2937">
-        ${intro}
-        <p style="margin:24px 0">
-          <a href="${dto.portalUrl}" style="background:#f97316;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">
-            ${isFinal ? 'Reactivate Membership' : 'Update Payment Method'}
-          </a>
-        </p>
-        <p style="color:#6b7280;font-size:13px">If you've already updated your card, please ignore this message — our system will retry automatically.</p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-        <p style="color:#6b7280;font-size:12px">MECA — Mobile Electronics Competition Association</p>
-      </body></html>
-    `;
-    const text = `${greeting},\n\nWe were unable to collect $${dto.amountDue} for your ${dto.membershipType} renewal. ${isFinal ? 'Your membership has been suspended.' : 'Please update your payment method.'}\n\n${dto.portalUrl}\n\n— MECA`;
+    const body = `
+      ${intro}
+      ${this.getEmailButton(isFinal ? 'Reactivate Membership' : 'Update Payment Method', dto.portalUrl)}
+      <p style="color:#64748b;font-size:13px;margin:0;">If you've already updated your card, please ignore this message — our system will retry automatically.</p>`;
+    const html = this.buildBrandedHtml(
+      isFinal ? 'Membership Suspended' : 'Payment Failed — Action Required',
+      body,
+      {
+        subtitle: dto.membershipType,
+        preheader: isFinal
+          ? `Your MECA ${dto.membershipType} has been suspended`
+          : `Your MECA ${dto.membershipType} renewal payment failed — update your card`,
+      },
+    );
+    const text = `${greeting},\n\nWe were unable to collect $${dto.amountDue} for your ${dto.membershipType} renewal. ${isFinal ? 'Your membership has been suspended.' : 'Please update your payment method.'}\n\n${dto.portalUrl}\n\nFun, Fair, Loud and Clear!\n— MECA`;
 
     return this.sendEmail({
       to: dto.to,
@@ -2133,6 +2134,20 @@ Need help? Visit our Support Desk: ${this.supportDeskUrl}
       <a href="${url}" style="display: inline-block; background-color: ${bgColor}; color: #ffffff; padding: 15px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; font-family: Arial, sans-serif;">${text}</a>
       <!--<![endif]-->
     </div>`;
+  }
+
+  /**
+   * PUBLIC: wrap arbitrary body HTML in the standard branded MECA email shell
+   * (logo banner, red title bar, white body, "Fun, Fair, Loud and Clear!" footer).
+   * Lets other services produce on-brand emails instead of hand-rolled HTML.
+   */
+  buildBrandedHtml(title: string, bodyHtml: string, opts?: { subtitle?: string; preheader?: string }): string {
+    return `${this.getEmailHeaderHtml(title, opts?.subtitle, opts?.preheader)}\n${bodyHtml}\n${this.getEmailFooterHtml()}`;
+  }
+
+  /** PUBLIC: standard Outlook-safe branded button for use inside buildBrandedHtml bodies. */
+  brandedButton(text: string, url: string, bgColor = '#f97316'): string {
+    return this.getEmailButton(text, url, bgColor);
   }
 
   private get logoUrl(): string {

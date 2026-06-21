@@ -286,18 +286,33 @@ export class ProfilesController {
 
     // MECA ID changes are restricted to protected super-admin accounts
     // (PROTECTED_MECA_IDS in is-admin.helper.ts — single source of truth).
+    // IMPORTANT: only gate on an ACTUAL change. The admin edit forms resend the
+    // whole profile, so meca_id is almost always present but UNCHANGED — gating
+    // on mere presence 403'd regular admins just trying to fix a name/typo.
+    // meca_id can be a number at runtime despite text typing, so coerce both
+    // sides with String() before comparing (see reference_meca_id_is_sometimes_number).
     if ('meca_id' in data) {
-      if (!authHeader?.startsWith('Bearer ')) {
-        throw new ForbiddenException('Only super admins can modify MECA IDs');
-      }
-      const token = authHeader.substring(7);
-      const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
-      if (error || !user) {
-        throw new ForbiddenException('Failed to verify authorization for MECA ID change');
-      }
-      const callerProfile = await this.em.fork().findOne(Profile, { id: user.id });
-      if (!isProtectedAccount(callerProfile)) {
-        throw new ForbiddenException('Only super admins can modify MECA IDs');
+      const existing = await this.profilesService.findById(id);
+      const currentMecaId = existing?.meca_id != null ? String(existing.meca_id) : '';
+      const incomingMecaId = (data as any).meca_id != null ? String((data as any).meca_id) : '';
+
+      if (incomingMecaId !== currentMecaId) {
+        // Genuine MECA ID change — super-admin only.
+        if (!authHeader?.startsWith('Bearer ')) {
+          throw new ForbiddenException('Only super admins can modify MECA IDs');
+        }
+        const token = authHeader.substring(7);
+        const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+        if (error || !user) {
+          throw new ForbiddenException('Failed to verify authorization for MECA ID change');
+        }
+        const callerProfile = await this.em.fork().findOne(Profile, { id: user.id });
+        if (!isProtectedAccount(callerProfile)) {
+          throw new ForbiddenException('Only super admins can modify MECA IDs');
+        }
+      } else {
+        // Unchanged — drop it so the update never tries to rewrite meca_id.
+        delete (data as any).meca_id;
       }
     }
     return this.profilesService.update(id, data);

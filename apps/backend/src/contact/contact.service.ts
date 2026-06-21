@@ -74,47 +74,28 @@ export class ContactService {
   private async sendNotificationEmail(submission: ContactSubmission): Promise<void> {
     const adminEmail = process.env.CONTACT_FORM_EMAIL || 'mecacaraudio@gmail.com';
 
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Contact Form Submission</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">New Contact Form Submission</h1>
-  </div>
-
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+    const body = `
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>From:</strong> ${this.escapeHtml(submission.name)}</p>
       <p style="margin: 0 0 10px 0;"><strong>Email:</strong> <a href="mailto:${encodeURIComponent(submission.email)}" style="color: #f97316;">${this.escapeHtml(submission.email)}</a></p>
       <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${this.escapeHtml(submission.subject)}</p>
-      <p style="margin: 0 0 10px 0;"><strong>Submitted:</strong> ${submission.createdAt.toLocaleString()}</p>
+      <p style="margin: 0;"><strong>Submitted:</strong> ${submission.createdAt.toLocaleString()}</p>
     </div>
 
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
       <p style="margin: 0 0 10px 0;"><strong>Message:</strong></p>
       <p style="margin: 0; white-space: pre-wrap;">${this.escapeHtml(submission.message)}</p>
     </div>
 
-    <div style="margin-top: 20px; text-align: center;">
-      <a href="mailto:${encodeURIComponent(submission.email)}?subject=Re: ${encodeURIComponent(submission.subject)}"
-         style="display: inline-block; background: #f97316; color: #fff; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-        Reply to ${this.escapeHtml(submission.name)}
-      </a>
-    </div>
+    ${this.emailService.brandedButton(`Reply to ${this.escapeHtml(submission.name)}`, `mailto:${encodeURIComponent(submission.email)}?subject=Re: ${encodeURIComponent(submission.subject)}`)}
 
     <p style="color: #64748b; font-size: 12px; margin-top: 20px;">
       Submission ID: ${submission.id}<br>
       IP Address: ${submission.ipAddress || 'Unknown'}
-    </p>
-  </div>
-</body>
-</html>
-    `.trim();
+    </p>`;
+    const html = this.emailService.buildBrandedHtml('New Contact Form Submission', body, {
+      preheader: `New contact submission from ${submission.name}: ${submission.subject}`,
+    });
 
     const text = `
 New Contact Form Submission
@@ -150,48 +131,29 @@ IP Address: ${submission.ipAddress || 'Unknown'}
    * Send confirmation email to user
    */
   private async sendConfirmationEmail(submission: ContactSubmission): Promise<void> {
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>We Received Your Message - MECA</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px; border-radius: 10px 10px 0 0;">
-    <h1 style="color: #f97316; margin: 0; font-size: 28px;">Thanks for Contacting Us!</h1>
-  </div>
+    const body = `
+    <p style="font-size: 16px; margin: 0 0 16px 0;">Hello ${this.escapeHtml(submission.name)},</p>
 
-  <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px;">
-    <p style="font-size: 16px;">Hello ${this.escapeHtml(submission.name)},</p>
+    <p style="margin: 0 0 16px 0;">We've received your message and appreciate you reaching out to MECA. Our team will review your inquiry and get back to you as soon as possible.</p>
 
-    <p>We've received your message and appreciate you reaching out to MECA. Our team will review your inquiry and get back to you as soon as possible.</p>
-
-    <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-      <p style="margin: 0 0 10px 0;"><strong>Your Message:</strong></p>
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+      <p style="margin: 0 0 10px 0;"><strong>Your Message</strong></p>
       <p style="margin: 0 0 10px 0;"><strong>Subject:</strong> ${this.escapeHtml(submission.subject)}</p>
       <p style="margin: 0; color: #64748b; font-style: italic; white-space: pre-wrap;">${this.escapeHtml(submission.message.substring(0, 300))}${submission.message.length > 300 ? '...' : ''}</p>
     </div>
 
-    <p>In the meantime, feel free to:</p>
-    <ul style="color: #64748b;">
+    <p style="margin: 0 0 8px 0;">In the meantime, feel free to:</p>
+    <ul style="color: #64748b; margin: 0 0 16px 0;">
       <li>Visit our <a href="https://mecacaraudio.com/events" style="color: #f97316;">upcoming events</a></li>
       <li>Check out our <a href="https://mecacaraudio.com/faq" style="color: #f97316;">FAQ page</a></li>
-      <li>Follow us on social media for the latest updates</li>
     </ul>
 
-    <p style="color: #64748b; font-size: 14px; margin-top: 30px;">
+    <p style="color: #64748b; font-size: 14px; margin: 0;">
       This is an automated confirmation. Please do not reply to this email.
-    </p>
-  </div>
-
-  <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-    <p>&copy; ${new Date().getFullYear()} MECA - Mobile Electronics Competition Association</p>
-  </div>
-</body>
-</html>
-    `.trim();
+    </p>`;
+    const html = this.emailService.buildBrandedHtml('Thanks for Contacting Us!', body, {
+      preheader: "We've received your message — our team will get back to you soon",
+    });
 
     const text = `
 Hello ${submission.name},

@@ -61,9 +61,26 @@ export class AuthController {
       return generic;
     }
 
+    // Personalize the email (name + MECA ID). The account exists at this point
+    // (link generation succeeded), so this lookup never leaks account validity.
+    let firstName: string | undefined;
+    let mecaId: string | number | undefined;
+    try {
+      const prof = await this.em.getConnection().execute(
+        `SELECT first_name, meca_id FROM public.profiles WHERE lower(email) = ? LIMIT 1`,
+        [email],
+      );
+      firstName = prof?.[0]?.first_name || undefined;
+      mecaId = prof?.[0]?.meca_id ?? undefined;
+    } catch {
+      // non-fatal — fall back to an unpersonalized greeting
+    }
+
     const sent = await this.emailService.sendPasswordResetLinkEmail({
       to: email,
       resetUrl: result.link,
+      firstName,
+      mecaId,
     });
     if (!sent.success) {
       this.logger.error(`forgot-password: email send failed for ${email}: ${sent.error}`);
@@ -117,6 +134,8 @@ export class AuthController {
           force_password_change: boolean | null;
           login_banned: boolean | null;
           can_login: boolean | null;
+          first_name: string | null;
+          meca_id: string | number | null;
         }
       | undefined;
     try {
@@ -125,7 +144,9 @@ export class AuthController {
                 u.recovery_sent_at,
                 p.force_password_change,
                 p.login_banned,
-                p.can_login
+                p.can_login,
+                p.first_name,
+                p.meca_id
            FROM auth.users u
            LEFT JOIN public.profiles p ON p.id = u.id
           WHERE lower(u.email) = ?
@@ -160,7 +181,12 @@ export class AuthController {
     const redirectTo = this.resolveRedirectTo(body?.redirectTo);
     const result = await this.supabaseAdmin.generatePasswordRecoveryLink(email, redirectTo);
     if (result.success && result.link) {
-      const sent = await this.emailService.sendPasswordResetLinkEmail({ to: email, resetUrl: result.link });
+      const sent = await this.emailService.sendPasswordResetLinkEmail({
+        to: email,
+        resetUrl: result.link,
+        firstName: row.first_name || undefined,
+        mecaId: row.meca_id ?? undefined,
+      });
       if (sent.success) {
         this.logger.log(`login-recovery: set-password link emailed to never-activated account ${email}`);
       } else {
@@ -200,11 +226,20 @@ export class AuthController {
       const rows = await this.em.getConnection().execute(
         `SELECT
             p.can_login AS can_login,
-            EXISTS (
-              SELECT 1 FROM public.memberships m
-               WHERE m.user_id = u.id
-                 AND m.payment_status = 'paid'
-                 AND (m.end_date IS NULL OR m.end_date > now())
+            (
+              EXISTS (
+                SELECT 1 FROM public.memberships m
+                 WHERE m.user_id = u.id
+                   AND m.payment_status = 'paid'
+                   AND (m.end_date IS NULL OR m.end_date > now())
+              )
+              -- ...AND the account is not flagged expired. An admin can mark a
+              -- member expired (or the expired-login gate applies) while a stale
+              -- membership row still looks current; such a member CANNOT log in
+              -- and must use the inline guest-renewal flow, not "log in".
+              -- (membership_status is a Postgres enum → use IS DISTINCT FROM,
+              -- which also treats NULL as not-expired.)
+              AND p.membership_status IS DISTINCT FROM 'expired'
             ) AS has_active_membership
            FROM auth.users u
            LEFT JOIN public.profiles p ON p.id = u.id
@@ -216,13 +251,12 @@ export class AuthController {
         return {
           exists: true,
           canLogin: rows[0].can_login !== false,
-          // Compute "active" from the memberships table (a PAID membership not
-          // past its end_date) — the SOURCE OF TRUTH — NOT the denormalized
-          // profiles.membership_status. That column goes stale when a
-          // membership lapses by date and nothing flips it, and a stale
-          // 'active' sent EXPIRED members to a "please log in" dead end (they
-          // can't log in — the expired-login gate signs them out). Using the
-          // truth lets the checkout route them into guest renewal instead.
+          // "Active" (→ tell them to log in) requires BOTH a current paid
+          // membership AND a non-expired profile status. A member is treated as
+          // renewable (→ inline set-password + renew) if EITHER the membership
+          // lapsed by date OR the profile is flagged expired — both mean they
+          // can't currently log in (the expired-login gate signs them out), so
+          // "please log in" / a reset link would be a dead end.
           hasActiveMembership: rows[0].has_active_membership === true,
         };
       }
