@@ -29,6 +29,7 @@ import { EventRegistration } from '../event-registrations/event-registrations.en
 import { FinalsRegistration } from '../world-finals/finals-registration.entity';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { EmailService } from '../email/email.service';
 import { generateSecurePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
 
 /**
@@ -60,9 +61,30 @@ export class PaymentFulfillmentService {
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly renewalTokenService: MembershipRenewalTokenService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly emailService: EmailService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  /**
+   * Email a brand-new, server-provisioned member a branded one-click link to set
+   * their password. Used only when WE created the auth account during webhook
+   * fulfillment (so the buyer has no known password). Best-effort / non-fatal.
+   */
+  private async emailNewMemberSetPasswordLink(email: string, firstName?: string): Promise<void> {
+    try {
+      const base = (process.env.FRONTEND_URL || 'https://www.mecacaraudio.com').replace(/\/+$/, '');
+      const result = await this.supabaseAdmin.generatePasswordRecoveryLink(email, `${base}/reset-password`);
+      if (result.success && result.link) {
+        await this.emailService.sendNewMemberSetPasswordEmail({ to: email, setPasswordUrl: result.link, firstName });
+        this.logger.log(`Set-password welcome email sent to new member ${email}`);
+      } else {
+        this.logger.warn(`Could not generate set-password link for ${email}: ${result.error || 'no link'}`);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to email set-password link to ${email}: ${err}`);
+    }
+  }
 
   /**
    * Fulfill a membership payment. Creates membership, clears invalidation flags,
@@ -279,6 +301,11 @@ export class PaymentFulfillmentService {
       });
       if (created.success && created.userId) {
         userId = created.userId;
+        // WE just created this account server-side, so the buyer has no password
+        // (their checkout password, if any, never reached us). Email a branded
+        // set-password link so they can sign in even if the client-side
+        // provisioning never ran. Fire-and-forget — never blocks fulfillment.
+        void this.emailNewMemberSetPasswordLink(normEmail, firstName);
       } else {
         // TOCTOU race: a concurrent creator (the frontend's client-side signUp
         // on the checkout success screen, or a duplicate webhook delivery) can

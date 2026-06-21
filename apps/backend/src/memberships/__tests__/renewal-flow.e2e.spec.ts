@@ -129,7 +129,7 @@ describe('CompetitionResults back-fill — simulated', () => {
 /**
  * MECA ID retention window — the ACTUAL (unannounced) reuse rule applied by
  * assignMecaIdToMembership: 45 days standard, 120-day relaunch amnesty
- * through July 5 2026. Member-facing copy only ever says 30 days.
+ * through August 25 2026. Member-facing copy only ever says 30 days.
  */
 describe('MECA ID retention window', () => {
   function makePrev(endDaysFromNow: number, mecaId = 700321) {

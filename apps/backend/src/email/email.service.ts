@@ -724,6 +724,42 @@ export class EmailService {
   }
 
   /**
+   * Sent when a membership payment provisioned a BRAND-NEW account server-side
+   * (webhook fulfillment) so the buyer has no password yet — their checkout
+   * password, if any, lived only in their browser and the client-side step never
+   * completed. Gives them a branded one-click link to set their password.
+   */
+  async sendNewMemberSetPasswordEmail(dto: {
+    to: string;
+    setPasswordUrl: string;
+    firstName?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const greeting = dto.firstName ? `Hi ${dto.firstName},` : 'Hi,';
+    const body = `
+      <p style="margin: 0 0 16px 0; font-size: 16px;">${greeting}</p>
+      <p style="margin: 0 0 12px 0;">Thank you for joining MECA! Your payment was received and your membership account for <strong>${dto.to}</strong> is ready.</p>
+      <p style="margin: 0 0 4px 0;">Set your password below to access your account, track events, and manage your membership.</p>
+      ${this.getEmailButton('Set Your Password', dto.setPasswordUrl)}
+      <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b;">If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="margin: 0 0 16px 0; font-size: 12px; word-break: break-all;"><a href="${dto.setPasswordUrl}" style="color: #2563eb;">${dto.setPasswordUrl}</a></p>
+      <p style="margin: 0; font-size: 13px; color: #64748b;">For your security this link expires after a short time. If it has expired, just use <strong>Forgot Password</strong> on the login page to set your password.</p>`;
+    const html = this.buildBrandedHtml('Welcome to MECA — Set Your Password', body, {
+      preheader: 'Your MECA membership is ready — set your password to sign in',
+    });
+    const text =
+      `${greeting}\n\nThank you for joining MECA! Your membership account for ${dto.to} is ready. ` +
+      `Set your password to access your account:\n\n${dto.setPasswordUrl}\n\n` +
+      `If the link has expired, use "Forgot Password" on the login page.\n\nFun, Fair, Loud and Clear!\n— MECA`;
+    return this.sendEmail({
+      to: dto.to,
+      subject: 'Welcome to MECA — Set Your Password',
+      html,
+      text,
+      from: this.fromAddresses.noreply,
+    });
+  }
+
+  /**
    * Send reference verification email
    */
   async sendReferenceVerificationEmail(dto: SendReferenceVerificationEmailDto): Promise<{ success: boolean; error?: string }> {

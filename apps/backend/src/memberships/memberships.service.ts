@@ -480,13 +480,21 @@ export class MembershipsService {
       }
     }
 
+    // This is a SELF-SERVICE renewal (member's own online order / webhook). It
+    // honors the self-service window (120 during the amnesty through Aug 25, then
+    // the advertised 30 days) for keeping the MECA ID, the continuous term, and
+    // the auto-points-reinstatement below. Renewing past that window mints a new
+    // MECA ID and leaves held points for an admin to restore (days 31–45).
+    const selfServiceWindow = MecaIdService.selfServiceRetentionGraceDays();
+    let keptPriorMecaId = false;
+
     // Use transaction for membership creation + MECA ID assignment
     const membership = await em.transactional(async (txEm) => {
       const startDate = new Date();
       // Authoritative end_date math (active early-renew, in-grace, fresh-start).
       // See docs/features/MEMBERSHIP_LIFECYCLE.md §2.
       const mostRecent = await this.mecaIdService.findMostRecentMembership(data.userId, config.category);
-      const endDate = this.mecaIdService.computeRenewalEndDate(mostRecent);
+      const endDate = this.mecaIdService.computeRenewalEndDate(mostRecent, selfServiceWindow);
       if (mostRecent?.endDate) {
         this.logger.log(`Renewal endDate computed: prev ${mostRecent.endDate.toISOString()} → new ${endDate.toISOString()}`);
       }
@@ -562,18 +570,38 @@ export class MembershipsService {
         ? await txEm.findOne(Membership, { id: canPurchase.existingMembershipId })
         : await this.mecaIdService.findMostRecentMembership(data.userId, config.category);
 
-      await this.mecaIdService.assignMecaIdToMembership(newMembership, previousMembership || undefined, txEm);
+      const assignedMecaId = await this.mecaIdService.assignMecaIdToMembership(
+        newMembership,
+        previousMembership || undefined,
+        txEm,
+        selfServiceWindow,
+      );
+      // Did this renewal KEEP the member's prior MECA ID (i.e. they were within
+      // the self-service window)? Drives whether we auto-reinstate their points.
+      keptPriorMecaId =
+        !!previousMembership?.mecaId &&
+        String(assignedMecaId) === String(previousMembership.mecaId);
 
       return newMembership;
     });
 
     this.logger.log(`Created membership ${membership.id} with MECA ID ${membership.mecaId} for user ${data.userId}`);
 
-    // If this renewal reactivated a previous MECA ID, back-fill any
-    // result rows that were stamped 999999 during the grace window.
-    // See docs/features/MEMBERSHIP_LIFECYCLE.md §7.2.
-    if (membership.mecaId) {
-      await this.backFillResultsForRenewal(membership.mecaId);
+    // Self-service renewal that KEPT the member's MECA ID (within the
+    // self-service window) → reinstate AND RECALCULATE their held/999999-stamped
+    // competition points right now, no admin needed. reinstatePointsForMecaId
+    // un-holds + restores BOTH hold mechanisms and recalcs points + placements
+    // for the affected events. If a NEW id was issued (renewed past the window),
+    // the held points stay put for an admin to restore in the 31–45 day window.
+    if (membership.mecaId && keptPriorMecaId) {
+      try {
+        const reinstated = await this.competitionResultsService.reinstatePointsForMecaId(membership.mecaId);
+        if (reinstated > 0) {
+          this.logger.log(`Renewal reinstated + recalculated ${reinstated} held result(s) for MECA ID ${membership.mecaId}`);
+        }
+      } catch (err) {
+        this.logger.error('Points reinstatement on self-service renewal failed (non-fatal):', err);
+      }
     }
 
     // Auto-create team if needed (for retailer/manufacturer/team category or competitor with team add-on/includes team)
@@ -619,6 +647,28 @@ export class MembershipsService {
       this.logger.error('Supersede prior membership on renewal failed (non-fatal):', err);
     }
 
+    // Back-fill the member's PROFILE (name / phone / address) from the order's
+    // billing details. The member-management + profile screens read the profile,
+    // not the membership row, so without this a purchased membership shows a
+    // blank name and "no address on file". FILL-IF-EMPTY — never overwrite what
+    // the member or an admin already set. Non-fatal so it can't break a paid
+    // membership. Runs for BOTH the client POST /api/memberships path and the
+    // Stripe/PayPal webhook fulfillment (both converge on createMembership).
+    try {
+      await this.backfillProfileFromBilling(em, data.userId, {
+        firstName: data.billingFirstName,
+        lastName: data.billingLastName,
+        phone: data.billingPhone,
+        address: data.billingAddress,
+        city: data.billingCity,
+        state: data.billingState,
+        postalCode: data.billingPostalCode,
+        country: data.billingCountry,
+      });
+    } catch (err) {
+      this.logger.error(`Profile back-fill from billing failed for ${data.userId}:`, err);
+    }
+
     // Sync profile membership status to ACTIVE
     await this.membershipSyncService.setProfileActive(data.userId);
 
@@ -657,6 +707,80 @@ export class MembershipsService {
     });
 
     return membership;
+  }
+
+  /**
+   * Copy an order's billing details onto the member's PROFILE so the profile +
+   * member-management + billing screens are complete after ANY purchase (the
+   * membership row stores its own billing*, but those screens read the profile).
+   * Strictly FILL-IF-EMPTY — we never overwrite a value the member or an admin
+   * has set. Public + billing-object shaped so EVERY order path can reuse it:
+   * one-time Stripe/PayPal (via createMembership) and auto-renew subscription
+   * (via the Stripe checkout webhook, sourcing from session.customer_details).
+   */
+  async backfillProfileFromBilling(
+    em: EntityManager,
+    userId: string,
+    billing: {
+      firstName?: string | null;
+      lastName?: string | null;
+      phone?: string | null;
+      address?: string | null;
+      city?: string | null;
+      state?: string | null;
+      postalCode?: string | null;
+      country?: string | null;
+    },
+  ): Promise<void> {
+    const profile = await em.findOne(Profile, { id: userId });
+    if (!profile) return;
+
+    const blank = (v?: string | null) => !v || !String(v).trim();
+    const firstName = (billing.firstName || '').trim();
+    const lastName = (billing.lastName || '').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    let changed = false;
+    const set = <K extends keyof Profile>(key: K, value: string | null | undefined) => {
+      if (value !== undefined && value !== null && String(value).trim() && blank(profile[key] as any)) {
+        profile[key] = String(value).trim() as Profile[K];
+        changed = true;
+      }
+    };
+
+    set('first_name', firstName || undefined);
+    set('last_name', lastName || undefined);
+    // full_name is NOT NULL — fill it when empty OR still a placeholder (email / "Member").
+    if (fullName && (blank(profile.full_name) || profile.full_name === profile.email || profile.full_name === 'Member')) {
+      profile.full_name = fullName;
+      changed = true;
+    }
+    set('phone', billing.phone);
+
+    // Primary address
+    set('address', billing.address);
+    set('city', billing.city);
+    set('state', billing.state);
+    set('postal_code', billing.postalCode);
+    set('country', billing.country);
+
+    // Billing address (mirror of the order's billing address)
+    set('billing_street', billing.address);
+    set('billing_city', billing.city);
+    set('billing_state', billing.state);
+    set('billing_zip', billing.postalCode);
+    set('billing_country', billing.country);
+
+    // Default shipping to billing if the member hasn't configured their own.
+    if (
+      profile.use_billing_for_shipping == null &&
+      blank(profile.shipping_street) &&
+      blank(profile.shipping_city)
+    ) {
+      profile.use_billing_for_shipping = true;
+      changed = true;
+    }
+
+    if (changed) await em.flush();
   }
 
   /**
@@ -3182,22 +3306,158 @@ export class MembershipsService {
   }
 
   /**
-   * Back-fill any result rows stamped 999999 during the grace window onto a
-   * renewed membership's reclaimed MECA ID. Non-fatal. Used by every renewal
-   * path: createMembership above and the subscription-checkout webhook.
+   * Reinstate AND recalculate a renewing member's held/999999-stamped results
+   * onto their reclaimed MECA ID — un-holds both hold mechanisms and recalcs
+   * points + placements for the affected events, so the renewer's points are
+   * assigned immediately (no admin step). Non-fatal. Used by the
+   * subscription-checkout webhook; createMembership calls the underlying service
+   * method directly.
    */
-  async backFillResultsForRenewal(mecaId: number | string): Promise<void> {
+  async reinstateHeldResultsForRenewal(mecaId: number | string): Promise<void> {
     try {
-      const backfilled = await this.competitionResultsService.backFillForRenewal(
-        String(mecaId),
-        String(mecaId),
-      );
-      if (backfilled > 0) {
-        this.logger.log(`Renewal back-fill: ${backfilled} result row(s) restored for MECA ID ${mecaId}`);
+      const reinstated = await this.competitionResultsService.reinstatePointsForMecaId(String(mecaId));
+      if (reinstated > 0) {
+        this.logger.log(`Renewal reinstated + recalculated ${reinstated} result row(s) for MECA ID ${mecaId}`);
       }
     } catch (err) {
-      this.logger.error('Renewal back-fill failed (non-fatal)', err);
+      this.logger.error('Renewal points reinstatement failed (non-fatal)', err);
     }
+  }
+
+  /**
+   * Is this member eligible for the admin "Restore MECA ID & Points" action?
+   *
+   * True only when their most recent renewal was issued a NEW MECA ID because
+   * the lapse at renewal fell in the 31–45 day ADMIN-only window (past the
+   * 30-day self-service window, within the 45-day admin window). That's exactly
+   * the case where a member renewed online, got a new ID, and their held/
+   * non-member (999999-stamped) results were NOT auto-restored — so support can
+   * one-click restore their original ID + points. Returns the old + new IDs so
+   * the UI can show what will happen.
+   *
+   * Not eligible when: they kept their ID (≤30d, or any amnesty renewal), the
+   * lapse was >45d (use the manual reassign tool), or the old ID is now held by
+   * a different member.
+   */
+  async getRestoreMecaIdEligibility(userId: string): Promise<{
+    eligible: boolean;
+    currentMembershipId?: string;
+    oldMecaId?: number;
+    newMecaId?: number;
+    gapDays?: number;
+    reason?: string;
+  }> {
+    const em = this.em.fork();
+    const memberships = await em.find(
+      Membership,
+      { user: userId, paymentStatus: PaymentStatus.PAID, mecaId: { $ne: null } },
+      { populate: ['membershipTypeConfig'], orderBy: { startDate: 'DESC', createdAt: 'DESC' } },
+    );
+    if (memberships.length < 2) return { eligible: false };
+
+    const current = memberships[0];
+    const category = current.membershipTypeConfig?.category;
+    // The most recent OLDER membership in the same category carrying a DIFFERENT
+    // MECA ID — i.e. the ID the renewal replaced.
+    const prior = memberships.find(
+      (m, i) => i > 0 && m.membershipTypeConfig?.category === category && m.mecaId !== current.mecaId,
+    );
+    if (!prior || prior.mecaId == null || current.mecaId == null || !prior.endDate || !current.startDate) {
+      return { eligible: false };
+    }
+
+    const gapDays = (current.startDate.getTime() - prior.endDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (gapDays <= MecaIdService.GRACE_SOFT_DAYS || gapDays > MecaIdService.GRACE_ADMIN_DAYS) {
+      return { eligible: false };
+    }
+
+    // The old ID must still be theirs to take back — never reclaim an ID a
+    // different member now holds.
+    const takenByOther = await em.count(Profile, {
+      meca_id: String(prior.mecaId),
+      id: { $ne: userId },
+    });
+    if (takenByOther > 0) {
+      return { eligible: false, reason: 'The previous MECA ID is now held by another member.' };
+    }
+
+    return {
+      eligible: true,
+      currentMembershipId: current.id,
+      oldMecaId: prior.mecaId,
+      newMecaId: current.mecaId,
+      gapDays: Math.round(gapDays),
+    };
+  }
+
+  /**
+   * Admin one-click restore for a member who renewed in the 31–45 day window and
+   * was issued a new MECA ID: put their ORIGINAL MECA ID back on their account
+   * and profile, move any results that landed under the new ID onto the old one,
+   * un-hold + un-stamp (999999) their non-member results, recalculate points +
+   * placements, and FREE the new ID back into the pool (it's held by no
+   * membership/profile after this, so get_next_meca_id reuses it). Audit-logged.
+   */
+  async restorePreviousMecaIdAndPoints(
+    userId: string,
+    adminId: string,
+  ): Promise<{ success: boolean; oldMecaId: number; newMecaId: number; resultsRestored: number; message: string }> {
+    const elig = await this.getRestoreMecaIdEligibility(userId);
+    if (!elig.eligible || !elig.currentMembershipId || elig.oldMecaId == null || elig.newMecaId == null) {
+      throw new BadRequestException(elig.reason || 'This member is not eligible for MECA ID restoration.');
+    }
+    const oldId = elig.oldMecaId;
+    const newId = elig.newMecaId;
+
+    // 1. Put the original MECA ID back on the current (renewed) membership +
+    //    record it in MECA ID history. This frees `newId` from this membership.
+    await this.mecaIdService.reassignMecaId(
+      oldId,
+      elig.currentMembershipId,
+      adminId,
+      `Restore previous MECA ID (31–45 day window): ${newId} → ${oldId}. Freed ${newId} for reuse.`,
+    );
+
+    // 2. Point the profile back at the original ID + clear any invalidation flag.
+    //    This frees `newId` from the profile too → no row holds it → reusable.
+    const em = this.em.fork();
+    await em.getConnection().execute(
+      `UPDATE profiles SET meca_id = ?, meca_id_invalidated_at = NULL, updated_at = NOW() WHERE id = ?`,
+      [String(oldId), userId],
+    );
+
+    // 3. Move any results entered under the NEW id onto the OLD id (consolidate),
+    //    then un-hold + un-stamp the held/999999 results and recalc points.
+    let moved = 0;
+    let reinstated = 0;
+    try {
+      moved = await this.competitionResultsService.reassignMecaId(String(newId), String(oldId));
+      reinstated = await this.competitionResultsService.reinstatePointsForMecaId(oldId);
+    } catch (err) {
+      this.logger.error('Result restore/recalc during MECA ID restore failed (non-fatal):', err);
+    }
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_restore_meca_id',
+      resourceType: 'membership',
+      resourceId: elig.currentMembershipId,
+      description: `Restored MECA ID ${oldId} (freed ${newId} for reuse) and reinstated ${moved + reinstated} result row(s) for user ${userId}`,
+      oldValues: { mecaId: newId },
+      newValues: { mecaId: oldId, freedMecaId: newId, resultsMoved: moved, resultsReinstated: reinstated },
+    });
+
+    this.logger.warn(
+      `Admin ${adminId} restored MECA ID ${oldId} for user ${userId} (freed ${newId}); ${moved + reinstated} result(s) reinstated`,
+    );
+
+    return {
+      success: true,
+      oldMecaId: oldId,
+      newMecaId: newId,
+      resultsRestored: moved + reinstated,
+      message: `Restored MECA ID ${oldId} and reinstated ${moved + reinstated} result(s). MECA ID ${newId} was freed for reuse.`,
+    };
   }
 
   /**

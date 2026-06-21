@@ -415,69 +415,16 @@ export default function MembershipCheckoutPage() {
       setExistingAccount(classification);
       if (classification === 'active' || classification === 'blocked') return;
 
+      // NOTHING is created, activated, signed in, or password-set BEFORE payment
+      // — for either a brand-new email OR a returning EXPIRED member ('renewable').
+      // An expired member has no usable password and must not be reactivated until
+      // they pay. We simply hold the password they chose and proceed to collect
+      // payment as a guest (email + billing go in the PaymentIntent metadata). The
+      // account is provisioned/reactivated and the password applied ONLY AFTER
+      // Stripe/PayPal confirms payment — in handlePaymentSuccess, with the webhook
+      // as the guaranteed server-side backup. An incomplete payment leaves the
+      // account exactly as it was: not activated, not signed in, no password set.
       setError(null);
-      setCreatingPaymentIntent(true);
-
-      // Returning member (migrated/expired, no active membership): set the
-      // password they chose on their EXISTING account, then sign them in. Their
-      // old-site password never carried over, so this is how they get back in.
-      const claimExistingAndSignIn = async (): Promise<boolean> => {
-        try {
-          await claimAccount(formData.email, accountPassword);
-        } catch (err: any) {
-          setError(err?.response?.data?.message || 'Could not set your password. Please try again.');
-          return false;
-        }
-        const { error: signInError } = await signIn(formData.email, accountPassword);
-        if (signInError) {
-          setError('Your password was set, but signing in failed. Please sign in with it on the login page.');
-          return false;
-        }
-        setAccountCreated(true);
-        return true;
-      };
-
-      if (classification === 'renewable') {
-        const ok = await claimExistingAndSignIn();
-        setCreatingPaymentIntent(false);
-        if (!ok) return;
-      } else {
-        // Brand-new email: create the account NOW — before payment — with the
-        // chosen password, so the PaymentIntent carries a real userId and the
-        // backend never has to provision post-payment (which used to race the
-        // webhook and drop paid memberships).
-        const { error: signUpError } = await signUp(
-          formData.email,
-          accountPassword,
-          formData.firstName,
-          formData.lastName,
-        );
-        if (signUpError) {
-          const msg = String(signUpError?.message || '');
-          if (/already|registered|exists/i.test(msg)) {
-            // Registered in the gap since the email check — it's really an
-            // existing account. If it has no active membership, claim it + sign
-            // in; otherwise route to sign-in.
-            const reclassified = await classifyGuestEmail();
-            setExistingAccount(reclassified ?? 'active');
-            if (reclassified === 'renewable') {
-              const ok = await claimExistingAndSignIn();
-              setCreatingPaymentIntent(false);
-              if (!ok) return;
-            } else {
-              setCreatingPaymentIntent(false);
-              return;
-            }
-          } else {
-            setCreatingPaymentIntent(false);
-            setError(signUpError.message || 'Could not create your account. Please try again.');
-            return;
-          }
-        } else {
-          setAccountCreated(true);
-          setCreatingPaymentIntent(false);
-        }
-      }
     }
 
     // If Stripe is not configured or PayPal is selected, go directly to payment step
@@ -563,12 +510,45 @@ export default function MembershipCheckoutPage() {
     if (!membership) return;
 
     const email = user ? (profile?.email || formData.email) : formData.email;
-    // Guests are signed up up front in handleContinueToPayment, so by here the
-    // buyer is authenticated either way. (Fall back to the freshly-created
-    // session's user if React state hasn't propagated yet.)
-    const currentUserId = user?.id;
+    let currentUserId = user?.id;
 
-    // Always create the membership client-side once we know who the buyer is.
+    // Provision/reactivate the account NOW — ONLY AFTER a successful payment —
+    // for a guest who chose a password at checkout but whom we deliberately did
+    // NOT activate beforehand. This is the single point where the password is set
+    // and the member is signed in. The Stripe/PayPal webhook independently
+    // fulfills (creates/renews the membership) as the guaranteed backup, so a
+    // hiccup here never loses the paid membership — at worst the member uses
+    // "Forgot Password" once their (now-active) account exists.
+    if (!currentUserId && accountPassword && existingAccount !== 'active' && existingAccount !== 'blocked') {
+      try {
+        if (existingAccount === 'renewable') {
+          // Returning EXPIRED member: set the chosen password on their EXISTING
+          // account and sign them in — now that payment is confirmed.
+          await claimAccount(formData.email, accountPassword);
+          const { error: signInError, userId } = await signIn(formData.email, accountPassword);
+          if (!signInError && userId) {
+            currentUserId = userId;
+            setAccountCreated(true);
+          }
+        } else {
+          // Brand-new email: create the account now (post-payment).
+          const { error: signUpError, data: signUpData } = await signUp(
+            formData.email,
+            accountPassword,
+            formData.firstName,
+            formData.lastName,
+          );
+          if (!signUpError && signUpData?.user?.id) {
+            currentUserId = signUpData.user.id;
+            setAccountCreated(true);
+          }
+        }
+      } catch (err) {
+        console.error('Post-payment account provisioning failed (webhook will fulfill):', err);
+      }
+    }
+
+    // Create the membership client-side once we know who the buyer is.
     // The Stripe webhook is the backup path (idempotent on stripePaymentIntentId).
     // Without this, a missed webhook = silent data loss for logged-in buyers.
     if (currentUserId) {
@@ -755,8 +735,10 @@ export default function MembershipCheckoutPage() {
             ) : (
               <div className="bg-slate-700/50 rounded-xl p-6 mb-8">
                 <p className="text-gray-400 text-sm">
-                  A confirmation email has been sent to <span className="text-white">{orderData?.email}</span>.
-                  You can create an account with this email to access your membership.
+                  Your payment was received and your membership is being set up for{' '}
+                  <span className="text-white">{orderData?.email}</span>. To access your account, use{' '}
+                  <Link to="/login" className="text-orange-400 hover:text-orange-300 underline">Forgot Password</Link>{' '}
+                  on the login page to set your password.
                 </p>
               </div>
             )}

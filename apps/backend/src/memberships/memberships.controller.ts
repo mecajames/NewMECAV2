@@ -1077,6 +1077,36 @@ export class MembershipsController {
     return result;
   }
 
+  /**
+   * Admin: is this member eligible for the one-click "Restore MECA ID & Points"
+   * action? True only when their latest renewal got a NEW MECA ID because the
+   * lapse at renewal was 31–45 days. Drives whether the button shows on the
+   * member detail page.
+   */
+  @Get('user/:userId/restore-meca-id/eligibility')
+  async restoreMecaIdEligibility(
+    @Param('userId') userId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getRestoreMecaIdEligibility(userId);
+  }
+
+  /**
+   * Admin: restore a member's ORIGINAL MECA ID (after a 31–45 day renewal that
+   * minted a new one) + reinstate/recalculate their held results' points, and
+   * free the new ID back into the pool. One click, eligibility-gated.
+   */
+  @Post('user/:userId/restore-meca-id')
+  @HttpCode(HttpStatus.OK)
+  async restoreMecaId(
+    @Param('userId') userId: string,
+    @Headers('authorization') authHeader: string,
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    return this.membershipsService.restorePreviousMecaIdAndPoints(userId, profile?.id || 'unknown');
+  }
+
   // =============================================================================
   // Admin Cancellation Endpoints
   // =============================================================================

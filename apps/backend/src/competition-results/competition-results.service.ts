@@ -1368,9 +1368,9 @@ export class CompetitionResultsService {
     const em = this.em.fork();
     const now = new Date();
     // Same effective window as MECA ID retention and the 999999 back-fill
-    // stamping (45 days standard, 120-day relaunch amnesty through July 5
-    // 2026) so a renewal that keeps the member's ID also releases their
-    // held points. Members are only ever told 30 days.
+    // stamping (45 days standard; BLANKET — any lapse — during the relaunch
+    // amnesty through August 25 2026) so a renewal that keeps the member's ID
+    // also releases their held points. Members are only ever told 30 days.
     const graceDays = MecaIdService.effectiveRetentionGraceDays();
     const graceCutoff = new Date(now.getTime() - graceDays * 24 * 60 * 60 * 1000);
 
