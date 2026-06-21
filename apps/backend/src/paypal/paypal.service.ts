@@ -272,6 +272,118 @@ export class PayPalService {
   }
 
   // =============================================================================
+  // RECONCILIATION (read-only verify/search against live PayPal)
+  // =============================================================================
+
+  /**
+   * Look up a capture by id (read-only) for live reconciliation verify — confirm
+   * a locally-paid PayPal payment is actually COMPLETED at PayPal. Returns null
+   * when not configured / not found / errored (recon degrades, never crashes).
+   */
+  async getCapture(captureId: string): Promise<{ status: string; amountCents: number; currency: string } | null> {
+    if (!process.env.PAYPAL_CLIENT_ID) return null;
+    try {
+      const baseUrl = await this.getBaseUrl();
+      const headers = await this.getAuthHeaders();
+      const res = await axios.get(`${baseUrl}/v2/payments/captures/${captureId}`, { headers });
+      const d = res.data || {};
+      return {
+        status: d.status,
+        amountCents: Math.round(parseFloat(d.amount?.value ?? '0') * 100),
+        currency: (d.amount?.currency_code || 'USD').toUpperCase(),
+      };
+    } catch (error: any) {
+      this.logger.warn(`PayPal getCapture(${captureId}) failed: ${error?.response?.status || error?.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Look up a refund by id (read-only) for live reconciliation — confirm a
+   * locally-recorded PayPal refund actually COMPLETED at PayPal. Null on
+   * not-configured / not-found / error.
+   */
+  async getRefundDetails(refundId: string): Promise<{ status: string; amountCents: number; currency: string } | null> {
+    if (!process.env.PAYPAL_CLIENT_ID) return null;
+    try {
+      const baseUrl = await this.getBaseUrl();
+      const headers = await this.getAuthHeaders();
+      const res = await axios.get(`${baseUrl}/v2/payments/refunds/${refundId}`, { headers });
+      const d = res.data || {};
+      return {
+        status: d.status,
+        amountCents: Math.round(parseFloat(d.amount?.value ?? '0') * 100),
+        currency: (d.amount?.currency_code || 'USD').toUpperCase(),
+      };
+    } catch (error: any) {
+      this.logger.warn(`PayPal getRefundDetails(${refundId}) failed: ${error?.response?.status || error?.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Transaction Search (`/v1/reporting/transactions`) for live reconciliation —
+   * lists PayPal transactions in a window so we can find captures with no local
+   * record (orphans). NOTE: this API must be ENABLED on the PayPal REST app
+   * ("Transaction Search" feature); it also caps the window at 31 days and lags
+   * ~3 hours. Returns {available:false, reason} when not configured, not enabled
+   * (403), or errored — recon then reports that PayPal orphan discovery was
+   * skipped (no silent gap).
+   */
+  async searchTransactions(startISO: string, endISO: string): Promise<{
+    available: boolean;
+    reason?: string;
+    capped: boolean;
+    transactions: Array<{ captureId: string; amountCents: number; currency: string; status: string; date: string }>;
+  }> {
+    if (!process.env.PAYPAL_CLIENT_ID) {
+      return { available: false, reason: 'not_configured', capped: false, transactions: [] };
+    }
+    const MAX_PAGES = 40;
+    const PAGE_SIZE = 500;
+    try {
+      const baseUrl = await this.getBaseUrl();
+      const headers = await this.getAuthHeaders();
+      const out: Array<{ captureId: string; amountCents: number; currency: string; status: string; date: string }> = [];
+      let capped = true;
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const res = await axios.get(`${baseUrl}/v1/reporting/transactions`, {
+          headers,
+          params: {
+            start_date: startISO,
+            end_date: endISO,
+            fields: 'transaction_info',
+            page_size: PAGE_SIZE,
+            page,
+          },
+        });
+        const details = res.data?.transaction_details ?? [];
+        for (const t of details) {
+          const info = t.transaction_info || {};
+          const id = info.transaction_id;
+          if (!id) continue;
+          out.push({
+            captureId: id,
+            amountCents: Math.round(parseFloat(info.transaction_amount?.value ?? '0') * 100),
+            currency: (info.transaction_amount?.currency_code || 'USD').toUpperCase(),
+            status: info.transaction_status,
+            date: info.transaction_initiation_date,
+          });
+        }
+        const totalPages = res.data?.total_pages ?? 1;
+        if (page >= totalPages) { capped = false; break; }
+      }
+      return { available: true, capped, transactions: out };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      // 403 = the Transaction Search feature isn't enabled on the app.
+      const reason = status === 403 ? 'transaction_search_not_enabled' : 'error';
+      this.logger.warn(`PayPal searchTransactions unavailable (${reason}): ${status || error?.message}`);
+      return { available: false, reason, capped: false, transactions: [] };
+    }
+  }
+
+  // =============================================================================
   // SUBSCRIPTIONS — recurring billing parity with Stripe.
   // PayPal subscriptions require a Product → Plan → Subscription chain. We
   // create one Plan per membership type at first use (idempotent via cached

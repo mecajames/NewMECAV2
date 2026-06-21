@@ -181,6 +181,25 @@ export interface FailedPaymentRow {
   detailUrl?: string;
 }
 
+export type ReconSeverity = 'info' | 'warning' | 'critical';
+
+export interface ReconCheck {
+  key: string;
+  label: string;
+  description: string;
+  severity: ReconSeverity;
+  count: number;
+  sample: Array<Record<string, any>>;
+}
+
+export interface ReconciliationReport {
+  generatedAt: string | null;
+  windowDays: number;
+  totalIssues: number;
+  criticalIssues: number;
+  checks: ReconCheck[];
+}
+
 /**
  * Row shape returned by GET /api/billing/payments — every Stripe + PayPal
  * payment regardless of status. Drives the unified All Payments page.
@@ -214,7 +233,7 @@ export interface AllPaymentRow {
 
 export interface MyTransaction {
   id: string;
-  source: 'event_registration' | 'membership' | 'shop_order';
+  source: 'event_registration' | 'membership' | 'shop_order' | 'world_finals';
   type: string;
   reference: string;
   description: string;
@@ -224,6 +243,31 @@ export interface MyTransaction {
   date: string;
   invoiceId?: string;
   detailUrl?: string;
+}
+
+export interface MyRefund {
+  id: string;
+  amount: number;
+  date: string;
+  reason?: string;
+  isPartial: boolean;
+  status: string;
+  gateway?: string;
+}
+
+export interface MyPayment {
+  id: string;
+  date: string;
+  amount: number;
+  amountRefunded: number;
+  currency: string;
+  status: string;
+  method: string;
+  type: string;
+  description?: string;
+  gateway: 'stripe' | 'paypal' | 'other';
+  reference?: string;
+  refunds: MyRefund[];
 }
 
 export type OrderItemCategory =
@@ -388,6 +432,25 @@ export const billingApi = {
     return response.data;
   },
 
+  /** Full billing detail for one order: all payments, refunds, invoice, dunning. */
+  getOrderBillingDetail: async (id: string): Promise<{
+    order: Order;
+    payments: Array<{
+      id: string; amount: string; currency?: string; paymentMethod: string; paymentStatus: string;
+      transactionId?: string; stripePaymentIntentId?: string; paypalOrderId?: string; paypalCaptureId?: string;
+      amountRefunded?: string; refundedAt?: string; paidAt?: string; failureReason?: string; createdAt?: string;
+    }>;
+    refunds: Array<{
+      id: string; amount: string; gateway?: string; gatewayRefundId?: string; reason?: string;
+      isPartial: boolean; status: string; createdAt?: string;
+    }>;
+    invoice: { id: string; invoiceNumber: string; status: string; total: string; amountPaid?: string } | null;
+    dunning: { failedAt?: string | null; lastDunningStep?: number | null; suspendedAt?: string | null } | null;
+  }> => {
+    const response = await axios.get(`/api/billing/orders/${id}/billing-detail`);
+    return response.data;
+  },
+
   /**
    * Create a new order (admin)
    */
@@ -489,6 +552,14 @@ export const billingApi = {
   },
 
   /**
+   * Get the current user's payments + nested refunds (incl. partials).
+   */
+  getMyPayments: async (): Promise<{ data: MyPayment[]; total: number }> => {
+    const response = await axios.get('/api/billing/my/payments');
+    return response.data;
+  },
+
+  /**
    * View user's invoice PDF in new tab (with auth)
    */
   viewMyInvoicePdf: async (id: string): Promise<void> => {
@@ -526,14 +597,34 @@ export const billingApi = {
    * Download user's invoice PDF (with auth)
    */
   downloadMyInvoicePdf: async (id: string, invoiceNumber?: string): Promise<void> => {
-    const response = await axios.get(`/api/billing/my/invoices/${id}/pdf`, {
+    // Real server-generated PDF (application/pdf), not HTML renamed .html.
+    const response = await axios.get(`/api/billing/my/invoices/${id}/pdf-file`, {
       responseType: 'blob',
     });
-    const blob = new Blob([response.data], { type: 'text/html' });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `invoice-${invoiceNumber || id}.html`;
+    link.download = `invoice-${invoiceNumber || id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Download a membership receipt as a real PDF (for comp / $0 / admin-assigned
+   * memberships that have no formal invoice).
+   */
+  downloadMyMembershipReceiptPdf: async (membershipId: string, mecaId?: string | number): Promise<void> => {
+    const response = await axios.get(`/api/billing/my/memberships/${membershipId}/receipt-pdf-file`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `meca-receipt-${mecaId || membershipId}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -605,6 +696,49 @@ export const billingApi = {
     const response = await axios.get('/api/billing/failed-payments', {
       params: windowDays ? { windowDays } : undefined,
     });
+    return response.data;
+  },
+
+  /** Latest stored nightly reconciliation report. */
+  getReconciliation: async (): Promise<ReconciliationReport> => {
+    const response = await axios.get('/api/billing/reconciliation');
+    return response.data;
+  },
+
+  /** Run reconciliation on demand over a trailing window. */
+  runReconciliation: async (windowDays = 30): Promise<ReconciliationReport> => {
+    const response = await axios.post('/api/billing/reconciliation/run', null, {
+      params: { windowDays },
+    });
+    return response.data;
+  },
+
+  /** Latest stored LIVE (gateway) reconciliation report. */
+  getLiveReconciliation: async (): Promise<ReconciliationReport> => {
+    const response = await axios.get('/api/billing/reconciliation/live');
+    return response.data;
+  },
+
+  /** Run LIVE gateway reconciliation on demand (window capped at 31 days). */
+  runLiveReconciliation: async (windowDays = 7): Promise<ReconciliationReport> => {
+    const response = await axios.post('/api/billing/reconciliation/live/run', null, {
+      params: { windowDays },
+    });
+    return response.data;
+  },
+
+  /** check-key → human label for discrepancies that support one-click remediation. */
+  getRemediableChecks: async (): Promise<Record<string, string>> => {
+    const response = await axios.get('/api/billing/reconciliation/remediable');
+    return response.data;
+  },
+
+  /** Apply a one-click remediation for a single flagged discrepancy row. */
+  remediateReconciliation: async (
+    checkKey: string,
+    payload: Record<string, any>,
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await axios.post('/api/billing/reconciliation/remediate', { checkKey, payload });
     return response.data;
   },
 

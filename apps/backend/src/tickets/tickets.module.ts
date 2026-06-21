@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { UploadsModule } from '../uploads/uploads.module';
 import { StripeModule } from '../stripe/stripe.module';
 import { PayPalModule } from '../paypal/paypal.module';
+import { RefundsModule } from '../payments/refunds.module';
 import { TicketsController } from './tickets.controller';
 import { TicketsService } from './tickets.service';
 import { TicketAdminController } from './ticket-admin.controller';
@@ -27,7 +28,7 @@ import { TicketQuickLinksService } from './ticket-quick-links.service';
 import { TicketQuickLinksController } from './ticket-quick-links.controller';
 
 @Module({
-  imports: [UploadsModule, forwardRef(() => StripeModule), forwardRef(() => PayPalModule)],
+  imports: [UploadsModule, forwardRef(() => StripeModule), forwardRef(() => PayPalModule), RefundsModule],
   controllers: [
     TicketsController,
     TicketAdminController,

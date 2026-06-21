@@ -17,6 +17,7 @@ export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
+  const [billingDetail, setBillingDetail] = useState<Awaited<ReturnType<typeof billingApi.getOrderBillingDetail>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState(false);
@@ -37,6 +38,8 @@ export default function OrderDetailPage() {
       const data = await billingApi.getOrder(id!);
       setOrder(data);
       setError(null);
+      // Full billing picture (all payments, refunds, invoice, dunning).
+      billingApi.getOrderBillingDetail(id!).then(setBillingDetail).catch(() => setBillingDetail(null));
     } catch (err) {
       console.error('Error fetching order:', err);
       setError('Failed to load order details');
@@ -448,6 +451,79 @@ export default function OrderDetailPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Full billing ledger — ALL payments, refunds, invoice, dunning */}
+            {billingDetail && (
+              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+                <div className="flex items-center gap-2 mb-4">
+                  <DollarSign className="h-5 w-5 text-emerald-400" />
+                  <h2 className="text-lg font-semibold text-white">Payments &amp; Refunds</h2>
+                </div>
+
+                {billingDetail.dunning && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 text-sm">
+                    Payment issue on the linked membership
+                    {billingDetail.dunning.failedAt ? ` — first failed ${new Date(billingDetail.dunning.failedAt).toLocaleDateString()}` : ''}
+                    {billingDetail.dunning.lastDunningStep ? `, dunning step ${billingDetail.dunning.lastDunningStep}/4` : ''}
+                    {billingDetail.dunning.suspendedAt ? `, SUSPENDED ${new Date(billingDetail.dunning.suspendedAt).toLocaleDateString()}` : ''}.
+                  </div>
+                )}
+
+                <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Payments ({billingDetail.payments.length})</h3>
+                <div className="space-y-2 mb-4">
+                  {billingDetail.payments.length === 0 && <p className="text-gray-500 text-sm">No payment rows linked.</p>}
+                  {billingDetail.payments.map((p) => (
+                    <div key={p.id} className="rounded-lg bg-slate-900/50 border border-slate-700 p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium">${Number(p.amount).toFixed(2)} {p.currency || 'USD'}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-gray-200 capitalize">{p.paymentMethod}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded capitalize ${p.paymentStatus === 'refunded' ? 'bg-red-500/15 text-red-300' : p.paymentStatus === 'paid' ? 'bg-green-500/15 text-green-300' : 'bg-slate-700 text-gray-300'}`}>{p.paymentStatus}</span>
+                        </span>
+                      </div>
+                      {Number(p.amountRefunded || 0) > 0 && (
+                        <div className="text-red-300 text-xs mt-1">Refunded: ${Number(p.amountRefunded).toFixed(2)}{p.refundedAt ? ` on ${new Date(p.refundedAt).toLocaleDateString()}` : ''}</div>
+                      )}
+                      <div className="text-gray-400 text-xs mt-1 font-mono break-all">
+                        {p.stripePaymentIntentId && <div>Stripe PI: {p.stripePaymentIntentId}</div>}
+                        {p.paypalCaptureId && <div>PayPal capture: {p.paypalCaptureId}</div>}
+                        {p.paypalOrderId && <div>PayPal order: {p.paypalOrderId}</div>}
+                        {!p.stripePaymentIntentId && !p.paypalCaptureId && p.transactionId && <div>Txn: {p.transactionId}</div>}
+                      </div>
+                      {p.failureReason && <div className="text-red-300 text-xs mt-1">Failure: {p.failureReason}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {billingDetail.refunds.length > 0 && (
+                  <>
+                    <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Refunds ({billingDetail.refunds.length})</h3>
+                    <div className="space-y-2 mb-4">
+                      {billingDetail.refunds.map((r) => (
+                        <div key={r.id} className="rounded-lg bg-red-500/5 border border-red-500/30 p-3 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-red-200 font-medium">-${Number(r.amount).toFixed(2)}{r.isPartial ? ' (partial)' : ''}</span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-gray-200 capitalize">{r.gateway || 'manual'}</span>
+                          </div>
+                          {r.reason && <div className="text-gray-400 text-xs mt-1">{r.reason}</div>}
+                          <div className="text-gray-500 text-xs mt-1">{r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}{r.gatewayRefundId ? ` · ${r.gatewayRefundId}` : ''}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {billingDetail.invoice && (
+                  <button
+                    onClick={() => navigate(`/admin/billing/invoices/${billingDetail.invoice!.id}`)}
+                    className="text-sm text-orange-400 hover:text-orange-300 inline-flex items-center gap-1"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Invoice {billingDetail.invoice.invoiceNumber} ({billingDetail.invoice.status}) — ${Number(billingDetail.invoice.total).toFixed(2)}
+                  </button>
+                )}
               </div>
             )}
 

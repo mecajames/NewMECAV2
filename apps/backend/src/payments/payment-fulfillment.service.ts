@@ -496,6 +496,25 @@ export class PaymentFulfillmentService {
         this.logger.error(`CRITICAL: Order/Invoice creation failed for shop order ${orderId}. ` +
           `Admin can recover via POST /api/shop/admin/orders/${orderId}/create-invoice: ${invoiceError}`);
       }
+
+      // Sync shop revenue to QuickBooks so it captures ALL income, not just
+      // memberships. Best-effort, non-blocking.
+      const shopEmail = metadata.email || (order as any).guestEmail || (order as any).user?.email;
+      if (shopEmail) {
+        const shopName = (order as any).guestName
+          || `${metadata.billingFirstName || ''} ${metadata.billingLastName || ''}`.trim()
+          || shopEmail;
+        this.quickBooksService
+          .createGenericSalesReceipt({
+            customerEmail: shopEmail,
+            customerName: shopName,
+            amount: Number((order as any).totalAmount ?? 0),
+            description: `Shop Order ${order.orderNumber}`,
+            paymentDate: new Date(),
+            reference: transactionId,
+          })
+          .catch((qbError) => this.logger.error(`QuickBooks shop sync failed (non-critical): ${qbError}`));
+      }
     } catch (error) {
       this.logger.error(`Error handling shop payment: ${error}`);
       throw error;
@@ -703,6 +722,7 @@ export class PaymentFulfillmentService {
         { transactionId: txnId },
       ],
     });
+    const isStripe = params.paymentMethod === PaymentMethod.STRIPE;
     if (!payment) {
       payment = em.create(Payment, {
         user: em.getReference(Profile, membership.user.id),
@@ -712,11 +732,25 @@ export class PaymentFulfillmentService {
         amount: amountPaid.toFixed(2),
         currency: 'USD',
         transactionId: txnId,
-        stripePaymentIntentId: params.paymentMethod === PaymentMethod.STRIPE ? txnId : undefined,
+        stripePaymentIntentId: isStripe ? txnId : undefined,
+        // Populate PayPal ids so refunds match + reconcile against the ledger.
+        paypalOrderId: !isStripe ? (params.metadata?.paypalOrderId || undefined) : undefined,
+        paypalCaptureId: !isStripe ? txnId : undefined,
         paymentStatus: PaymentStatus.PAID,
         paidAt: new Date(),
       } as any);
       await em.persistAndFlush(payment);
+    }
+
+    // Persist the PayPal capture id on the MEMBERSHIP too, so a later refund can
+    // be issued through PayPal (refundMembership previously had only a Stripe path
+    // and silently returned no money for PayPal-paid memberships).
+    if (!isStripe) {
+      const m = await em.findOne(Membership, { id: membership.id });
+      if (m && !m.paypalCaptureId) {
+        m.paypalCaptureId = txnId;
+        await em.flush();
+      }
     }
 
     const existingOrder = await em.findOne(Order, { payment: payment.id });
@@ -841,7 +875,49 @@ export class PaymentFulfillmentService {
       if (params.paymentMethod === PaymentMethod.STRIPE) {
         payment = await em.findOne(Payment, { stripePaymentIntentId: transactionId });
       } else if (params.paymentMethod === PaymentMethod.PAYPAL) {
-        payment = await em.findOne(Payment, { paypalOrderId: metadata.paypalOrderId || transactionId });
+        payment = await em.findOne(Payment, {
+          $or: [
+            { paypalOrderId: metadata.paypalOrderId || transactionId },
+            { paypalCaptureId: transactionId },
+            { transactionId },
+          ],
+        });
+      }
+
+      // No Payment ledger row yet (the event-registration / non-membership paths
+      // never created one) → create it now so EVERY order has a payment in the
+      // ledger, with the right gateway ids for refund matching + reconciliation.
+      if (!payment) {
+        const isStripe = params.paymentMethod === PaymentMethod.STRIPE;
+        payment = em.create(Payment, {
+          user: metadata.userId ? em.getReference(Profile, metadata.userId) : undefined,
+          paymentType: type === 'membership' ? PaymentType.MEMBERSHIP : PaymentType.EVENT_REGISTRATION,
+          paymentMethod: params.paymentMethod,
+          paymentStatus: PaymentStatus.PAID,
+          amount: amountPaid.toFixed(2),
+          currency: 'USD',
+          transactionId,
+          stripePaymentIntentId: isStripe ? transactionId : undefined,
+          paypalOrderId: !isStripe ? (metadata.paypalOrderId || undefined) : undefined,
+          paypalCaptureId: !isStripe ? transactionId : undefined,
+          paidAt: new Date(),
+          description: type === 'event_registration' ? `Event Registration: ${metadata.eventTitle || 'Event'}` : undefined,
+        } as any);
+        await em.persistAndFlush(payment);
+      }
+
+      // Idempotency guard: if an Order already exists for this payment (a retried
+      // checkout.session.completed / capture webhook re-enters here), don't mint a
+      // second Order+Invoice for the same money. The Payment row above is already
+      // deduped; the Order was the unguarded gap (audit: subscription-initial dup).
+      if (payment) {
+        const existingOrder = await em.findOne(Order, { payment: payment.id });
+        if (existingOrder) {
+          this.logger.log(
+            `Order ${existingOrder.orderNumber} already exists for payment ${transactionId}; skipping duplicate order/invoice creation`,
+          );
+          return;
+        }
       }
 
       const orderType = type === 'membership'
@@ -927,6 +1003,13 @@ export class PaymentFulfillmentService {
         const createdInvoice = await this.invoicesService.createFromOrder(createdOrder.id);
         this.logger.log(`Invoice ${createdInvoice.invoiceNumber} created for order ${createdOrder.orderNumber}`);
 
+        // Link the payment to the order (order.payments OneToMany) so the admin
+        // order view shows the full payment history.
+        if (payment) {
+          const p = await em.findOne(Payment, { id: payment.id });
+          if (p) p.order = em.getReference(Order, createdOrder.id) as any;
+        }
+
         return { order: createdOrder, invoice: createdInvoice };
       });
 
@@ -935,6 +1018,26 @@ export class PaymentFulfillmentService {
         this.invoicesService.sendInvoice(invoice.id).catch((error) => {
           this.logger.error(`Failed to send invoice email: ${error}`);
         });
+      }
+
+      // Sync event-registration revenue to QuickBooks (memberships sync via their
+      // own membership-config-aware path). Best-effort, non-blocking.
+      if (type === 'event_registration') {
+        const customerName = metadata.billingFirstName && metadata.billingLastName
+          ? `${metadata.billingFirstName} ${metadata.billingLastName}`
+          : metadata.email;
+        if (metadata.email) {
+          this.quickBooksService
+            .createGenericSalesReceipt({
+              customerEmail: metadata.email,
+              customerName: customerName || metadata.email,
+              amount: amountPaid,
+              description: `Event Registration: ${metadata.eventTitle || 'Event'}`,
+              paymentDate: new Date(),
+              reference: transactionId,
+            })
+            .catch((qbError) => this.logger.error(`QuickBooks event-reg sync failed (non-critical): ${qbError}`));
+        }
       }
     } catch (error) {
       this.logger.error(`Failed to create order/invoice: ${error}`);

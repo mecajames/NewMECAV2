@@ -973,4 +973,117 @@ export class StripeService implements OnApplicationBootstrap {
       throw new BadRequestException('Failed to get or create price');
     }
   }
+
+  // =============================================================================
+  // RECONCILIATION (read-only list/verify against the live Stripe account)
+  // =============================================================================
+
+  /**
+   * List succeeded charges created in [sinceUnixSec, untilUnixSec]. Used by live
+   * reconciliation to diff the gateway's truth against the local payments ledger
+   * in BOTH directions from a single pull. Read-only. Degrades to
+   * {available:false} when Stripe isn't configured or the API errors (so recon
+   * never crashes on a missing/invalid key).
+   */
+  async listChargesInWindow(sinceUnixSec: number, untilUnixSec: number): Promise<{
+    available: boolean;
+    capped: boolean;
+    charges: Array<{
+      id: string;
+      paymentIntentId: string | null;
+      amountCents: number;
+      amountRefundedCents: number;
+      currency: string;
+      status: string;
+      refunded: boolean;
+      created: number;
+    }>;
+  }> {
+    if (!process.env.STRIPE_SECRET_KEY) return { available: false, capped: false, charges: [] };
+    const MAX_PAGES = 50;
+    try {
+      const stripe = this.getStripeClient();
+      const out: any[] = [];
+      let cursor: string | undefined;
+      let capped = true;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const resp = await stripe.charges.list({
+          limit: 100,
+          created: { gte: sinceUnixSec, lte: untilUnixSec },
+          ...(cursor ? { starting_after: cursor } : {}),
+        });
+        for (const c of resp.data) {
+          out.push({
+            id: c.id,
+            paymentIntentId: typeof c.payment_intent === 'string' ? c.payment_intent : (c.payment_intent as any)?.id ?? null,
+            amountCents: c.amount ?? 0,
+            amountRefundedCents: c.amount_refunded ?? 0,
+            currency: (c.currency || 'usd').toUpperCase(),
+            status: c.status,
+            refunded: !!c.refunded,
+            created: c.created,
+          });
+        }
+        if (!resp.has_more) { capped = false; break; }
+        cursor = resp.data[resp.data.length - 1]?.id;
+        if (!cursor) { capped = false; break; }
+      }
+      return { available: true, capped, charges: out };
+    } catch (error) {
+      this.logger.warn(`Stripe listChargesInWindow failed (treated as unavailable): ${error}`);
+      return { available: false, capped: false, charges: [] };
+    }
+  }
+
+  /**
+   * List refunds created in [sinceUnixSec, untilUnixSec]. Read-only; same
+   * graceful-degrade contract as listChargesInWindow.
+   */
+  async listRefundsInWindow(sinceUnixSec: number, untilUnixSec: number): Promise<{
+    available: boolean;
+    capped: boolean;
+    refunds: Array<{
+      id: string;
+      paymentIntentId: string | null;
+      chargeId: string | null;
+      amountCents: number;
+      currency: string;
+      status: string | null;
+      created: number;
+    }>;
+  }> {
+    if (!process.env.STRIPE_SECRET_KEY) return { available: false, capped: false, refunds: [] };
+    const MAX_PAGES = 50;
+    try {
+      const stripe = this.getStripeClient();
+      const out: any[] = [];
+      let cursor: string | undefined;
+      let capped = true;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const resp = await stripe.refunds.list({
+          limit: 100,
+          created: { gte: sinceUnixSec, lte: untilUnixSec },
+          ...(cursor ? { starting_after: cursor } : {}),
+        });
+        for (const r of resp.data) {
+          out.push({
+            id: r.id,
+            paymentIntentId: typeof r.payment_intent === 'string' ? r.payment_intent : (r.payment_intent as any)?.id ?? null,
+            chargeId: typeof r.charge === 'string' ? r.charge : (r.charge as any)?.id ?? null,
+            amountCents: r.amount ?? 0,
+            currency: (r.currency || 'usd').toUpperCase(),
+            status: r.status ?? null,
+            created: r.created,
+          });
+        }
+        if (!resp.has_more) { capped = false; break; }
+        cursor = resp.data[resp.data.length - 1]?.id;
+        if (!cursor) { capped = false; break; }
+      }
+      return { available: true, capped, refunds: out };
+    } catch (error) {
+      this.logger.warn(`Stripe listRefundsInWindow failed (treated as unavailable): ${error}`);
+      return { available: false, capped: false, refunds: [] };
+    }
+  }
 }

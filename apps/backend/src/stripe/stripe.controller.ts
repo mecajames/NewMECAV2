@@ -34,7 +34,8 @@ import { Payment } from '../payments/payments.entity';
 import { Order } from '../orders/orders.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
-import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, InvoiceStatus, PaymentType, UserRole, ShopAddress, StripePaymentType } from '@newmeca/shared';
+import { MembershipType, PaymentIntentResult, OrderType, OrderItemType, OrderStatus, InvoiceStatus, PaymentType, UserRole, ShopAddress, StripePaymentType, RefundGateway, RefundSourceType } from '@newmeca/shared';
+import { RefundService } from '../payments/refund.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { ShopService } from '../shop/shop.service';
 import { TaxService } from '../tax/tax.service';
@@ -141,6 +142,7 @@ export class StripeController {
     private readonly membershipSyncService: MembershipSyncService,
     private readonly worldFinalsService: WorldFinalsService,
     private readonly paymentFulfillmentService: PaymentFulfillmentService,
+    private readonly refundService: RefundService,
     private readonly couponsService: CouponsService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly emailService: EmailService,
@@ -1465,11 +1467,30 @@ export class StripeController {
       return;
     }
 
-    // Update payment status
     const { PaymentStatus } = await import('@newmeca/shared');
-    payment.paymentStatus = PaymentStatus.REFUNDED;
-    payment.refundedAt = new Date();
-    payment.refundReason = charge.refunds?.data[0]?.reason || 'Refunded via Stripe';
+
+    // Reconcile into the unified refund ledger (idempotent on the Stripe refund
+    // id): writes the Refund row + updates Payment + cascades Order/Invoice. This
+    // also covers refunds issued straight from the Stripe dashboard (our admin
+    // path already recorded its own, so this no-ops there). callGateway:false —
+    // the money was already refunded; we never re-call the gateway here.
+    const stripeRefundId = charge.refunds?.data?.[0]?.id;
+    const isPartialReconcile = charge.amount_refunded > 0 && charge.amount_refunded < charge.amount;
+    try {
+      await this.refundService.issueRefund({
+        callGateway: false,
+        gateway: RefundGateway.STRIPE,
+        gatewayRefundId: stripeRefundId,
+        sourceType: payment.membership ? RefundSourceType.MEMBERSHIP : RefundSourceType.ORDER,
+        sourceId: payment.membership?.id,
+        totalAmountDollars: Number(payment.amount),
+        amountCents: isPartialReconcile ? (charge.refunds?.data?.[0]?.amount ?? charge.amount_refunded) : undefined,
+        reason: charge.refunds?.data?.[0]?.reason || 'Refunded via Stripe',
+        payment,
+      });
+    } catch (e) {
+      console.error('Refund ledger reconcile failed (non-fatal):', e);
+    }
 
     // If this payment is associated with a membership, update membership status. Determine if this is a master/independent (a.k.a. "main") refund — those skip user in-app per requirements.
     let isMainMembershipRefund = false;
@@ -1541,7 +1562,9 @@ export class StripeController {
       });
     }
 
-    // TODO: Create QuickBooks credit memo if QB is connected
+    // QuickBooks refund receipt is posted centrally by RefundService.issueRefund
+    // (this webhook reconciles via the callGateway:false issueRefund call above),
+    // so accounting income is reduced for every refund source — not just here.
   }
 
   /**
@@ -1784,6 +1807,13 @@ export class StripeController {
 
     membership.endDate = newEndDate;
     membership.paymentStatus = PaymentStatus.PAID;
+    // Payment RECOVERED → reset the dunning lifecycle so a future failure starts
+    // escalation cleanly. Previously these were left stale, which suppressed
+    // re-escalation on a later failure (a stale step satisfied the >= check).
+    membership.failedAt = undefined;
+    membership.lastDunningStep = undefined;
+    membership.lastDunningAt = undefined;
+    membership.suspendedAt = undefined;
     await em.flush();
 
     console.log('Extended membership ' + membership.id + ' end_date: ' + oldEndStr + ' -> ' + newEndStr + ' (subscription: ' + subscriptionId + ')');
@@ -1872,6 +1902,10 @@ export class StripeController {
     }
 
     membership.paymentStatus = PaymentStatus.FAILED;
+    // Stamp the FIRST failure as the dunning cadence anchor (stable — unlike
+    // updated_at, which unrelated writes + the cron itself bump). Only set it if
+    // not already failing.
+    if (!membership.failedAt) membership.failedAt = new Date();
     await em.populate(membership, ['user', 'membershipTypeConfig']);
 
     // Record the failed renewal as a Payment row keyed by Stripe invoice id

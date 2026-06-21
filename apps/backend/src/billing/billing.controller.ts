@@ -32,6 +32,7 @@ import {
 import { OrdersService } from '../orders/orders.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { InvoicePdfService } from '../invoices/pdf/invoice-pdf.service';
+import { ReceiptPdfService } from '../invoices/pdf/receipt-pdf.service';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { Order } from '../orders/orders.entity';
 import { Membership } from '../memberships/memberships.entity';
@@ -39,6 +40,8 @@ import { ShopOrder } from '../shop/entities/shop-order.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { Payment } from '../payments/payments.entity';
+import { Refund } from '../payments/refund.entity';
+import { FinalsRegistration } from '../world-finals/finals-registration.entity';
 import { InvoiceItemType } from '@newmeca/shared';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
@@ -55,6 +58,7 @@ export class BillingController {
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
     private readonly pdfService: InvoicePdfService,
+    private readonly receiptPdfService: ReceiptPdfService,
     private readonly supabaseAdmin: SupabaseAdminService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -114,6 +118,20 @@ export class BillingController {
   ) {
     await this.requireAdmin(authHeader);
     return this.ordersService.findById(id);
+  }
+
+  /**
+   * Full billing detail for one order: ALL payments (incl. PayPal ids), every
+   * refund, the linked invoice, and dunning state — so the admin order view
+   * shows the complete picture, not a single Stripe-only payment.
+   */
+  @Get('orders/:id/billing-detail')
+  async getOrderBillingDetail(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.ordersService.getOrderBillingDetail(id);
   }
 
   /**
@@ -248,7 +266,7 @@ export class BillingController {
     const user = await this.getCurrentUser(authHeader);
     const em = this.em.fork();
 
-    const [registrations, memberships, shopOrders, billingOrders, userInvoices] = await Promise.all([
+    const [registrations, memberships, shopOrders, billingOrders, userInvoices, finalsRegs] = await Promise.all([
       em.find(
         EventRegistration,
         { user: user.id },
@@ -273,6 +291,11 @@ export class BillingController {
         Invoice,
         { user: user.id },
         { populate: ['masterMembership', 'items'], orderBy: { createdAt: 'DESC' } },
+      ),
+      em.find(
+        FinalsRegistration,
+        { user: user.id },
+        { populate: ['season'], orderBy: { createdAt: 'DESC' } },
       ),
     ]);
 
@@ -309,7 +332,7 @@ export class BillingController {
 
     type Transaction = {
       id: string;
-      source: 'event_registration' | 'membership' | 'shop_order';
+      source: 'event_registration' | 'membership' | 'shop_order' | 'world_finals';
       type: string;
       reference: string;
       description: string;
@@ -383,8 +406,107 @@ export class BillingController {
       });
     }
 
+    for (const f of finalsRegs) {
+      const linkedOrder = f.stripePaymentIntentId
+        ? orderByPaymentIntentId.get(f.stripePaymentIntentId)
+        : undefined;
+      const seasonName = (f.season as any)?.name;
+      txs.push({
+        id: `world_finals:${f.id}`,
+        source: 'world_finals',
+        type: 'World Finals Registration',
+        reference: linkedOrder?.orderNumber || f.id.slice(0, 8),
+        description: `World Finals Registration${seasonName ? `: ${seasonName}` : ''}`,
+        status: f.paymentStatus,
+        amount: Number(f.totalAmount ?? 0),
+        currency: 'USD',
+        date: (f.createdAt instanceof Date ? f.createdAt : new Date((f.createdAt as any) ?? Date.now())).toISOString(),
+        invoiceId: linkedOrder?.invoiceId,
+        detailUrl: '/world-finals',
+      });
+    }
+
     txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     return { data: txs, total: txs.length };
+  }
+
+  /**
+   * Member-facing payments + refunds ledger. Returns each real money movement on
+   * the signed-in user's account (from the unified `payments` table) with any
+   * refunds — including PARTIAL refunds — nested underneath. Powers the
+   * "Payments & Refunds" panel on the Billing page so members can see exactly
+   * what was charged and what was returned.
+   */
+  @Get('my/payments')
+  async getMyPayments(
+    @Headers('authorization') authHeader: string,
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    const em = this.em.fork();
+
+    const payments = await em.find(
+      Payment,
+      { user: user.id },
+      { populate: ['membership', 'membership.membershipTypeConfig'], orderBy: { createdAt: 'DESC' } },
+    );
+
+    // Pull every refund tied to those payments in one query, then group by payment.
+    const paymentIds = payments.map((p) => p.id);
+    const refunds = paymentIds.length
+      ? await em.find(
+          Refund,
+          { payment: { $in: paymentIds } },
+          { orderBy: { createdAt: 'DESC' } },
+        )
+      : [];
+
+    const refundsByPayment = new Map<string, Refund[]>();
+    for (const r of refunds) {
+      const pid = (r.payment as any)?.id || (r.payment as any);
+      if (!pid) continue;
+      const list = refundsByPayment.get(String(pid)) ?? [];
+      list.push(r);
+      refundsByPayment.set(String(pid), list);
+    }
+
+    const gatewayOf = (p: Payment): 'stripe' | 'paypal' | 'other' => {
+      if (p.stripePaymentIntentId || p.stripeCustomerId) return 'stripe';
+      if (p.paypalCaptureId || p.paypalOrderId) return 'paypal';
+      return 'other';
+    };
+
+    const data = payments.map((p) => {
+      const ref = (p.stripePaymentIntentId || p.paypalCaptureId || p.transactionId || '').toString();
+      const rs = refundsByPayment.get(p.id) ?? [];
+      return {
+        id: p.id,
+        date: (p.paidAt ?? p.createdAt).toISOString(),
+        amount: Number(p.amount ?? 0),
+        amountRefunded: Number(p.amountRefunded ?? 0),
+        currency: p.currency || 'USD',
+        status: p.paymentStatus,
+        method: p.paymentMethod,
+        type: p.paymentType,
+        description:
+          p.description ||
+          (p.membership?.membershipTypeConfig?.name
+            ? `Membership: ${p.membership.membershipTypeConfig.name}`
+            : undefined),
+        gateway: gatewayOf(p),
+        reference: ref ? `…${ref.slice(-8)}` : undefined,
+        refunds: rs.map((r) => ({
+          id: r.id,
+          amount: Number(r.amount ?? 0),
+          date: r.createdAt.toISOString(),
+          reason: r.reason,
+          isPartial: r.isPartial,
+          status: r.status,
+          gateway: r.gateway,
+        })),
+      };
+    });
+
+    return { data, total: data.length };
   }
 
   /**
@@ -444,9 +566,117 @@ export class BillingController {
     res.send(html);
   }
 
+  /**
+   * Current user's invoice as a REAL PDF file (application/pdf), so "Download"
+   * saves a .pdf instead of HTML.
+   */
+  @Get('my/invoices/:id/pdf-file')
+  async getMyInvoicePdfFile(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    const invoice = await this.invoicesService.findById(id);
+    if (invoice.user?.id !== user.id) {
+      throw new ForbiddenException('You do not have permission to access this invoice');
+    }
+    const bytes = await this.receiptPdfService.generateInvoicePdf(invoice);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+    res.send(Buffer.from(bytes));
+  }
+
+  /**
+   * Current user's membership receipt as a REAL PDF file (application/pdf).
+   */
+  @Get('my/memberships/:id/receipt-pdf-file')
+  async getMyMembershipReceiptPdfFile(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Res() res: Response,
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    const em = this.em.fork();
+    const membership = await em.findOne(
+      Membership,
+      { id },
+      { populate: ['user', 'membershipTypeConfig'] },
+    );
+    if (!membership) {
+      throw new ForbiddenException('Membership not found');
+    }
+    if ((membership.user as any)?.id !== user.id) {
+      throw new ForbiddenException('You do not have permission to access this membership receipt');
+    }
+    const bytes = await this.receiptPdfService.generateMembershipReceiptPdf(membership);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="meca-receipt-${membership.mecaId || membership.id.slice(0, 8)}.pdf"`);
+    res.send(Buffer.from(bytes));
+  }
+
   // ==========================================
   // DASHBOARD STATS ENDPOINTS
   // ==========================================
+
+  /**
+   * NET revenue for a period, computed in SQL. Single source of truth for every
+   * revenue figure so the dashboard and the revenue report can't disagree.
+   *
+   *   net = completed-order totals
+   *       − refunds against those orders (partials; full refunds already drop
+   *         the order out of 'completed')
+   *       + subscription renewals (Payment rows with no Order — otherwise invisible)
+   *
+   * No row cap (the old reduce() silently stopped at 1000 orders).
+   */
+  private async computeNetRevenue(start: Date | null, end: Date | null): Promise<{
+    gross_orders: string; order_refunds: string; renewal_revenue: string; net_revenue: string;
+  }> {
+    const conn = this.em.getConnection();
+    const hasStart = !!start;
+    const hasEnd = !!end;
+    const orderDateSql = `${hasStart ? ' AND o.created_at >= ?' : ''}${hasEnd ? ' AND o.created_at <= ?' : ''}`;
+    const payDateSql = `${hasStart ? ' AND p.created_at >= ?' : ''}${hasEnd ? ' AND p.created_at <= ?' : ''}`;
+    const params: any[] = [];
+    if (hasStart) params.push(start);
+    if (hasEnd) params.push(end);
+    if (hasStart) params.push(start);
+    if (hasEnd) params.push(end);
+
+    const rows = await conn.execute<Array<{
+      gross_orders: string; order_refunds: string; renewal_revenue: string; net_revenue: string;
+    }>>(
+      `
+      WITH completed_orders AS (
+        SELECT o.id, o.total::numeric AS total
+        FROM orders o
+        WHERE o.status = 'completed'${orderDateSql}
+      ),
+      order_refunds AS (
+        SELECT COALESCE(SUM(p.amount_refunded), 0)::numeric AS refunded
+        FROM payments p
+        WHERE p.order_id IN (SELECT id FROM completed_orders)
+      ),
+      renewal_rev AS (
+        SELECT COALESCE(SUM(p.amount - COALESCE(p.amount_refunded, 0)), 0)::numeric AS amt
+        FROM payments p
+        WHERE p.order_id IS NULL
+          AND p.payment_status = 'paid'
+          AND p.payment_type = 'membership'${payDateSql}
+      )
+      SELECT
+        (SELECT COALESCE(SUM(total), 0) FROM completed_orders)         AS gross_orders,
+        (SELECT refunded FROM order_refunds)                          AS order_refunds,
+        (SELECT amt FROM renewal_rev)                                 AS renewal_revenue,
+        (SELECT COALESCE(SUM(total), 0) FROM completed_orders)
+          - (SELECT refunded FROM order_refunds)
+          + (SELECT amt FROM renewal_rev)                             AS net_revenue
+      `,
+      params,
+    );
+    return rows?.[0] ?? { gross_orders: '0', order_refunds: '0', renewal_revenue: '0', net_revenue: '0' };
+  }
 
   /**
    * Get billing dashboard statistics
@@ -478,20 +708,11 @@ export class BillingController {
       this.invoicesService.getRecentInvoices(5),
     ]);
 
-    // Revenue = sum(total) of completed orders in period. The DTO types
-    // startDate/endDate as Date — coerce here so the query string params
-    // can be passed straight through.
-    const completedOrders = await this.ordersService.findAll({
-      page: 1,
-      status: OrderStatus.COMPLETED,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined,
-      limit: 1000,
-    });
-    const totalRevenue = completedOrders.data.reduce(
-      (sum, order) => sum + parseFloat(order.total),
-      0,
+    const rev = await this.computeNetRevenue(
+      startDate ? new Date(startDate) : null,
+      endDate ? new Date(endDate) : null,
     );
+    const totalRevenue = parseFloat(rev.net_revenue || '0');
 
     return {
       orders: {
@@ -506,6 +727,9 @@ export class BillingController {
       },
       revenue: {
         total: totalRevenue.toFixed(2),
+        grossOrders: parseFloat(rev.gross_orders || '0').toFixed(2),
+        refunds: parseFloat(rev.order_refunds || '0').toFixed(2),
+        renewals: parseFloat(rev.renewal_revenue || '0').toFixed(2),
         currency: 'USD',
       },
       recent: {
@@ -1080,6 +1304,11 @@ export class BillingController {
       .filter(i => i.paidAt && new Date(i.paidAt) <= end)
       .reduce((sum, i) => sum + parseFloat(i.total), 0);
 
+    // Authoritative total = the same NET figure the dashboard uses (orders − refunds
+    // + renewals), not the old lossy max(orders, invoices) heuristic which both
+    // double-thought about the order↔invoice overlap AND dropped renewals/refunds.
+    const rev = await this.computeNetRevenue(start, end);
+
     return {
       period: {
         start: start.toISOString(),
@@ -1094,7 +1323,10 @@ export class BillingController {
         revenue: invoiceRevenue.toFixed(2),
       },
       total: {
-        revenue: Math.max(orderRevenue, invoiceRevenue).toFixed(2),
+        revenue: parseFloat(rev.net_revenue || '0').toFixed(2),
+        grossOrders: parseFloat(rev.gross_orders || '0').toFixed(2),
+        refunds: parseFloat(rev.order_refunds || '0').toFixed(2),
+        renewals: parseFloat(rev.renewal_revenue || '0').toFixed(2),
         currency: 'USD',
       },
     };

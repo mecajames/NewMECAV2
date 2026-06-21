@@ -194,6 +194,18 @@ export interface CanPurchaseResult {
   existingMembershipId?: string;
 }
 
+export interface DunningStatus {
+  membershipId: string;
+  membershipType: string;
+  amountDue: string;
+  failedAt: string | null;
+  lastDunningStep: number;
+  suspendedAt: string | null;
+  endDate: string | null;
+  isSuspended: boolean;
+  hasSubscription: boolean;
+}
+
 export interface UserMecaId {
   mecaId: number;
   membershipId: string;
@@ -1182,6 +1194,15 @@ export const membershipsApi = {
       returnUrl,
     });
     return response.data;
+  },
+
+  /**
+   * Failed-renewal / dunning state for the signed-in member. Returns null when
+   * there's nothing wrong (no failed auto-renew charge).
+   */
+  getMyDunningStatus: async (): Promise<DunningStatus | null> => {
+    const response = await axios.get('/api/memberships/me/dunning');
+    return response.data ?? null;
   },
 
   // ============================================================

@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  forwardRef,
   NotFoundException,
   BadRequestException,
   Logger,
@@ -21,6 +22,8 @@ import {
   InvoiceListQuery,
   CompanyInfo,
   BillingAddress,
+  RefundSourceType,
+  RefundGateway,
 } from '@newmeca/shared';
 import { Invoice } from './invoices.entity';
 import { InvoiceItem } from './invoice-items.entity';
@@ -33,6 +36,7 @@ import { Team } from '../teams/team.entity';
 import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { StripeService } from '../stripe/stripe.service';
+import { RefundService } from '../payments/refund.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // Default MECA company info
@@ -59,6 +63,8 @@ export class InvoicesService {
     private readonly em: EntityManager,
     private readonly emailService: EmailService,
     private readonly stripeService: StripeService,
+    @Inject(forwardRef(() => RefundService))
+    private readonly refundService: RefundService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -853,17 +859,23 @@ export class InvoicesService {
   /**
    * Refund a paid invoice AND clean up the records it created.
    *
-   * Steps (single transaction):
-   *  1. Issue Stripe refund against the linked Payment's paymentIntent
-   *  2. Mark Payment as REFUNDED
-   *  3. Mark linked Order as REFUNDED
-   *  4. Delete Membership(s) created from this payment and clear the owner
-   *     profile's cached meca_id so the email can purchase again
-   *  5. Mark Invoice as REFUNDED
+   *  1. Issue the gateway refund + write the `refunds` ledger row + cascade
+   *     Payment/Order/Invoice to REFUNDED via the central RefundService — which
+   *     (unlike the old Stripe-only inline path) handles BOTH Stripe and PayPal,
+   *     tracks partial refunds (amount_refunded), and posts the QuickBooks credit
+   *     memo. Skipped only for manual/comp invoices with no gateway charge.
+   *  2. Tear down what the purchase created — delete the Membership(s) + their
+   *     teams, and clear the owner profile's cached meca_id so the email can
+   *     buy again — then belt-and-suspenders the REFUNDED statuses.
+   *
+   * The gateway refund (step 1) is committed durably BEFORE the teardown (the
+   * same ordering refundMembership uses), so a teardown hiccup can't leave money
+   * refunded at the gateway but unrecorded in our ledger.
    */
   async refundAndCleanup(
     id: string,
     reason: string,
+    actorId?: string,
   ): Promise<{
     invoice: Invoice;
     stripeRefundId?: string;
@@ -871,131 +883,129 @@ export class InvoicesService {
     deletedTeamIds: string[];
   }> {
     const em = this.em.fork();
-
-    return em.transactional(async (tx) => {
-      const invoice = await tx.findOne(
-        Invoice,
-        { id },
-        { populate: ['items', 'order', 'order.payment', 'user'] },
+    const invoice = await em.findOne(
+      Invoice,
+      { id },
+      { populate: ['order', 'order.payment', 'user'] },
+    );
+    if (!invoice) {
+      throw new NotFoundException(`Invoice with ID ${id} not found`);
+    }
+    if (invoice.status !== InvoiceStatus.PAID) {
+      throw new BadRequestException(
+        `Only paid invoices can be refunded. Current status: ${invoice.status}`,
       );
+    }
 
-      if (!invoice) {
-        throw new NotFoundException(`Invoice with ID ${id} not found`);
-      }
+    // Resolve the payment via the order link.
+    const payment: Payment | null = invoice.order?.payment
+      ? await em.findOne(Payment, { id: invoice.order.payment.id }, { populate: ['membership'] })
+      : null;
 
-      if (invoice.status !== InvoiceStatus.PAID) {
-        throw new BadRequestException(
-          `Only paid invoices can be refunded. Current status: ${invoice.status}`,
-        );
-      }
-
-      // Locate the payment (via order.payment); fall back to matching by
-      // membership.transactionId when the order link is missing.
-      let payment: Payment | null = invoice.order?.payment
-        ? await tx.findOne(
-            Payment,
-            { id: invoice.order.payment.id },
-            { populate: ['membership'] },
-          )
-        : null;
-
-      // Issue Stripe refund if we have a payment intent
-      let stripeRefundId: string | undefined;
-      if (payment?.stripePaymentIntentId) {
-        const refund = await this.stripeService.createRefund(
-          payment.stripePaymentIntentId,
+    // 1. Money + ledger + cascade via the single RefundService (Stripe OR PayPal).
+    let stripeRefundId: string | undefined;
+    if (payment && (payment.stripePaymentIntentId || payment.paypalCaptureId)) {
+      const totalCents = Math.round(Number(payment.amount) * 100);
+      const alreadyCents = Math.round(Number(payment.amountRefunded || 0) * 100);
+      const remainingCents = Math.max(0, totalCents - alreadyCents);
+      if (remainingCents > 0) {
+        const result = await this.refundService.issueRefund({
+          sourceType: RefundSourceType.INVOICE,
+          sourceId: invoice.id,
+          totalAmountDollars: Number(payment.amount),
+          // Refund only the un-refunded remainder; undefined when nothing's been
+          // refunded yet (= full refund).
+          amountCents: remainingCents < totalCents ? remainingCents : undefined,
           reason,
-        );
-        stripeRefundId = refund.id;
+          actorId,
+          stripePaymentIntentId: payment.stripePaymentIntentId,
+          paypalCaptureId: payment.paypalCaptureId,
+          payment,
+        });
+        if (result.gateway === RefundGateway.STRIPE) stripeRefundId = result.gatewayRefundId;
         this.logger.log(
-          `Stripe refund ${refund.id} issued for payment ${payment.id} (invoice ${invoice.invoiceNumber})`,
+          `Invoice ${invoice.invoiceNumber} refund via ${result.gateway} ($${result.amount.toFixed(2)}, partial=${result.isPartial})`,
         );
       } else {
-        this.logger.warn(
-          `No Stripe payment intent found for invoice ${invoice.invoiceNumber}; skipping Stripe refund`,
-        );
+        this.logger.warn(`Invoice ${invoice.invoiceNumber} already fully refunded; running cleanup only.`);
       }
+    } else {
+      this.logger.warn(
+        `No gateway payment id for invoice ${invoice.invoiceNumber}; skipping gateway refund (manual/comp invoice).`,
+      );
+    }
 
-      // Find memberships tied to this payment. Prefer payment.membership;
-      // also sweep any memberships whose transactionId matches (covers
-      // multi-membership checkouts where only one is linked on Payment).
+    // 2. Teardown + ensure REFUNDED statuses on a FRESH context that sees the
+    // RefundService commits from step 1.
+    const tx = this.em.fork();
+    return tx.transactional(async (t) => {
+      const inv = await t.findOne(Invoice, { id }, { populate: ['order', 'user'] });
+      if (!inv) throw new NotFoundException(`Invoice with ID ${id} not found`);
+      const pay = payment ? await t.findOne(Payment, { id: payment.id }, { populate: ['membership'] }) : null;
+
+      // Memberships tied to this payment — prefer payment.membership, also sweep
+      // siblings sharing the transactionId (multi-membership checkouts).
       const membershipsToDelete: Membership[] = [];
-      if (payment) {
-        if (payment.membership) {
-          const m = await tx.findOne(Membership, { id: payment.membership.id });
+      if (pay) {
+        if (pay.membership) {
+          const m = await t.findOne(Membership, { id: pay.membership.id });
           if (m) membershipsToDelete.push(m);
         }
-
-        const siblingTxId = payment.stripePaymentIntentId || payment.transactionId;
+        const siblingTxId = pay.stripePaymentIntentId || pay.transactionId;
         if (siblingTxId) {
-          const siblings = await tx.find(Membership, {
-            transactionId: siblingTxId,
-          });
+          const siblings = await t.find(Membership, { transactionId: siblingTxId });
           for (const s of siblings) {
-            if (!membershipsToDelete.find((m) => m.id === s.id)) {
-              membershipsToDelete.push(s);
-            }
+            if (!membershipsToDelete.find((m) => m.id === s.id)) membershipsToDelete.push(s);
           }
         }
       }
 
-      // Clear profile.meca_id cache for any owners whose cached value matches
-      // a membership we're about to delete, so the next purchase doesn't see
-      // stale data.
+      // Clear cached profile.meca_id so the next purchase doesn't see stale data.
       for (const membership of membershipsToDelete) {
         if (membership.mecaId && membership.user) {
-          await tx.getConnection().execute(
+          await t.getConnection().execute(
             `UPDATE profiles SET meca_id = NULL, meca_id_invalidated_at = NULL, updated_at = NOW() WHERE id = ? AND meca_id = ?`,
-            [
-              (membership.user as any).id ?? membership.user,
-              String(membership.mecaId),
-            ],
+            [(membership.user as any).id ?? membership.user, String(membership.mecaId)],
           );
         }
       }
 
-      // Delete any teams created for these memberships (hasTeamAddon / includesTeam).
-      // teams.membership_id is ON DELETE SET NULL, so without this step teams would
-      // be orphaned in team lists. team_members has no FK to teams, so wipe members first.
+      // Delete teams created for these memberships (membership_id is ON DELETE SET
+      // NULL, so teams would otherwise be orphaned; team_members has no FK → wipe first).
       const deletedTeamIds: string[] = [];
       for (const membership of membershipsToDelete) {
-        const teams = await tx.find(Team, { membership: membership.id });
+        const teams = await t.find(Team, { membership: membership.id });
         for (const team of teams) {
-          await tx.nativeDelete(TeamMember, { teamId: team.id });
-          tx.remove(team);
+          await t.nativeDelete(TeamMember, { teamId: team.id });
+          t.remove(team);
           deletedTeamIds.push(team.id);
         }
       }
 
       const deletedMembershipIds = membershipsToDelete.map((m) => m.id);
-      for (const m of membershipsToDelete) {
-        tx.remove(m);
+      for (const m of membershipsToDelete) t.remove(m);
+
+      // Ensure REFUNDED statuses (idempotent — RefundService already set them when
+      // a gateway refund ran; this covers the manual/comp-invoice path too).
+      if (pay && pay.paymentStatus !== PaymentStatus.REFUNDED) {
+        pay.paymentStatus = PaymentStatus.REFUNDED;
+        pay.refundedAt = new Date();
+        pay.refundReason = reason;
       }
-
-      // Update payment
-      if (payment) {
-        payment.paymentStatus = PaymentStatus.REFUNDED;
-        payment.refundedAt = new Date();
-        payment.refundReason = reason;
+      if (inv.order) {
+        inv.order.status = OrderStatus.REFUNDED;
+        inv.order.notes = reason;
       }
+      inv.status = InvoiceStatus.REFUNDED;
+      inv.notes = reason;
 
-      // Update order
-      if (invoice.order) {
-        invoice.order.status = OrderStatus.REFUNDED;
-        invoice.order.notes = reason;
-      }
-
-      // Update invoice
-      invoice.status = InvoiceStatus.REFUNDED;
-      invoice.notes = reason;
-
-      await tx.flush();
+      await t.flush();
 
       this.logger.log(
-        `Refunded invoice ${invoice.invoiceNumber}: deleted ${deletedMembershipIds.length} membership(s), ${deletedTeamIds.length} team(s), Stripe refund ${stripeRefundId ?? 'n/a'}`,
+        `Refunded invoice ${inv.invoiceNumber}: deleted ${deletedMembershipIds.length} membership(s), ${deletedTeamIds.length} team(s), gateway refund ${stripeRefundId ?? 'n/a'}`,
       );
 
-      return { invoice, stripeRefundId, deletedMembershipIds, deletedTeamIds };
+      return { invoice: inv, stripeRefundId, deletedMembershipIds, deletedTeamIds };
     });
   }
 

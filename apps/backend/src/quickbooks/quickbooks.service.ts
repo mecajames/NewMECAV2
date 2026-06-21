@@ -382,6 +382,140 @@ export class QuickBooksService {
   }
 
   /**
+   * Post a generic SalesReceipt to QuickBooks for NON-membership revenue (event
+   * registrations, shop orders) so QB captures ALL income — it previously only
+   * synced membership payments. Best-effort: returns null (never throws) when QB
+   * isn't connected/configured, so a sale never fails on the accounting sync.
+   */
+  async createGenericSalesReceipt(data: {
+    customerEmail: string;
+    customerName: string;
+    amount: number;
+    description: string;
+    paymentDate: Date;
+    reference?: string;
+    itemId?: string;
+    accountId?: string;
+  }): Promise<any | null> {
+    if (!this.oauthClient) {
+      console.warn('QuickBooks not configured — skipping sales receipt sync');
+      return null;
+    }
+    const connection = await this.getActiveConnection();
+    if (!connection) return null;
+    if (!data.customerEmail || !(data.amount > 0)) return null;
+
+    const qbo = await this.getQuickBooksClient();
+    const customer = await this.findOrCreateCustomer(qbo, data.customerEmail, data.customerName || data.customerEmail);
+
+    return new Promise((resolve) => {
+      const salesReceipt: any = {
+        CustomerRef: { value: customer.Id, name: customer.DisplayName },
+        TxnDate: data.paymentDate.toISOString().split('T')[0],
+        PrivateNote: data.reference ? `Payment: ${data.reference}` : undefined,
+        Line: [
+          {
+            Amount: data.amount,
+            DetailType: 'SalesItemLineDetail',
+            SalesItemLineDetail: {
+              ItemRef: data.itemId ? { value: data.itemId } : { value: '1', name: 'Services' },
+              Qty: 1,
+              UnitPrice: data.amount,
+            },
+            Description: data.description,
+          },
+        ],
+      };
+      if (data.accountId) {
+        salesReceipt.DepositToAccountRef = { value: data.accountId };
+      }
+
+      qbo.createSalesReceipt(salesReceipt, (err: any, receipt: any) => {
+        if (err) {
+          // Non-fatal — log and resolve null so the sale itself still succeeds.
+          console.error('Error creating QuickBooks sales receipt (generic):', err?.Fault?.Error ?? err);
+          resolve(null);
+        } else {
+          this.updateLastSyncTime();
+          resolve(receipt);
+        }
+      });
+    });
+  }
+
+  /**
+   * Post a RefundReceipt to QuickBooks so a refund REDUCES reported revenue (QB
+   * was previously overstating income — refunds were never synced). Best-effort:
+   * returns null when QB isn't connected/configured instead of throwing, so a
+   * refund never fails just because the accounting sync is down. Generic (not
+   * membership-specific) so every refund source — membership/shop/event/WF — can
+   * use it.
+   */
+  async createRefundReceipt(data: {
+    customerEmail: string;
+    customerName: string;
+    amount: number;
+    description: string;
+    refundDate: Date;
+    reference?: string;
+    itemId?: string;
+    accountId?: string;
+  }): Promise<any | null> {
+    if (!this.oauthClient) {
+      console.warn('QuickBooks not configured — skipping refund receipt sync');
+      return null;
+    }
+    const connection = await this.getActiveConnection();
+    if (!connection) {
+      console.warn('QuickBooks not connected — skipping refund receipt sync');
+      return null;
+    }
+    if (!data.customerEmail || !(data.amount > 0)) {
+      console.warn('QuickBooks refund receipt skipped — missing customer email or non-positive amount');
+      return null;
+    }
+
+    const qbo = await this.getQuickBooksClient();
+    const customer = await this.findOrCreateCustomer(qbo, data.customerEmail, data.customerName || data.customerEmail);
+
+    return new Promise((resolve) => {
+      const refundReceipt: any = {
+        CustomerRef: { value: customer.Id, name: customer.DisplayName },
+        TxnDate: data.refundDate.toISOString().split('T')[0],
+        PrivateNote: data.reference ? `Refund: ${data.reference}` : 'Refund',
+        Line: [
+          {
+            Amount: data.amount,
+            DetailType: 'SalesItemLineDetail',
+            SalesItemLineDetail: {
+              ItemRef: data.itemId ? { value: data.itemId } : { value: '1', name: 'Services' },
+              Qty: 1,
+              UnitPrice: data.amount,
+            },
+            Description: data.description,
+          },
+        ],
+      };
+      if (data.accountId) {
+        refundReceipt.DepositToAccountRef = { value: data.accountId };
+      }
+
+      // node-quickbooks exposes createRefundReceipt at runtime but its TS types
+      // omit it — cast to reach the method.
+      (qbo as any).createRefundReceipt(refundReceipt, (err: any, receipt: any) => {
+        if (err) {
+          // Non-fatal: log and resolve null so the refund itself still succeeds.
+          console.error('Error creating QuickBooks refund receipt:', err?.Fault?.Error ?? err);
+          resolve(null);
+        } else {
+          this.updateLastSyncTime();
+          resolve(receipt);
+        }
+      });
+    });
+  }
+
+  /**
    * Get list of items from QuickBooks (for mapping to membership types)
    */
   async getItems(): Promise<any[]> {

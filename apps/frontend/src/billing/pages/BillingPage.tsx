@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CreditCard,
@@ -16,10 +16,10 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
-import { billingApi, Invoice, MyTransaction } from '../../api-client/billing.api-client';
-import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
+import { billingApi, Invoice, MyTransaction, MyPayment } from '../../api-client/billing.api-client';
+import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES, DunningStatus } from '@/memberships';
 
-type BillingTab = 'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'invoices';
+type BillingTab = 'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'world_finals' | 'payments' | 'invoices';
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -27,9 +27,10 @@ export default function BillingPage() {
   const { profile, user } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [transactions, setTransactions] = useState<MyTransaction[]>([]);
+  const [payments, setPayments] = useState<MyPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const initialTab = (searchParams.get('tab') as BillingTab) || 'overview';
-  const validTabs: BillingTab[] = ['overview', 'memberships', 'shop_orders', 'event_registrations', 'invoices'];
+  const validTabs: BillingTab[] = ['overview', 'memberships', 'shop_orders', 'event_registrations', 'world_finals', 'payments', 'invoices'];
   const [activeTab, setActiveTabState] = useState<BillingTab>(
     validTabs.includes(initialTab) ? initialTab : 'overview',
   );
@@ -58,6 +59,8 @@ export default function BillingPage() {
   // Row to highlight after navigating from another page (e.g., the Membership History "View" button).
   const highlightedId = searchParams.get('highlight');
   const [membership, setMembership] = useState<Membership | null>(null);
+  const [dunning, setDunning] = useState<DunningStatus | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
   const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
   const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
@@ -66,6 +69,7 @@ export default function BillingPage() {
   const membershipTxs = transactions.filter((t) => t.source === 'membership');
   const shopTxs = transactions.filter((t) => t.source === 'shop_order');
   const eventTxs = transactions.filter((t) => t.source === 'event_registration');
+  const worldFinalsTxs = transactions.filter((t) => t.source === 'world_finals');
 
   useEffect(() => {
     if (profile?.id) {
@@ -78,14 +82,18 @@ export default function BillingPage() {
 
     try {
       setLoading(true);
-      const [invoicesRes, membershipRes, transactionsRes] = await Promise.all([
+      const [invoicesRes, membershipRes, transactionsRes, dunningRes, paymentsRes] = await Promise.all([
         billingApi.getMyInvoices({ limit: 10 }),
         membershipsApi.getUserActiveMembership(profile.id),
         billingApi.getMyAllTransactions().catch(() => ({ data: [], total: 0 })),
+        membershipsApi.getMyDunningStatus().catch(() => null),
+        billingApi.getMyPayments().catch(() => ({ data: [], total: 0 })),
       ]);
       setInvoices(invoicesRes.data || []);
       setMembership(membershipRes);
       setTransactions(transactionsRes.data || []);
+      setDunning(dunningRes);
+      setPayments(paymentsRes.data || []);
 
       // If this is a master membership, fetch secondaries
       if (membershipRes?.id) {
@@ -101,6 +109,25 @@ export default function BillingPage() {
       console.error('Error fetching billing data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Open the Stripe billing portal so the member can replace the failing card.
+  // If there's no portal session (no Stripe customer / PayPal-paid), fall back to
+  // the renewal flow.
+  const handleUpdatePayment = async () => {
+    try {
+      setOpeningPortal(true);
+      const { url } = await membershipsApi.getBillingPortalUrl(window.location.href);
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      navigate('/membership');
+    } catch {
+      navigate('/membership');
+    } finally {
+      setOpeningPortal(false);
     }
   };
 
@@ -192,6 +219,68 @@ export default function BillingPage() {
             Go Back
           </button>
         </div>
+
+        {/* Failed-renewal / dunning banner */}
+        {dunning && (
+          <div
+            className={`rounded-xl p-5 mb-6 border ${
+              dunning.isSuspended
+                ? 'bg-red-950/60 border-red-700'
+                : 'bg-amber-950/50 border-amber-600'
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <AlertCircle
+                className={`h-6 w-6 flex-shrink-0 mt-0.5 ${
+                  dunning.isSuspended ? 'text-red-400' : 'text-amber-400'
+                }`}
+              />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white">
+                  {dunning.isSuspended
+                    ? 'Membership suspended — payment failed'
+                    : 'Your renewal payment failed'}
+                </h3>
+                <p className="text-sm text-gray-300 mt-1">
+                  {dunning.isSuspended ? (
+                    <>
+                      We were unable to collect the {formatCurrency(dunning.amountDue)} renewal for your{' '}
+                      <span className="font-semibold text-white">{dunning.membershipType}</span> after
+                      several attempts, so it has been suspended. Update your payment method to
+                      reinstate it.
+                    </>
+                  ) : (
+                    <>
+                      We couldn&apos;t process the {formatCurrency(dunning.amountDue)} auto-renewal for your{' '}
+                      <span className="font-semibold text-white">{dunning.membershipType}</span>.
+                      Please update your payment method to keep your membership active
+                      {dunning.endDate ? <> — access continues through {formatDate(dunning.endDate)}.</> : '.'}
+                    </>
+                  )}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleUpdatePayment}
+                    disabled={openingPortal}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    {openingPortal ? 'Opening…' : 'Update Payment Method'}
+                  </button>
+                  {dunning.isSuspended && (
+                    <button
+                      onClick={() => navigate('/membership')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Renew Membership
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Membership Status Card */}
         <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-6">
@@ -335,6 +424,28 @@ export default function BillingPage() {
           >
             Event Registrations ({eventTxs.length})
           </button>
+          {worldFinalsTxs.length > 0 && (
+            <button
+              onClick={() => setActiveTab('world_finals')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'world_finals'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              World Finals ({worldFinalsTxs.length})
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              activeTab === 'payments'
+                ? 'bg-orange-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            Payments &amp; Refunds ({payments.length})
+          </button>
           <button
             onClick={() => setActiveTab('invoices')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -375,6 +486,7 @@ export default function BillingPage() {
                       onClick={() => {
                         if (tx.source === 'membership') setActiveTab('memberships');
                         else if (tx.source === 'shop_order') setActiveTab('shop_orders');
+                        else if (tx.source === 'world_finals') setActiveTab('world_finals');
                         else setActiveTab('event_registrations');
                       }}
                       className="w-full flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors text-left"
@@ -544,6 +656,23 @@ export default function BillingPage() {
               );
             }}
           />
+        )}
+
+        {/* World Finals Tab */}
+        {!loading && activeTab === 'world_finals' && (
+          <TransactionTable
+            transactions={worldFinalsTxs}
+            emptyIcon={<Calendar className="h-16 w-16 mx-auto mb-4 text-gray-500" />}
+            emptyText="No World Finals registrations found"
+            referenceLabel="Reference"
+            descriptionLabel="Registration"
+            onView={(tx) => tx.detailUrl && navigate(tx.detailUrl)}
+          />
+        )}
+
+        {/* Payments & Refunds Tab */}
+        {!loading && activeTab === 'payments' && (
+          <PaymentsTable payments={payments} formatCurrency={formatCurrency} formatDate={formatDate} />
         )}
 
         {/* Invoices Tab */}
@@ -804,6 +933,109 @@ function TransactionTable({
                   </div>
                 </td>
               </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+interface PaymentsTableProps {
+  payments: MyPayment[];
+  formatCurrency: (amount: string | number) => string;
+  formatDate: (dateString: string | null | undefined) => string;
+}
+
+function PaymentsTable({ payments, formatCurrency, formatDate }: PaymentsTableProps) {
+  const paymentStatusColor = (status: string): { bg: string; text: string } => {
+    const map: Record<string, { bg: string; text: string }> = {
+      succeeded: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      completed: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      paid: { bg: 'bg-green-900/50', text: 'text-green-400' },
+      pending: { bg: 'bg-yellow-900/50', text: 'text-yellow-400' },
+      processing: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
+      failed: { bg: 'bg-red-900/50', text: 'text-red-400' },
+      refunded: { bg: 'bg-orange-900/50', text: 'text-orange-400' },
+      partially_refunded: { bg: 'bg-orange-900/50', text: 'text-orange-400' },
+    };
+    return map[status] || { bg: 'bg-gray-800/50', text: 'text-gray-400' };
+  };
+
+  const gatewayLabel = (g: string) =>
+    g === 'stripe' ? 'Card' : g === 'paypal' ? 'PayPal' : 'Other';
+
+  if (payments.length === 0) {
+    return (
+      <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+        <div className="text-center py-12">
+          <CreditCard className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+          <p className="text-gray-400">No payments found</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
+      <table className="min-w-full divide-y divide-slate-700">
+        <thead className="bg-slate-700/50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Description</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Method</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
+            <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Refunded</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-700">
+          {payments.map((p) => {
+            const c = paymentStatusColor(p.status);
+            const hasRefunds = p.refunds.length > 0;
+            return (
+              <Fragment key={p.id}>
+                <tr className="hover:bg-slate-700/30">
+                  <td className="px-6 py-4 text-sm text-white">
+                    {p.description || p.type}
+                    {p.reference && (
+                      <span className="block text-gray-500 text-xs font-mono mt-0.5">{p.reference}</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{gatewayLabel(p.gateway)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs rounded-full capitalize ${c.bg} ${c.text}`}>
+                      {p.status.replace(/_/g, ' ')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-white text-right">
+                    {formatCurrency(p.amount)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                    {p.amountRefunded > 0 ? (
+                      <span className="text-orange-400">{formatCurrency(p.amountRefunded)}</span>
+                    ) : (
+                      <span className="text-gray-500">—</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDate(p.date)}</td>
+                </tr>
+                {hasRefunds &&
+                  p.refunds.map((r) => (
+                    <tr key={r.id} className="bg-slate-900/40">
+                      <td className="px-6 py-2 text-xs text-orange-300 pl-12" colSpan={3}>
+                        ↳ {r.isPartial ? 'Partial refund' : 'Refund'}
+                        {r.reason ? `: ${r.reason}` : ''}
+                        {r.gateway ? ` (${gatewayLabel(r.gateway)})` : ''}
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap text-xs text-orange-300 text-right">
+                        -{formatCurrency(r.amount)}
+                      </td>
+                      <td className="px-6 py-2"></td>
+                      <td className="px-6 py-2 whitespace-nowrap text-xs text-gray-500">{formatDate(r.date)}</td>
+                    </tr>
+                  ))}
+              </Fragment>
             );
           })}
         </tbody>
