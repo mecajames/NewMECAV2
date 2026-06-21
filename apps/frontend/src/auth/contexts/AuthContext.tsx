@@ -14,7 +14,7 @@ interface AuthContextType {
   loading: boolean;
   forcePasswordChange: boolean;
   restrictedToBilling: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any; userId?: string }>;
   signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: any; data: any }>;
   signInWithOAuth: (provider: Provider) => Promise<{ error: any }>;
   signOut: (logoutReason?: string) => Promise<void>;
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return { error };
+    return { error, userId: data?.user?.id };
   };
 
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {

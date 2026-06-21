@@ -44,20 +44,44 @@ export class MecaIdService {
   static readonly GRACE_MEDIUM_DAYS = 37;        // days 31-37 : silent reclaim + internal flag
   static readonly GRACE_ADMIN_DAYS = 45;         // days 38-45 : no self reclaim; admin may reassign
 
-  // Relaunch amnesty: the site was down ~2 months around the V2 relaunch, so
-  // through July 5, 2026 a renewal keeps its MECA ID if expired ≤120 days.
-  // After the deadline this reverts to GRACE_ADMIN_DAYS (45). NEVER surface
-  // 45 or 120 in member-facing copy — the announced retention window is 30
-  // days (GRACE_SOFT_DAYS); everything beyond that is silent goodwill.
-  static readonly RELAUNCH_GRACE_DAYS = 120;
-  // End of July 5, 2026 in the westernmost mainland US timezone (PDT, UTC-7).
-  static readonly RELAUNCH_GRACE_DEADLINE = new Date('2026-07-06T07:00:00.000Z');
+  // Relaunch amnesty: the new site launched Apr 27 2026 and members could NOT
+  // renew during the changeover. So through August 25, 2026 the amnesty is
+  // BLANKET — ANY expired member who renews keeps their MECA ID + held points,
+  // regardless of how long ago they expired (James 2026-06-20). Represented as a
+  // large-but-finite day count ("effectively unlimited") so the <= window
+  // comparison and the `now − days` date math stay valid (Infinity would break
+  // them). After Aug 25 it reverts to the normal windows: 30 self-service / 45
+  // admin (the 31–45 range is the silent admin-only buffer; members are only ever
+  // told 30 days).
+  static readonly RELAUNCH_GRACE_DAYS = 36500; // ~100 years = blanket during the amnesty
+  // End of August 25, 2026 in the westernmost mainland US timezone (PDT, UTC-7).
+  static readonly RELAUNCH_GRACE_DEADLINE = new Date('2026-08-26T07:00:00.000Z');
 
-  /** The ACTUAL (unannounced) MECA ID retention window, in days. */
+  /**
+   * The ACTUAL (unannounced) MECA ID retention window, in days — the ADMIN /
+   * data-preservation window. BLANKET (any lapse) during the relaunch amnesty
+   * through Aug 25 2026, then 45. This is the WIDE window: held competition
+   * results are preserved this long so an admin can manually reactivate + restore
+   * points in the 31–45 day range. Member-facing copy only ever says 30 days.
+   */
   static effectiveRetentionGraceDays(at: Date = new Date()): number {
     return at < MecaIdService.RELAUNCH_GRACE_DEADLINE
       ? MecaIdService.RELAUNCH_GRACE_DAYS
       : MecaIdService.GRACE_ADMIN_DAYS;
+  }
+
+  /**
+   * The SELF-SERVICE retention window, in days — what a member's OWN online
+   * renewal honors automatically (keep MECA ID + auto-reinstate held points).
+   * BLANKET (any lapse) during the relaunch amnesty through Aug 25 2026, then the
+   * ADVERTISED 30 days. Days 31–45 are reserved for ADMIN-only manual
+   * reactivation (see effectiveRetentionGraceDays); a self-service renewal in
+   * that range gets a NEW MECA ID and its held points wait for an admin.
+   */
+  static selfServiceRetentionGraceDays(at: Date = new Date()): number {
+    return at < MecaIdService.RELAUNCH_GRACE_DEADLINE
+      ? MecaIdService.RELAUNCH_GRACE_DAYS
+      : MecaIdService.GRACE_SOFT_DAYS;
   }
 
   /**
@@ -78,15 +102,18 @@ export class MecaIdService {
   async assignMecaIdToMembership(
     membership: Membership,
     previousMembership?: Membership,
-    callerEm?: EntityManager
+    callerEm?: EntityManager,
+    // Retention window (days) for the keep-vs-mint-new decision. Defaults to the
+    // wide admin window; self-service renewals pass selfServiceRetentionGraceDays().
+    retentionDaysOverride?: number,
   ): Promise<number> {
     // Use caller's EM if provided, otherwise fork our own
     const em = callerEm || this.em.fork();
 
     // A renewal by the SAME member keeps their MECA ID while the previous
-    // membership is active or expired within the ACTUAL retention window
-    // (effectiveRetentionGraceDays: 45 days standard, 120-day relaunch
-    // amnesty through July 5 2026 — members are only ever told 30 days).
+    // membership is active or expired within the retention window for this actor
+    // (self-service 30 / admin 45 days standard; BLANKET — any lapse — during the
+    // relaunch amnesty through Aug 25 2026; members are only ever told 30 days).
     // Beyond the window the number is retired and a fresh ID is minted; an
     // admin can still restore the old number via the reassign tool. The
     // number is also never reused if it is currently held by a DIFFERENT
@@ -96,7 +123,7 @@ export class MecaIdService {
       const daysSinceExpiry = previousMembership.endDate
         ? this.getDaysSinceExpiry(previousMembership.endDate)
         : 0;
-      const retentionDays = MecaIdService.effectiveRetentionGraceDays();
+      const retentionDays = retentionDaysOverride ?? MecaIdService.effectiveRetentionGraceDays();
 
       if (daysSinceExpiry > retentionDays) {
         this.logger.log(
@@ -293,32 +320,63 @@ export class MecaIdService {
   }
 
   /**
-   * Authoritative renewal end_date computation per
-   * docs/features/MEMBERSHIP_LIFECYCLE.md §2.
+   * Renewal end_date computation.
+   *
+   * Business rule (James, 2026-06-20): an EXPIRED member who renews WITHIN the
+   * retention window is renewed AS OF their expiration date — the new term runs
+   * from the old end date to one year after it (continuous). e.g. expired May 3,
+   * renews June 19 → new term ends May 3 of next year. The lapsed gap is absorbed
+   * (not credited, not added on top), and they keep their MECA ID + held points.
+   *
+   * This uses the SAME window that governs the keep-MECA-ID decision for the
+   * actor (self-service vs admin), so "keep ID + points" and "continuous term"
+   * coincide — EXCEPT a long-lapsed blanket-amnesty renewal: it keeps the ID
+   * (blanket) but "continuous" (old end + 1yr) would already be in the past, so
+   * we fall through to a fresh year from today (see the guard below).
+   *   within window + continuous is future → keep ID + continuous term from expiry
+   *   past window, or continuous already expired → new/blanket ID + fresh year
+   *
+   * The other extend-from-prior-end case is an EARLY renewal of a STILL-ACTIVE
+   * membership (renewed before expiry), so no paid days are lost.
    *
    * @param previous The most recent membership in the same category (may be active or expired)
    * @returns The new membership's end_date
    */
-  computeRenewalEndDate(previous?: Membership | null): Date {
+  computeRenewalEndDate(
+    previous?: Membership | null,
+    // Retention window (days) for the continuous-vs-fresh decision. Defaults to
+    // the wide admin window; self-service renewals pass selfServiceRetentionGraceDays()
+    // so the term decision matches the keep-MECA-ID decision for that actor.
+    retentionDays: number = MecaIdService.effectiveRetentionGraceDays(),
+  ): Date {
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-    if (!previous?.endDate) {
-      return new Date(Date.now() + ONE_YEAR_MS);
-    }
     const now = Date.now();
+    if (!previous?.endDate) {
+      return new Date(now + ONE_YEAR_MS);
+    }
     const prevEnd = previous.endDate.getTime();
 
-    // Active early-renew: previous still in term → extend from prev endDate
+    // Early renewal — still active (renewing before expiry): stack onto the
+    // current term so no paid days are lost.
     if (prevEnd >= now) {
       return new Date(prevEnd + ONE_YEAR_MS);
     }
 
-    // Expired: within MECA ID grace (1-45 days) → extend from prev endDate (A1)
+    // Expired renewal WITHIN the window → renew as of the expiration date
+    // (continuous): old end + 1 year — UNLESS that's already in the past
+    // (expired > 1 year ago, e.g. a blanket-amnesty renewal of a long-lapsed
+    // member), in which case "continuous" would mint an already-expired term, so
+    // fall through to a fresh year from today.
     const daysSinceExpiry = (now - prevEnd) / (1000 * 60 * 60 * 24);
-    if (daysSinceExpiry <= MecaIdService.GRACE_ADMIN_DAYS) {
-      return new Date(prevEnd + ONE_YEAR_MS);
+    if (daysSinceExpiry <= retentionDays) {
+      const continuous = prevEnd + ONE_YEAR_MS;
+      if (continuous > now) {
+        return new Date(continuous);
+      }
     }
 
-    // Past 45-day grace → fresh 365-day term from renewal date
+    // Past the window, or continuous would already be expired → a full 365-day
+    // term from the renewal date (today).
     return new Date(now + ONE_YEAR_MS);
   }
 

@@ -1993,14 +1993,48 @@ export class StripeController {
       membership.paymentStatus = PaymentStatus.PAID;
       membership.stripeSubscriptionId = subscriptionId;
       membership.startDate = new Date();
-      membership.endDate = this.mecaIdService.computeRenewalEndDate(previousMembership);
+      // Auto-renew is a SELF-SERVICE renewal → use the self-service window (120
+      // during the amnesty through Aug 25, then 30) for the term + MECA ID + the
+      // points reinstatement below.
+      const selfServiceWindow = MecaIdService.selfServiceRetentionGraceDays();
+      membership.endDate = this.mecaIdService.computeRenewalEndDate(previousMembership, selfServiceWindow);
 
-      // Set competitor name from metadata if available
-      const billingFirstName = metadata.billingFirstName || profile.first_name || '';
-      const billingLastName = metadata.billingLastName || profile.last_name || '';
+      // Billing details: prefer what Stripe collected on the hosted Checkout
+      // page (customer_details — address/phone/name), falling back to metadata
+      // then the existing profile. This is how the auto-renew path gets a full
+      // address (the subscription form itself only collects first/last name).
+      const cd = session.customer_details;
+      const cdAddr = cd?.address;
+      const cdName = (cd?.name || '').trim();
+      const cdFirst = cdName ? cdName.split(' ')[0] : '';
+      const cdLast = cdName ? cdName.split(' ').slice(1).join(' ') : '';
+      const billing = {
+        firstName: metadata.billingFirstName || cdFirst || profile.first_name || '',
+        lastName: metadata.billingLastName || cdLast || profile.last_name || '',
+        phone: cd?.phone || undefined,
+        address: cdAddr ? [cdAddr.line1, cdAddr.line2].filter(Boolean).join(' ') || undefined : undefined,
+        city: cdAddr?.city || undefined,
+        state: cdAddr?.state || undefined,
+        postalCode: cdAddr?.postal_code || undefined,
+        country: cdAddr?.country || undefined,
+      };
+
+      const billingFirstName = billing.firstName;
+      const billingLastName = billing.lastName;
       membership.competitorName =
         [billingFirstName, billingLastName].filter(Boolean).join(' ') ||
         previousMembership?.competitorName;
+
+      // Persist billing onto the membership row so the billing/subscription
+      // screens are populated for auto-renew members too.
+      membership.billingFirstName = billingFirstName || undefined;
+      membership.billingLastName = billingLastName || undefined;
+      membership.billingPhone = billing.phone || previousMembership?.billingPhone;
+      membership.billingAddress = billing.address || previousMembership?.billingAddress;
+      membership.billingCity = billing.city || previousMembership?.billingCity;
+      membership.billingState = billing.state || previousMembership?.billingState;
+      membership.billingPostalCode = billing.postalCode || previousMembership?.billingPostalCode;
+      membership.billingCountry = billing.country || previousMembership?.billingCountry || 'USA';
 
       // The subscription checkout form doesn't collect vehicle info, so a
       // renewal would otherwise come through blank.
@@ -2009,20 +2043,22 @@ export class StripeController {
       membership.vehicleColor = previousMembership?.vehicleColor;
       membership.vehicleLicensePlate = previousMembership?.vehicleLicensePlate;
 
-      // Assign MECA ID — retention grace rules apply when renewing
+      // Assign MECA ID — self-service window applies (keep within 120/30, else new).
       const mecaId = await this.mecaIdService.assignMecaIdToMembership(
         membership,
         previousMembership || undefined,
         em,
+        selfServiceWindow,
       );
       membership.mecaId = mecaId;
 
       await em.persistAndFlush(membership);
 
-      // If the renewal reclaimed the prior MECA ID, restore any result rows
-      // stamped 999999 during the grace window.
+      // If the renewal KEPT the prior MECA ID (within the self-service window),
+      // reinstate AND RECALCULATE the member's held/999999-stamped points now —
+      // no admin needed. New id → leave held for an admin (days 31–45).
       if (previousMembership?.mecaId && mecaId === previousMembership.mecaId) {
-        await this.membershipsService.backFillResultsForRenewal(mecaId);
+        await this.membershipsService.reinstateHeldResultsForRenewal(mecaId);
       }
 
       // Early-renewal supersede: if this NEW subscription replaces a still-active
@@ -2037,6 +2073,15 @@ export class StripeController {
         );
       } catch (err) {
         console.error('Supersede prior membership on new-subscription renewal failed (non-fatal):', err);
+      }
+
+      // Back-fill the profile (name / phone / address) from the collected
+      // billing details — same fill-if-empty rule as the one-time order paths —
+      // so auto-renew members also get a complete profile + billing page.
+      try {
+        await this.membershipsService.backfillProfileFromBilling(em, profile.id, billing);
+      } catch (err) {
+        console.error('Profile back-fill from subscription billing failed (non-fatal):', err);
       }
 
       // Update profile membership status

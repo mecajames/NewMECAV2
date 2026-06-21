@@ -98,6 +98,10 @@ export default function MemberDetailPage() {
   const [showManualRenewal, setShowManualRenewal] = useState(false);
   const [showAssignSubscription, setShowAssignSubscription] = useState(false);
   const [renewalRefreshKey, setRenewalRefreshKey] = useState(0);
+  // "Restore MECA ID & Points" — shown only when the member's latest renewal
+  // got a NEW MECA ID because the lapse was 31–45 days (admin-only window).
+  const [restoreMecaId, setRestoreMecaId] = useState<{ eligible: boolean; oldMecaId?: number; newMecaId?: number; gapDays?: number } | null>(null);
+  const [restoringMecaId, setRestoringMecaId] = useState(false);
   const [messageTitle, setMessageTitle] = useState('');
   const [messageBody, setMessageBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -206,9 +210,37 @@ export default function MemberDetailPage() {
 
       setMember(data);
       setLoading(false);
+
+      // Check whether this member qualifies for the one-click MECA ID restore
+      // (renewed in the 31–45 day window → got a new ID). Non-blocking.
+      membershipsApi
+        .getRestoreMecaIdEligibility(memberId!)
+        .then(setRestoreMecaId)
+        .catch(() => setRestoreMecaId(null));
     } catch (error) {
       console.error('Error fetching member:', error);
       setLoading(false);
+    }
+  };
+
+  const handleRestoreMecaId = async () => {
+    if (!member || restoringMecaId) return;
+    const oldId = restoreMecaId?.oldMecaId;
+    if (!confirm(
+      `Restore this member's previous MECA ID${oldId ? ` (#${oldId})` : ''} and recalculate their held points?\n\n` +
+      `Their current MECA ID will be replaced by their original, their held/non-member results will be reinstated and scored, and the temporary ID will be freed for reuse.`,
+    )) return;
+    setRestoringMecaId(true);
+    try {
+      const result = await membershipsApi.restoreMecaId(member.id);
+      alert(result.message || 'MECA ID restored.');
+      setRestoreMecaId({ eligible: false });
+      setRenewalRefreshKey((k) => k + 1);
+      fetchMember();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to restore MECA ID.');
+    } finally {
+      setRestoringMecaId(false);
     }
   };
 
@@ -1078,6 +1110,17 @@ export default function MemberDetailPage() {
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Manual Renewal
+                </button>
+              )}
+              {hasPermission('edit_user') && restoreMecaId?.eligible && (
+                <button
+                  onClick={handleRestoreMecaId}
+                  disabled={restoringMecaId}
+                  className="px-2.5 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-500 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
+                  title={`This member renewed ${restoreMecaId.gapDays ?? ''} days after expiring (31–45 day window) and was issued a new MECA ID. Restore their original MECA ID${restoreMecaId.oldMecaId ? ` (#${restoreMecaId.oldMecaId})` : ''} and recalculate their held points.`}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {restoringMecaId ? 'Restoring…' : 'Restore MECA ID & Points'}
                 </button>
               )}
               {hasPermission('edit_user') && (

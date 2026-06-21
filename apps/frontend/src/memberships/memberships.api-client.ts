@@ -439,6 +439,28 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: is this member eligible for the one-click "Restore MECA ID & Points"
+   * action (renewed in the 31–45 day window and was issued a new MECA ID)?
+   */
+  getRestoreMecaIdEligibility: async (
+    userId: string,
+  ): Promise<{ eligible: boolean; oldMecaId?: number; newMecaId?: number; gapDays?: number; reason?: string }> => {
+    const response = await axios.get(`/api/memberships/user/${userId}/restore-meca-id/eligibility`);
+    return response.data;
+  },
+
+  /**
+   * Admin: restore the member's original MECA ID + reinstate/recalculate their
+   * held results' points, and free the new ID back into the pool.
+   */
+  restoreMecaId: async (
+    userId: string,
+  ): Promise<{ success: boolean; oldMecaId: number; newMecaId: number; resultsRestored: number; message: string }> => {
+    const response = await axios.post(`/api/memberships/user/${userId}/restore-meca-id`);
+    return response.data;
+  },
+
+  /**
    * Get all MECA IDs for a user across their memberships
    */
   getUserMecaIds: async (userId: string): Promise<UserMecaId[]> => {

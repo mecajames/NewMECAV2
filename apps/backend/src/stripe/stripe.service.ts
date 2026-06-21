@@ -896,11 +896,19 @@ export class StripeService implements OnApplicationBootstrap {
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,
         metadata: params.metadata,
+        // Collect the full billing address + phone on the hosted Checkout page so
+        // auto-renew members end up with complete profile/billing data — same as
+        // the one-time card/PayPal flows (which collect it on our own form). Read
+        // back from session.customer_details in the checkout webhook.
+        billing_address_collection: 'required',
+        phone_number_collection: { enabled: true },
       };
 
       // Use existing customer or create new one from email
       if (params.customerId) {
         sessionParams.customer = params.customerId;
+        // Persist the collected address/phone/name back onto the Customer too.
+        sessionParams.customer_update = { address: 'auto', name: 'auto' };
       } else if (params.customerEmail) {
         sessionParams.customer_email = params.customerEmail;
       }
