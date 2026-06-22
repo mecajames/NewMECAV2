@@ -181,6 +181,74 @@ export class CompetitionResultsService {
     return affected.length;
   }
 
+  /**
+   * Super-admin one-off points override. Sets `pointsEarned` on a single result
+   * by hand and LOCKS it (`pointsManualOverride=true`) so the automatic
+   * recalculation never overwrites it. Use for edge cases the auto-calc can't
+   * reach (e.g. a member whose points couldn't be reinstated). Audit-logged by
+   * the controller.
+   */
+  async setManualPoints(
+    resultId: string,
+    points: number,
+    reason: string,
+    adminId: string,
+  ): Promise<CompetitionResult> {
+    if (!Number.isFinite(points) || points < 0) {
+      throw new BadRequestException('Points must be a non-negative number.');
+    }
+    const em = this.em.fork();
+    const result = await em.findOne(CompetitionResult, { id: resultId });
+    if (!result) throw new NotFoundException(`Competition result ${resultId} not found`);
+
+    const previous = result.pointsEarned;
+    result.pointsEarned = Math.round(points);
+    result.pointsManualOverride = true;
+    result.pointsOverrideReason = reason?.trim() || undefined;
+    result.pointsOverrideBy = adminId;
+    result.pointsOverrideAt = new Date();
+    await em.flush();
+
+    this.logger.warn(
+      `Manual points override: result ${resultId} (mecaId=${result.mecaId ?? 'n/a'}) ` +
+        `${previous} → ${result.pointsEarned} pts by admin ${adminId}`,
+    );
+    return result;
+  }
+
+  /**
+   * Remove a manual points override and return the result to automatic
+   * calculation. Recomputes the event's points so the result reverts to its
+   * computed value immediately.
+   */
+  async clearManualPoints(resultId: string, adminId: string): Promise<CompetitionResult> {
+    const em = this.em.fork();
+    const result = await em.findOne(CompetitionResult, { id: resultId }, { populate: ['event'] });
+    if (!result) throw new NotFoundException(`Competition result ${resultId} not found`);
+    if (!result.pointsManualOverride) {
+      return result; // nothing to clear
+    }
+
+    result.pointsManualOverride = false;
+    result.pointsOverrideReason = undefined;
+    result.pointsOverrideBy = undefined;
+    result.pointsOverrideAt = undefined;
+    await em.flush();
+
+    // Re-run auto-calc for the event so this row returns to its computed points.
+    const eventId = (result.event as any)?.id;
+    if (eventId) {
+      try {
+        await this.updateEventPoints(eventId);
+      } catch (err) {
+        this.logger.error(`clearManualPoints: recalc for event ${eventId} failed: ${err}`);
+      }
+    }
+    this.logger.warn(`Cleared manual points override: result ${resultId} by admin ${adminId}`);
+    // Re-read so the caller gets the recomputed pointsEarned.
+    return (await this.em.fork().findOne(CompetitionResult, { id: resultId })) ?? result;
+  }
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -1722,6 +1790,14 @@ export class CompetitionResultsService {
       let currentPlacement = 1;
       for (const result of groupResults) {
         result.placement = currentPlacement;
+
+        // Manual one-off points override (super-admin) is sacrosanct — leave the
+        // hand-entered pointsEarned exactly as set; never recompute or hold it.
+        // Placement is still assigned (it reflects score order, not points).
+        if (result.pointsManualOverride) {
+          currentPlacement++;
+          continue;
+        }
 
         // Only calculate points if the format is eligible for points
         if (isFormatEligible && format) {

@@ -29,7 +29,8 @@ import { ResultsImportService } from './results-import.service';
 import { Public } from '../auth/public.decorator';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
+import { AdminAuditService } from '../user-activity/admin-audit.service';
 
 @Controller('api/competition-results')
 export class CompetitionResultsController {
@@ -39,9 +40,91 @@ export class CompetitionResultsController {
     private readonly competitionResultsService: CompetitionResultsService,
     private readonly resultsImportService: ResultsImportService,
     private readonly supabaseAdmin: SupabaseAdminService,
+    private readonly adminAuditService: AdminAuditService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
+
+  /**
+   * Super-admin-only guard (James / Mick — PROTECTED_MECA_IDS). Used for the
+   * manual points-override tool, which can hand-set a result's points and bypass
+   * the automatic calculation. Returns the resolved profile.
+   */
+  private async requireSuperAdmin(authHeader?: string): Promise<Profile> {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await this.supabaseAdmin.getClient().auth.getUser(token);
+    if (error || !user) throw new UnauthorizedException('Invalid authorization token');
+    const profile = await this.em.fork().findOne(Profile, { id: user.id });
+    if (!isSuperAdmin(profile)) {
+      throw new ForbiddenException('This tool is restricted to super-admins.');
+    }
+    return profile!;
+  }
+
+  /**
+   * Super-admin: set a one-off manual points value on a single result. The value
+   * is LOCKED against the automatic recalculation. James / Mick only.
+   */
+  @Post('admin/results/:id/manual-points')
+  @HttpCode(HttpStatus.OK)
+  async setManualPoints(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Headers('x-forwarded-for') ip: string,
+    @Body() body: { points?: number; reason?: string },
+  ): Promise<CompetitionResult> {
+    const profile = await this.requireSuperAdmin(authHeader);
+    if (body?.points === undefined || body?.points === null) {
+      throw new BadRequestException('points is required.');
+    }
+    const before = await this.em.fork().findOne(CompetitionResult, { id });
+    const result = await this.competitionResultsService.setManualPoints(
+      id,
+      Number(body.points),
+      body.reason || '',
+      profile.id,
+    );
+    this.adminAuditService.logAction({
+      adminUserId: profile.id,
+      action: 'result_manual_points_set',
+      resourceType: 'competition_result',
+      resourceId: id,
+      description: `Manual points override → ${result.pointsEarned} for ${result.competitorName || 'competitor'} (MECA ID ${result.mecaId ?? 'n/a'})` +
+        (body.reason ? `: ${body.reason}` : ''),
+      oldValues: { pointsEarned: before?.pointsEarned, pointsManualOverride: before?.pointsManualOverride },
+      newValues: { pointsEarned: result.pointsEarned, pointsManualOverride: true, reason: body.reason },
+      ip,
+    });
+    return result;
+  }
+
+  /**
+   * Super-admin: remove a manual override and return the result to automatic
+   * points calculation. James / Mick only.
+   */
+  @Delete('admin/results/:id/manual-points')
+  @HttpCode(HttpStatus.OK)
+  async clearManualPoints(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader: string,
+    @Headers('x-forwarded-for') ip: string,
+  ): Promise<CompetitionResult> {
+    const profile = await this.requireSuperAdmin(authHeader);
+    const result = await this.competitionResultsService.clearManualPoints(id, profile.id);
+    this.adminAuditService.logAction({
+      adminUserId: profile.id,
+      action: 'result_manual_points_clear',
+      resourceType: 'competition_result',
+      resourceId: id,
+      description: `Cleared manual points override (back to auto-calc) for ${result.competitorName || 'competitor'} (MECA ID ${result.mecaId ?? 'n/a'})`,
+      newValues: { pointsEarned: result.pointsEarned, pointsManualOverride: false },
+      ip,
+    });
+    return result;
+  }
 
   /**
    * Admin-only auth guard for the back-office maintenance endpoints
