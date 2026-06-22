@@ -411,6 +411,34 @@ export interface ApplyManualPaymentDto {
 // API Client
 // ==========================================
 
+/**
+ * Fetch a CSV export THROUGH axios (so the Authorization header is attached by
+ * the interceptor) and save it as a file. The previous approach navigated the
+ * browser straight to the endpoint (`window.location.href = url`), which does
+ * NOT send the bearer token → the admin guard returned 401. Always go via axios.
+ */
+async function fetchAndSaveCsv(
+  url: string,
+  params: Record<string, string | undefined>,
+  filename: string,
+): Promise<void> {
+  try {
+    const response = await axios.get(url, { params, responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+  } catch (err: any) {
+    console.error(`CSV export failed (${url}):`, err);
+    alert('Export failed. Please make sure you are signed in as an admin and try again.');
+  }
+}
+
 export const billingApi = {
   // ==========================================
   // ORDERS
@@ -894,35 +922,35 @@ export const billingApi = {
   },
 
   /**
-   * Download orders export
+   * Download orders export (via axios so the auth token is sent).
    */
-  downloadOrdersExport: (params: {
+  downloadOrdersExport: async (params: {
     startDate?: string;
     endDate?: string;
     status?: OrderStatus;
-  } = {}): void => {
-    window.location.href = billingApi.getOrdersExportUrl(params);
+  } = {}): Promise<void> => {
+    await fetchAndSaveCsv('/api/billing/export/orders', params, `orders-export-${new Date().toISOString().split('T')[0]}.csv`);
   },
 
   /**
-   * Download invoices export
+   * Download invoices export (via axios so the auth token is sent).
    */
-  downloadInvoicesExport: (params: {
+  downloadInvoicesExport: async (params: {
     startDate?: string;
     endDate?: string;
     status?: InvoiceStatus;
-  } = {}): void => {
-    window.location.href = billingApi.getInvoicesExportUrl(params);
+  } = {}): Promise<void> => {
+    await fetchAndSaveCsv('/api/billing/export/invoices', params, `invoices-export-${new Date().toISOString().split('T')[0]}.csv`);
   },
 
   /**
-   * Download revenue export
+   * Download revenue export (via axios so the auth token is sent).
    */
-  downloadRevenueExport: (params: {
+  downloadRevenueExport: async (params: {
     startDate?: string;
     endDate?: string;
-  } = {}): void => {
-    window.location.href = billingApi.getRevenueExportUrl(params);
+  } = {}): Promise<void> => {
+    await fetchAndSaveCsv('/api/billing/export/revenue', params, `revenue-export-${new Date().toISOString().split('T')[0]}.csv`);
   },
 };
 
