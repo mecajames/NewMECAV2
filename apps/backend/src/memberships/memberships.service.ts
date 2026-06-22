@@ -15,6 +15,8 @@ import {
   SubscriptionBundle,
   AssignSubscriptionResult,
   LegacyConversionReport,
+  RefundSourceType,
+  RefundGateway,
 } from '@newmeca/shared';
 import { Membership } from './memberships.entity';
 import { MembershipTypeConfig } from '../membership-type-configs/membership-type-configs.entity';
@@ -29,6 +31,7 @@ import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
+import { RefundService } from '../payments/refund.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CompetitionResultsService } from '../competition-results/competition-results.service';
@@ -169,6 +172,7 @@ export class MembershipsService {
     private readonly emailService: EmailService,
     @Inject(forwardRef(() => StripeService))
     private readonly stripeService: StripeService,
+    private readonly refundService: RefundService,
     private readonly adminAuditService: AdminAuditService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly notificationsService: NotificationsService,
@@ -332,6 +336,66 @@ export class MembershipsService {
     }
 
     return baseMembership;
+  }
+
+  /**
+   * Member-facing dunning state. When an auto-renew charge fails, the
+   * membership's paymentStatus flips to FAILED — so it disappears from
+   * getActiveMembership (which only returns PAID). This surfaces that failed
+   * renewal so the member can be warned and pointed at "update your card"
+   * BEFORE the grace period runs out and the membership is suspended.
+   *
+   * Returns null when there's nothing to act on (no failed renewal).
+   */
+  async getDunningStatusForUser(userId: string): Promise<{
+    membershipId: string;
+    membershipType: string;
+    amountDue: string;
+    failedAt: Date | null;
+    lastDunningStep: number;
+    suspendedAt: Date | null;
+    endDate: Date | null;
+    isSuspended: boolean;
+    hasSubscription: boolean;
+  } | null> {
+    const em = this.em.fork();
+
+    // The most recent failed renewal for this user. Include CANCELLED only when
+    // it was the dunning auto-suspend (suspendedAt set) so the member still sees
+    // "your membership was suspended for non-payment" rather than it vanishing.
+    const failed = await em.find(
+      Membership,
+      {
+        user: userId,
+        paymentStatus: PaymentStatus.FAILED,
+      },
+      { populate: ['membershipTypeConfig'], orderBy: { failedAt: 'DESC', updatedAt: 'DESC' } },
+    );
+
+    const suspended = await em.find(
+      Membership,
+      {
+        user: userId,
+        suspendedAt: { $ne: null },
+        cancellationReason: { $like: '%dunning%' },
+      },
+      { populate: ['membershipTypeConfig'], orderBy: { suspendedAt: 'DESC' } },
+    );
+
+    const candidate = failed[0] ?? suspended[0];
+    if (!candidate) return null;
+
+    return {
+      membershipId: candidate.id,
+      membershipType: candidate.membershipTypeConfig?.name || 'Membership',
+      amountDue: Number(candidate.amountPaid || 0).toFixed(2),
+      failedAt: candidate.failedAt ?? null,
+      lastDunningStep: candidate.lastDunningStep ?? 0,
+      suspendedAt: candidate.suspendedAt ?? null,
+      endDate: candidate.endDate ?? null,
+      isSuspended: !!candidate.suspendedAt,
+      hasSubscription: !!candidate.stripeSubscriptionId,
+    };
   }
 
   /**
@@ -3857,27 +3921,29 @@ export class MembershipsService {
     }
 
     let stripeRefund: { id: string; amount: number; status: string } | null = null;
+    let refundedAmountDollars = Number(membership.amountPaid);
 
-    // Process Stripe refund if there's a payment intent
-    if (membership.stripePaymentIntentId) {
-      try {
-        const refund = await this.stripeService.createRefund(
-          membership.stripePaymentIntentId,
-          reason,
-          amountCents,
-        );
-        stripeRefund = {
-          id: refund.id,
-          amount: refund.amount,
-          status: refund.status || 'pending',
-        };
-        this.logger.log(`Stripe refund ${refund.id} created for membership ${membershipId} (amount=${refund.amount}, partial=${isPartial})`);
-      } catch (stripeError) {
-        this.logger.error(`Failed to create Stripe refund for membership ${membershipId}:`, stripeError);
-        throw new BadRequestException(
-          `Failed to process Stripe refund: ${stripeError instanceof Error ? stripeError.message : 'Unknown error'}`
-        );
+    // Issue the gateway refund (Stripe OR PayPal) + write the refund ledger row
+    // + cascade Payment/Order/Invoice — all via the single RefundService. This
+    // is what fixes (a) PayPal memberships previously being "refunded" locally
+    // with NO money returned, and (b) the order/invoice/payment still showing
+    // PAID after a refund. Skipped for comp/$0 memberships with no charge.
+    if (membership.stripePaymentIntentId || membership.paypalCaptureId) {
+      const result = await this.refundService.issueRefund({
+        sourceType: RefundSourceType.MEMBERSHIP,
+        sourceId: membershipId,
+        totalAmountDollars: Number(membership.amountPaid),
+        amountCents,
+        reason,
+        actorId: adminId,
+        stripePaymentIntentId: membership.stripePaymentIntentId,
+        paypalCaptureId: membership.paypalCaptureId,
+      });
+      refundedAmountDollars = result.amount;
+      if (result.gateway === RefundGateway.STRIPE) {
+        stripeRefund = { id: result.gatewayRefundId || '', amount: Math.round(result.amount * 100), status: 'succeeded' };
       }
+      this.logger.log(`Membership ${membershipId} refund issued via ${result.gateway} ($${result.amount.toFixed(2)}, partial=${result.isPartial})`);
     }
 
     // Partial refund: keep membership active, only annotate. Full refund: cancel.
@@ -3911,7 +3977,7 @@ export class MembershipsService {
           mecaId: membership.mecaId!,
           membershipType: membership.membershipTypeConfig?.name || 'Membership',
           cancellationDate: new Date(),
-          refundAmount: stripeRefund ? stripeRefund.amount / 100 : Number(membership.amountPaid),
+          refundAmount: refundedAmountDollars,
           reason,
         });
         this.logger.log(`Refund notification email sent to ${membership.user.email}`);
@@ -3933,7 +3999,7 @@ export class MembershipsService {
       oldValues: { paymentStatus: membership.paymentStatus },
       newValues: {
         paymentStatus: isPartial ? PaymentStatus.PAID : PaymentStatus.REFUNDED,
-        refundAmount: stripeRefund ? stripeRefund.amount / 100 : Number(membership.amountPaid),
+        refundAmount: refundedAmountDollars,
         isPartial,
         cancellationReason: reason,
       },
@@ -3943,9 +4009,9 @@ export class MembershipsService {
       success: true,
       membership,
       stripeRefund,
-      message: stripeRefund
-        ? `Membership cancelled and refunded $${(stripeRefund.amount / 100).toFixed(2)}`
-        : 'Membership cancelled. No Stripe payment to refund.',
+      message: (membership.stripePaymentIntentId || membership.paypalCaptureId)
+        ? `Membership ${isPartial ? 'partially ' : ''}refunded $${refundedAmountDollars.toFixed(2)}`
+        : 'Membership cancelled. No captured payment to refund.',
     };
   }
 

@@ -1,11 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { EmailService } from '../email/email.service';
 import { AnalyticsService, SummaryStats, TopPage, TrafficSource } from './analytics.service';
 import { SearchConsoleService } from './search-console.service';
 import { Profile } from '../profiles/profiles.entity';
+import { SiteSettings } from '../site-settings/site-settings.entity';
 import { adminRecipientWhere } from '../auth/is-admin.helper';
+
+// Stable, arbitrary 32-bit key for the Postgres advisory lock that serialises
+// the weekly-analytics send across processes/instances (so two app instances —
+// or PM2 cluster workers — can't both fire the cron and double-send).
+const WEEKLY_ANALYTICS_LOCK_ID = 815623001;
+const WEEKLY_ANALYTICS_MARKER_KEY = 'analytics_weekly_last_sent_range';
 
 interface SearchQueryData {
   query: string;
@@ -27,9 +34,20 @@ export class AnalyticsEmailService {
   ) {}
 
   /**
-   * Send weekly analytics digest email every Monday at 9 AM
+   * Send the weekly analytics digest — Mondays at 9 AM Eastern.
+   *
+   * Hardened against the duplicate-email bug James reported (4+ copies of the
+   * same report):
+   *   1. An explicit timezone so every running instance fires at the SAME wall
+   *      clock (the old `EVERY_WEEK` = Sun 00:00 in each box's local TZ, so a
+   *      UTC instance and an Eastern instance fired hours apart — two sends).
+   *   2. A once-per-week idempotency claim (advisory lock + persisted marker) so
+   *      only the FIRST process to fire for a given date range actually sends;
+   *      every other instance/worker/restart no-ops.
+   *   3. De-duplicated recipients (see getAdminEmails) so duplicate profile rows
+   *      sharing one email don't each get a copy.
    */
-  @Cron(CronExpression.EVERY_WEEK)
+  @Cron('0 9 * * 1', { name: 'weekly-analytics-email', timeZone: 'America/New_York' })
   async sendWeeklyAnalyticsEmail() {
     this.logger.log('Running weekly analytics email job...');
 
@@ -39,7 +57,7 @@ export class AnalyticsEmailService {
     }
 
     try {
-      // Get admin emails
+      // Get admin emails (deduped)
       const adminEmails = await this.getAdminEmails();
       if (adminEmails.length === 0) {
         this.logger.warn('No admin emails found - skipping weekly analytics email');
@@ -55,6 +73,15 @@ export class AnalyticsEmailService {
       const startStr = startDate.toISOString().split('T')[0];
       const endStr = endDate.toISOString().split('T')[0];
 
+      // Idempotency: claim this week's send. If another instance/worker already
+      // sent (or is sending) the report for this exact range, bail out now so we
+      // don't deliver duplicates.
+      const claimed = await this.claimWeeklySend(`${startStr}_${endStr}`);
+      if (!claimed) {
+        this.logger.log(`Weekly analytics report for ${startStr}..${endStr} already sent by another instance — skipping.`);
+        return;
+      }
+
       // Fetch analytics data
       const [summary, topPages, searchQueries] = await Promise.all([
         this.analyticsService.getSummaryStats(startStr, endStr),
@@ -68,17 +95,64 @@ export class AnalyticsEmailService {
       // Send to each admin
       const dateRange = `${this.formatDate(startStr)} - ${this.formatDate(endStr)}`;
       for (const email of adminEmails) {
-        await this.emailService.sendEmail({
-          to: email,
-          subject: `MECA Weekly Analytics Report - ${dateRange}`,
-          html,
-          from: 'noreply@mecacaraudio.com',
-        });
+        try {
+          await this.emailService.sendEmail({
+            to: email,
+            subject: `MECA Weekly Analytics Report - ${dateRange}`,
+            html,
+            from: 'noreply@mecacaraudio.com',
+          });
+        } catch (err) {
+          // One bad recipient shouldn't abort the rest of the send.
+          this.logger.error(`Failed to send weekly analytics email to ${email}: ${err}`);
+        }
       }
 
       this.logger.log(`Weekly analytics email sent to ${adminEmails.length} admin(s)`);
     } catch (error) {
       this.logger.error('Failed to send weekly analytics email:', error);
+    }
+  }
+
+  /**
+   * Atomically claim the weekly send for a given date range. Returns true if THIS
+   * call won the claim (and should send), false if it was already claimed.
+   *
+   * A transaction-level advisory lock serialises concurrent firings (instances /
+   * cluster workers that hit the cron at the same instant); a persisted marker in
+   * site_settings remembers the last range sent so firings minutes/hours apart
+   * (e.g. instances in different timezones) also de-duplicate. We don't rely on a
+   * unique constraint on site_settings (it isn't enforced in this DB).
+   */
+  private async claimWeeklySend(rangeId: string): Promise<boolean> {
+    const em = this.em.fork();
+    try {
+      return await em.transactional(async (tem) => {
+        // Hold the lock until commit so a concurrent firing waits, then sees the marker.
+        await tem.getConnection().execute('SELECT pg_advisory_xact_lock(?)', [WEEKLY_ANALYTICS_LOCK_ID]);
+
+        const existing = await tem.findOne(SiteSettings, { setting_key: WEEKLY_ANALYTICS_MARKER_KEY });
+        if (existing && existing.setting_value === rangeId) {
+          return false; // already sent this week's report
+        }
+        if (existing) {
+          existing.setting_value = rangeId;
+          existing.updated_at = new Date();
+        } else {
+          tem.create(SiteSettings, {
+            setting_key: WEEKLY_ANALYTICS_MARKER_KEY,
+            setting_value: rangeId,
+            setting_type: 'string',
+            description: 'Last weekly analytics report date range that was emailed (duplicate-send guard).',
+          } as any);
+        }
+        return true;
+      });
+    } catch (err) {
+      // If the guard itself fails, fall back to sending rather than silently dropping
+      // the report — a rare duplicate beats never delivering it.
+      this.logger.error(`Weekly analytics idempotency claim failed (will send anyway): ${err}`);
+      return true;
     }
   }
 
@@ -89,9 +163,20 @@ export class AnalyticsEmailService {
     const admins = await em.find(Profile, adminRecipientWhere() as any, {
       fields: ['email'],
     });
-    return admins
-      .map(a => a.email)
-      .filter((e): e is string => !!e);
+    // De-duplicate case-insensitively: PROD has duplicate profile rows that share
+    // one email (auth orphans / re-provisioned accounts), and without this each
+    // copy got its own email — a second cause of James's 4× duplicate reports.
+    const seen = new Set<string>();
+    const emails: string[] = [];
+    for (const a of admins) {
+      const email = a.email?.trim();
+      if (!email) continue;
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      emails.push(email);
+    }
+    return emails;
   }
 
   private async getSearchQueries(startDate: string, endDate: string): Promise<SearchQueryData[]> {

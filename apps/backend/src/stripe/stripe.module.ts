@@ -14,6 +14,7 @@ import { SiteSettingsModule } from '../site-settings/site-settings.module';
 import { WorldFinalsModule } from '../world-finals/world-finals.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
+import { RefundsModule } from '../payments/refunds.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AdminNotificationsModule } from '../admin-notifications/admin-notificat
     forwardRef(() => WorldFinalsModule),
     CouponsModule,
     AdminNotificationsModule,
+    forwardRef(() => RefundsModule),
   ],
   providers: [StripeService],
   controllers: [StripeController],

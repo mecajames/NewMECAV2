@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -22,9 +23,14 @@ import { OrderItem } from './order-items.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Payment } from '../payments/payments.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { Refund } from '../payments/refund.entity';
+import { Invoice } from '../invoices/invoices.entity';
+import { Membership } from '../memberships/memberships.entity';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager,
@@ -85,6 +91,89 @@ export class OrdersService {
     }
 
     return order;
+  }
+
+  /**
+   * Full billing detail for a single order — EVERYTHING related to it in one
+   * call: the order + items, ALL payments (linked via order_id plus the legacy
+   * single payment, plus a fallback by the buyer's membership for orders that
+   * predate the link), every refund against those payments, the linked invoice,
+   * and the buyer's dunning state. This is what the admin order view reads so it
+   * surfaces the complete picture (payments, PayPal ids, refunds, invoice,
+   * dunning) instead of a single Stripe-only payment.
+   */
+  async getOrderBillingDetail(id: string): Promise<{
+    order: Order;
+    payments: Payment[];
+    refunds: Refund[];
+    invoice: Invoice | null;
+    dunning: { failedAt?: Date | null; lastDunningStep?: number | null; suspendedAt?: Date | null } | null;
+  }> {
+    const em = this.em.fork();
+    const order = await em.findOne(Order, { id }, { populate: ['member', 'items', 'payment', 'payments'] });
+    if (!order) throw new NotFoundException(`Order with ID ${id} not found`);
+
+    // All payments: linked by order_id, plus the legacy single payment pointer.
+    const paymentMap = new Map<string, Payment>();
+    for (const p of order.payments.getItems()) paymentMap.set(p.id, p);
+    if (order.payment) {
+      const legacy = await em.findOne(Payment, { id: order.payment.id });
+      if (legacy) paymentMap.set(legacy.id, legacy);
+    }
+    // Fallback: match by the membership line item (orders created before order_id
+    // existed may have payments linked only to the membership). membership_id is a
+    // uuid column, so guard against a non-uuid referenceId (e.g. a numeric/slug
+    // reference on some orders) — binding it would make Postgres throw
+    // "invalid input syntax for type uuid" and 500 the whole endpoint.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const membershipItem = order.items.getItems().find((it) => it.referenceId && UUID_RE.test(it.referenceId));
+    if (membershipItem?.referenceId) {
+      try {
+        const membershipPayments = await em.find(Payment, { membership: membershipItem.referenceId });
+        for (const p of membershipPayments) paymentMap.set(p.id, p);
+      } catch (err) {
+        this.logger.warn(`billing-detail: membership payment lookup skipped for order ${id}: ${err}`);
+      }
+    }
+    const payments = Array.from(paymentMap.values());
+
+    // Refunds against those payments OR recorded against this order id. Defensive:
+    // a bad value must never 500 this read-only detail endpoint.
+    let refunds: Refund[] = [];
+    try {
+      const paymentIds = payments.map((p) => p.id);
+      const refundWhere: any = { $or: [{ sourceId: id }] };
+      if (paymentIds.length) refundWhere.$or.push({ payment: { $in: paymentIds } });
+      refunds = await em.find(Refund, refundWhere, { orderBy: { createdAt: 'DESC' } });
+    } catch (err) {
+      this.logger.warn(`billing-detail: refund lookup skipped for order ${id}: ${err}`);
+    }
+
+    // The linked invoice (by the real FK or the legacy invoice_id pointer).
+    let invoice: Invoice | null = null;
+    try {
+      invoice = await em.findOne(Invoice, { order: id });
+      if (!invoice && order.invoiceId && UUID_RE.test(order.invoiceId)) {
+        invoice = await em.findOne(Invoice, { id: order.invoiceId });
+      }
+    } catch (err) {
+      this.logger.warn(`billing-detail: invoice lookup skipped for order ${id}: ${err}`);
+    }
+
+    // Dunning state from the buyer's membership (if this is a membership order).
+    let dunning: { failedAt?: Date | null; lastDunningStep?: number | null; suspendedAt?: Date | null } | null = null;
+    const membershipPayment = payments.find((p) => (p as any).membership);
+    if (membershipPayment) {
+      const mId = ((membershipPayment as any).membership)?.id;
+      if (mId) {
+        const m = await em.findOne(Membership, { id: mId });
+        if (m && (m.failedAt || m.lastDunningStep || m.suspendedAt)) {
+          dunning = { failedAt: m.failedAt, lastDunningStep: m.lastDunningStep, suspendedAt: m.suspendedAt };
+        }
+      }
+    }
+
+    return { order, payments, refunds, invoice, dunning };
   }
 
   /**

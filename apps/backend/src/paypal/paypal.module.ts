@@ -11,6 +11,7 @@ import { ShopModule } from '../shop/shop.module';
 import { TaxModule } from '../tax/tax.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { AdminNotificationsModule } from '../admin-notifications/admin-notifications.module';
+import { RefundsModule } from '../payments/refunds.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AdminNotificationsModule } from '../admin-notifications/admin-notificat
     TaxModule,
     CouponsModule,
     AdminNotificationsModule,
+    forwardRef(() => RefundsModule),
   ],
   providers: [PayPalService],
   controllers: [PayPalController],

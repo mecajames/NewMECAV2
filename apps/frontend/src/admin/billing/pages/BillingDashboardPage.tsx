@@ -12,6 +12,7 @@ import {
   MoreVertical,
   CreditCard,
   XOctagon,
+  ShieldAlert,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 
@@ -465,6 +466,17 @@ export default function BillingDashboardPage() {
             <p className="text-gray-400 text-sm">
               {subStats?.active ?? 0} active · assign, move &amp; convert legacy
             </p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/billing/reconciliation')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center mb-4">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Reconciliation</h3>
+            <p className="text-gray-400 text-sm">Ledger consistency &amp; webhook errors</p>
           </button>
         </div>
 

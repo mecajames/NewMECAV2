@@ -91,8 +91,14 @@ export class Order {
   @OneToMany(() => OrderItem, (item) => item.order)
   items = new Collection<OrderItem>(this);
 
+  // Legacy single "primary" payment pointer (kept for back-compat).
   @ManyToOne(() => Payment, { nullable: true, fieldName: 'payment_id' })
   payment?: Payment;
+
+  // ALL payments against this order (attempts, retries, captures) via
+  // payment.order_id. The admin order view reads this for full history.
+  @OneToMany(() => Payment, (p) => p.order)
+  payments = new Collection<Payment>(this);
 
   // Forward reference to Invoice - will be set when invoice is created
   @Property({ type: 'uuid', nullable: true, fieldName: 'invoice_id' })

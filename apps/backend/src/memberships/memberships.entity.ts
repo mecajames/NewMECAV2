@@ -246,6 +246,22 @@ export class Membership {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'last_dunning_at' })
   lastDunningAt?: Date;
 
+  // When the renewal charge first FAILED — the stable anchor for dunning cadence
+  // (replaces anchoring on updated_at, which unrelated writes/cron bump). Cleared
+  // when payment recovers.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'failed_at' })
+  failedAt?: Date;
+
+  // When dunning auto-suspended the membership (step 4) — explicit, instead of
+  // overloading CANCELLED.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'suspended_at' })
+  suspendedAt?: Date;
+
+  // PayPal capture id of the paying charge — so a PayPal-paid membership can be
+  // refunded through PayPal (refund code previously had only a Stripe path).
+  @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id' })
+  paypalCaptureId?: string;
+
   /**
    * Check if this membership's MECA ID can be reactivated (within grace period)
    */

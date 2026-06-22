@@ -1433,6 +1433,19 @@ export class MembershipsController {
   }
 
   /**
+   * Member: failed-renewal / dunning state for the signed-in user. Powers the
+   * "your renewal payment failed — update your card" banner on the Billing page.
+   * Returns null when there's nothing wrong.
+   */
+  @Get('me/dunning')
+  async getMyDunningStatus(
+    @Headers('authorization') authHeader: string,
+  ) {
+    const { user } = await this.getAuthenticatedUser(authHeader);
+    return this.membershipsService.getDunningStatusForUser(user.id);
+  }
+
+  /**
    * Admin: bulk refund or cancel multiple memberships in one request. Returns
    * per-membership success/error so a partial failure doesn't block the rest.
    */

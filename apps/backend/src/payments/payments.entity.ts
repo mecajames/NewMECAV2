@@ -20,6 +20,12 @@ export class Payment {
   @ManyToOne(() => Membership, { nullable: true, fieldName: 'membership_id' })
   membership?: Membership;
 
+  // The billing Order this payment belongs to. Lets an Order own MANY payments
+  // (failed attempt + retry, multiple captures) so the admin order view can show
+  // the complete payment history — not just the single legacy order.payment_id.
+  @ManyToOne('Order', { nullable: true, fieldName: 'order_id' })
+  order?: any;
+
   @Enum(() => PaymentType)
   @Property({ fieldName: 'payment_type' })
   paymentType!: PaymentType;
@@ -76,6 +82,11 @@ export class Payment {
 
   @Property({ type: 'text', nullable: true, fieldName: 'refund_reason' })
   refundReason?: string;
+
+  // Running total refunded against this payment. Drives partial-refund tracking
+  // (status flips to REFUNDED only when this reaches `amount`).
+  @Property({ type: 'decimal', precision: 10, scale: 2, default: '0.00', fieldName: 'amount_refunded' })
+  amountRefunded: string = '0.00';
 
   @Property({ type: 'text', nullable: true, fieldName: 'failure_reason' })
   failureReason?: string;

@@ -28,6 +28,7 @@ export enum OrderType {
   EVENT_REGISTRATION = 'event_registration',
   MANUAL = 'manual',
   SHOP = 'shop',
+  WORLD_FINALS = 'world_finals',
 }
 
 export enum OrderItemType {
@@ -57,7 +58,37 @@ export enum InvoiceItemType {
   PROCESSING_FEE = 'processing_fee',
   DISCOUNT = 'discount',
   TAX = 'tax',
+  // Added so order line items (SHOP_PRODUCT / TEAM_ADDON / WORLD_FINALS) survive
+  // the order→invoice copy without being silently downcast to OTHER.
+  TEAM_ADDON = 'team_addon',
+  SHOP_PRODUCT = 'shop_product',
+  WORLD_FINALS = 'world_finals',
   OTHER = 'other',
+}
+
+// =============================================================================
+// Refund ledger
+// =============================================================================
+
+export enum RefundGateway {
+  STRIPE = 'stripe',
+  PAYPAL = 'paypal',
+  MANUAL = 'manual', // cash/check/comp reversal recorded with no gateway call
+}
+
+export enum RefundSourceType {
+  MEMBERSHIP = 'membership',
+  SHOP_ORDER = 'shop_order',
+  EVENT_REGISTRATION = 'event_registration',
+  WORLD_FINALS = 'world_finals',
+  INVOICE = 'invoice',
+  ORDER = 'order',
+}
+
+export enum RefundStatus {
+  PENDING = 'pending',
+  SUCCEEDED = 'succeeded',
+  FAILED = 'failed',
 }
 
 // =============================================================================
@@ -70,3 +101,6 @@ export const OrderTypeSchema = z.nativeEnum(OrderType);
 export const OrderItemTypeSchema = z.nativeEnum(OrderItemType);
 export const InvoiceStatusSchema = z.nativeEnum(InvoiceStatus);
 export const InvoiceItemTypeSchema = z.nativeEnum(InvoiceItemType);
+export const RefundGatewaySchema = z.nativeEnum(RefundGateway);
+export const RefundSourceTypeSchema = z.nativeEnum(RefundSourceType);
+export const RefundStatusSchema = z.nativeEnum(RefundStatus);

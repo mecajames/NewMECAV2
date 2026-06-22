@@ -384,7 +384,7 @@ export class InvoicesController {
     @Body() body: { reason?: string },
   ) {
     const { user } = await this.requireAdmin(authHeader);
-    const result = await this.invoicesService.refundAndCleanup(id, body.reason || 'Refunded by admin');
+    const result = await this.invoicesService.refundAndCleanup(id, body.reason || 'Refunded by admin', user.id);
     this.adminAuditService.logAction({
       adminUserId: user.id,
       action: 'invoice_refund',

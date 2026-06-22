@@ -32,12 +32,16 @@ import { Event } from '../events/events.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { ProcessedPaypalWebhook } from './processed-paypal-webhook.entity';
 import { Membership } from '../memberships/memberships.entity';
+import { Payment } from '../payments/payments.entity';
+import { RefundService } from '../payments/refund.service';
 import {
   PaymentMethod,
   PayPalPaymentType,
   StripePaymentType,
   ShopAddress,
   PaymentStatus,
+  RefundGateway,
+  RefundSourceType,
 } from '@newmeca/shared';
 
 // DTO interfaces matching Stripe controller pattern
@@ -106,6 +110,7 @@ export class PayPalController {
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly adminNotificationsService: AdminNotificationsService,
     private readonly emailService: EmailService,
+    private readonly refundService: RefundService,
     @Inject('EntityManager')
     private readonly em: EntityManager,
   ) {}
@@ -475,6 +480,21 @@ export class PayPalController {
       throw new BadRequestException('Missing event ID');
     }
 
+    // Verify the webhook signature. PayPal events act on the DB (refunds,
+    // subscription state), so an unverified POST must never be trusted. When a
+    // webhook id is configured we verify and reject on failure; if it isn't set
+    // we log loudly (set PAYPAL_WEBHOOK_ID in production).
+    const paypalWebhookId = process.env.PAYPAL_WEBHOOK_ID;
+    if (paypalWebhookId) {
+      const verified = await this.paypalService.verifyWebhookSignature(headers, body, paypalWebhookId);
+      if (!verified) {
+        this.logger.error(`PayPal webhook signature verification FAILED for event ${eventId}`);
+        throw new BadRequestException('Invalid PayPal webhook signature');
+      }
+    } else {
+      this.logger.warn('PAYPAL_WEBHOOK_ID not configured — PayPal webhook signature NOT verified. Set it for production.');
+    }
+
     // Idempotency check - insert record, unique constraint prevents duplicates
     const em = this.em.fork();
     const webhookRecord = new ProcessedPaypalWebhook();
@@ -528,10 +548,51 @@ export class PayPalController {
           webhookRecord.processingResult = 'success';
           break;
         }
-        case 'PAYMENT.CAPTURE.REFUNDED':
+        case 'PAYMENT.CAPTURE.REFUNDED': {
           this.logger.log(`PayPal capture refunded webhook: ${eventId}`);
+          const refundRes = event.resource;
+          const refundId = refundRes?.id;
+          const captureId = refundRes?.supplementary_data?.related_ids?.capture_id;
+          const refundAmountCents = refundRes?.amount?.value
+            ? Math.round(parseFloat(refundRes.amount.value) * 100)
+            : undefined;
+          try {
+            const payment = captureId
+              ? await em.findOne(
+                  Payment,
+                  { $or: [{ paypalCaptureId: captureId }, { paypalOrderId: captureId }] },
+                  { populate: ['membership'] },
+                )
+              : null;
+            const totalDollars = payment ? Number(payment.amount) : (refundAmountCents ?? 0) / 100;
+            // Reconcile into the unified ledger (idempotent on the PayPal refund
+            // id) + cascade Payment/Order/Invoice. No gateway call — already done.
+            await this.refundService.issueRefund({
+              callGateway: false,
+              gateway: RefundGateway.PAYPAL,
+              gatewayRefundId: refundId,
+              paypalCaptureId: captureId,
+              sourceType: payment?.membership ? RefundSourceType.MEMBERSHIP : RefundSourceType.ORDER,
+              sourceId: payment?.membership?.id,
+              totalAmountDollars: totalDollars,
+              amountCents: refundAmountCents,
+              reason: 'Refunded via PayPal',
+              payment: payment ?? undefined,
+            });
+            // Flip the membership source entity if this refund maps to one.
+            if (payment?.membership) {
+              const m = await em.findOne(Membership, { id: payment.membership.id });
+              if (m) {
+                m.paymentStatus = PaymentStatus.REFUNDED;
+                await em.flush();
+              }
+            }
+          } catch (e) {
+            this.logger.error(`PayPal refund reconcile failed (non-fatal): ${e}`);
+          }
           webhookRecord.processingResult = 'success';
           break;
+        }
         case 'BILLING.SUBSCRIPTION.CANCELLED':
         case 'BILLING.SUBSCRIPTION.EXPIRED':
         case 'BILLING.SUBSCRIPTION.SUSPENDED': {

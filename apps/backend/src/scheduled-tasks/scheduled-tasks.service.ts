@@ -174,9 +174,11 @@ export class ScheduledTasksService {
     let suspended = 0;
 
     for (const m of failed) {
-      // Anchor on updated_at (when paymentStatus flipped to FAILED) — close enough
-      // for dunning cadence and avoids needing a separate failed_at column.
-      const failedAt = m.updatedAt ?? m.createdAt;
+      // Anchor cadence on the dedicated failed_at column (set when the renewal
+      // first failed) — STABLE, unlike updated_at which unrelated writes and this
+      // cron itself bump (which slipped escalation). Fall back to updated_at for
+      // rows that failed before failed_at existed.
+      const failedAt = m.failedAt ?? m.updatedAt ?? m.createdAt;
       if (!failedAt) continue;
       const daysSinceFailed = Math.floor((Date.now() - failedAt.getTime()) / 86400000);
 
@@ -215,6 +217,7 @@ export class ScheduledTasksService {
         if (desiredStep === 4) {
           m.paymentStatus = PaymentStatus.CANCELLED;
           m.cancelledAt = new Date();
+          m.suspendedAt = new Date();
           m.cancellationReason = 'Auto-suspended after 14 days of failed payments (dunning)';
           m.cancelledBy = 'system';
           suspended++;
