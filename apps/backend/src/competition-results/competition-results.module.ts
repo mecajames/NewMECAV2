@@ -8,6 +8,7 @@ import { WorldFinalsModule } from '../world-finals/world-finals.module';
 import { AchievementsModule } from '../achievements/achievements.module';
 import { PointsConfigurationModule } from '../points-configuration/points-configuration.module';
 import { ResultTeamsModule } from '../result-teams/result-teams.module';
+import { UserActivityModule } from '../user-activity/user-activity.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ResultTeamsModule } from '../result-teams/result-teams.module';
     forwardRef(() => AchievementsModule),
     PointsConfigurationModule,
     ResultTeamsModule,
+    UserActivityModule,
   ],
   controllers: [CompetitionResultsController],
   providers: [CompetitionResultsService, ResultsImportService],

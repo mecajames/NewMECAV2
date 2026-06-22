@@ -6925,12 +6925,62 @@ function EventRegistrationsTab({ member: _member }: { member: Profile }) {
 }
 
 function CompetitionResultsTab({ member }: { member: Profile }) {
+  const { profile: currentUserProfile } = useAuth();
+  const canOverridePoints = isSuperAdmin(currentUserProfile);
   const [results, setResults] = useState<CompetitionResult[]>([]);
   const [eventMap, setEventMap] = useState<Record<string, string>>({});
   const [eventsData, setEventsData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
+
+  // Manual points override (super-admin only)
+  const [editingPointsId, setEditingPointsId] = useState<string | null>(null);
+  const [pointsValue, setPointsValue] = useState('');
+  const [pointsReason, setPointsReason] = useState('');
+  const [savingPoints, setSavingPoints] = useState(false);
+
+  const openPointsEditor = (r: CompetitionResult) => {
+    setEditingPointsId(r.id);
+    setPointsValue(String(r.pointsEarned ?? r.points_earned ?? 0));
+    setPointsReason('');
+  };
+
+  const savePointsOverride = async (resultId: string) => {
+    const pts = Number(pointsValue);
+    if (!Number.isFinite(pts) || pts < 0) {
+      alert('Enter a valid non-negative points value.');
+      return;
+    }
+    try {
+      setSavingPoints(true);
+      const updated = await competitionResultsApi.setManualPoints(resultId, pts, pointsReason.trim());
+      setResults((prev) => prev.map((r) => (r.id === resultId
+        ? { ...r, pointsEarned: updated.pointsEarned, pointsManualOverride: true, points_manual_override: true, pointsOverrideReason: updated.pointsOverrideReason }
+        : r)));
+      setEditingPointsId(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to set points');
+    } finally {
+      setSavingPoints(false);
+    }
+  };
+
+  const clearPointsOverride = async (resultId: string) => {
+    if (!confirm('Remove the manual override and return this result to automatic points calculation?')) return;
+    try {
+      setSavingPoints(true);
+      const updated = await competitionResultsApi.clearManualPoints(resultId);
+      setResults((prev) => prev.map((r) => (r.id === resultId
+        ? { ...r, pointsEarned: updated.pointsEarned, pointsManualOverride: false, points_manual_override: false, pointsOverrideReason: undefined }
+        : r)));
+      setEditingPointsId(null);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to clear override');
+    } finally {
+      setSavingPoints(false);
+    }
+  };
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -7243,12 +7293,15 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
               <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Place</th>
               <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Points</th>
               <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
+              {canOverridePoints && (
+                <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Points Tools</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
             {filteredResults.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={canOverridePoints ? 8 : 7} className="px-4 py-8 text-center text-gray-400">
                   No results match the current filters
                 </td>
               </tr>
@@ -7278,13 +7331,79 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                     </span>
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-center text-orange-400 font-medium whitespace-nowrap">
-                    {result.pointsEarned || result.points_earned || 0}
+                    {result.pointsEarned ?? result.points_earned ?? 0}
+                    {(result.pointsManualOverride || result.points_manual_override) && (
+                      <span
+                        title={result.pointsOverrideReason || result.points_override_reason || 'Manually set points (locked from recalculation)'}
+                        className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 align-middle"
+                      >
+                        <Lock className="h-2.5 w-2.5" /> manual
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
                     {result.createdAt || result.created_at
                       ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
                       : '-'}
                   </td>
+                  {canOverridePoints && (
+                    <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">
+                      {editingPointsId === result.id ? (
+                        <div className="flex flex-col gap-1 items-stretch min-w-[180px]">
+                          <input
+                            type="number"
+                            min={0}
+                            value={pointsValue}
+                            onChange={(e) => setPointsValue(e.target.value)}
+                            className="px-2 py-1 bg-slate-800 border border-slate-500 rounded text-white text-sm w-full"
+                            placeholder="Points"
+                          />
+                          <input
+                            type="text"
+                            value={pointsReason}
+                            onChange={(e) => setPointsReason(e.target.value)}
+                            className="px-2 py-1 bg-slate-800 border border-slate-500 rounded text-white text-xs w-full"
+                            placeholder="Reason (optional)"
+                          />
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => savePointsOverride(result.id)}
+                              disabled={savingPoints}
+                              className="flex-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white text-xs rounded"
+                            >
+                              {savingPoints ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => setEditingPointsId(null)}
+                              className="flex-1 px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white text-xs rounded"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openPointsEditor(result)}
+                            className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white text-xs rounded inline-flex items-center gap-1"
+                            title="Set a one-off manual points value (locked from recalculation)"
+                          >
+                            <Pencil className="h-3 w-3" /> Set Points
+                          </button>
+                          {(result.pointsManualOverride || result.points_manual_override) && (
+                            <button
+                              onClick={() => clearPointsOverride(result.id)}
+                              disabled={savingPoints}
+                              className="px-2 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-purple-300 text-xs rounded"
+                              title="Remove the manual override and return to automatic calculation"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             )}

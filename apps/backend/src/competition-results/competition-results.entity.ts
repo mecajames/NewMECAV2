@@ -139,4 +139,20 @@ export class CompetitionResult {
   // either create-class-and-accept or assign-to-existing-class.
   @Property({ type: 'boolean', default: false, fieldName: 'needs_class_review', serializedName: 'needs_class_review' })
   needsClassReview: boolean = false;
+
+  // Manual one-off points override (super-admin only). When true, `pointsEarned`
+  // was set by hand and the automatic recalculation (updateEventPoints) MUST NOT
+  // overwrite it — otherwise the next recalc would silently wipe the manual
+  // value. Cleared back to auto-calc by removing the override.
+  @Property({ type: 'boolean', default: false, fieldName: 'points_manual_override', serializedName: 'points_manual_override' })
+  pointsManualOverride: boolean = false;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'points_override_reason', serializedName: 'points_override_reason' })
+  pointsOverrideReason?: string;
+
+  @Property({ type: 'uuid', nullable: true, fieldName: 'points_override_by' })
+  pointsOverrideBy?: string;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'points_override_at', serializedName: 'points_override_at' })
+  pointsOverrideAt?: Date;
 }

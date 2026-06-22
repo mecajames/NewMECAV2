@@ -26,6 +26,13 @@ export interface CompetitionResult {
   updatedAt?: string;
   revisionCount?: number;
   modificationReason?: string;
+  // Manual one-off points override (super-admin) — locked against auto-recalc.
+  pointsManualOverride?: boolean;
+  points_manual_override?: boolean;
+  pointsOverrideReason?: string;
+  points_override_reason?: string;
+  pointsOverrideAt?: string;
+  points_override_at?: string;
   // Display names resolved server-side from created_by/updated_by
   created_by_name?: string;
   updated_by_name?: string;
@@ -164,6 +171,21 @@ export const competitionResultsApi = {
 
   recalculatePoints: async (eventId: string): Promise<{ message: string }> => {
     const response = await axios.post(`/api/competition-results/recalculate-points/${eventId}`);
+    return response.data;
+  },
+
+  /**
+   * Super-admin (James / Mick) only: set a one-off manual points value on a
+   * result. The value is locked against the automatic recalculation.
+   */
+  setManualPoints: async (resultId: string, points: number, reason: string): Promise<CompetitionResult> => {
+    const response = await axios.post(`/api/competition-results/admin/results/${resultId}/manual-points`, { points, reason });
+    return response.data;
+  },
+
+  /** Super-admin only: remove a manual override, returning the result to auto-calc. */
+  clearManualPoints: async (resultId: string): Promise<CompetitionResult> => {
+    const response = await axios.delete(`/api/competition-results/admin/results/${resultId}/manual-points`);
     return response.data;
   },
 
