@@ -134,6 +134,7 @@ const CheckInHubPage = lazy(() => import('@/event-registrations/pages/CheckInHub
 
 // Lazy-loaded pages - Admin (only admins access these)
 const MembersPage = lazy(() => import('@/admin/pages/MembersPage'));
+const NameMismatchReportPage = lazy(() => import('@/admin/pages/NameMismatchReportPage'));
 const MemberDetailPage = lazy(() => import('@/admin/pages/MemberDetailPage'));
 const TeamManagementPage = lazy(() => import('@/admin/pages/TeamManagementPage'));
 const AdminTicketsPage = lazy(() => import('@/admin/pages/AdminTicketsPage'));
@@ -364,6 +365,7 @@ function App() {
 
               {/* Admin Routes */}
               <Route path="/admin/members" element={<L><MembersPage /></L>} />
+              <Route path="/admin/name-mismatches" element={<L><NameMismatchReportPage /></L>} />
               <Route path="/admin/event-director-revenue" element={<L><EventDirectorRevenuePage /></L>} />
               <Route path="/admin/members/:memberId" element={<L><MemberDetailPage /></L>} />
               <Route path="/admin/teams" element={<L><TeamManagementPage /></L>} />

@@ -241,6 +241,16 @@ export class ProfilesController {
     return this.profilesService.create(data);
   }
 
+  /**
+   * Admin report: members whose current name differs from the name on their
+   * original membership order (likely changed their name after registering).
+   */
+  @Get('admin/name-mismatches')
+  async getNameMismatches(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.profilesService.findNameMismatches();
+  }
+
   @Put(':id')
   async updateProfile(
     @Param('id') id: string,

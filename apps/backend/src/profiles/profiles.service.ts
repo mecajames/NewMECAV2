@@ -307,6 +307,84 @@ export class ProfilesService {
     return profile;
   }
 
+  /**
+   * Admin report: members whose CURRENT name doesn't match the name on their
+   * ORIGINAL (earliest) membership order's billing details — i.e. people who
+   * likely changed their name after registering. The order billing name is an
+   * immutable snapshot from checkout (the name that should match their card), so
+   * it's the reference. Comparison is case-insensitive and whitespace-normalized;
+   * results are a starting point for an admin to review (some legitimate
+   * differences like middle names/suffixes can appear).
+   */
+  async findNameMismatches(): Promise<Array<{
+    profileId: string;
+    mecaId: string | null;
+    email: string | null;
+    currentName: string;
+    orderName: string;
+    orderNumber: string;
+    orderDate: string;
+  }>> {
+    const em = this.em.fork();
+    const rows = await em.getConnection().execute<Array<{
+      profile_id: string;
+      meca_id: string | null;
+      email: string | null;
+      current_name: string;
+      order_name: string;
+      order_number: string;
+      order_date: string;
+    }>>(`
+      WITH first_order AS (
+        SELECT DISTINCT ON (o.member_id)
+          o.member_id,
+          o.billing_address->>'name' AS order_name,
+          o.order_number,
+          o.created_at
+        FROM orders o
+        WHERE o.member_id IS NOT NULL
+          AND o.order_type = 'membership'
+          AND COALESCE(o.billing_address->>'name', '') <> ''
+        ORDER BY o.member_id, o.created_at ASC
+      )
+      SELECT
+        p.id AS profile_id,
+        p.meca_id,
+        p.email,
+        TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))) AS current_name,
+        fo.order_name,
+        fo.order_number,
+        fo.created_at AS order_date
+      FROM first_order fo
+      JOIN profiles p ON p.id = fo.member_id
+      -- Compare on letters+digits only (lower-cased): this ignores case, spaces,
+      -- punctuation, apostrophes/escaping, and odd whitespace so only a GENUINE
+      -- name difference (e.g. "Rodney Tomes" -> "Redbeard") is flagged, not
+      -- cosmetic formatting differences.
+      WHERE REGEXP_REPLACE(LOWER(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, '')))), '[^a-z0-9]', '', 'g')
+         <> REGEXP_REPLACE(LOWER(TRIM(fo.order_name)), '[^a-z0-9]', '', 'g')
+      ORDER BY fo.created_at DESC
+    `);
+
+    return (rows || []).map((r: {
+      profile_id: string;
+      meca_id: string | null;
+      email: string | null;
+      current_name: string;
+      order_name: string;
+      order_number: string;
+      order_date: string;
+    }) => ({
+      profileId: r.profile_id,
+      mecaId: r.meca_id != null ? String(r.meca_id) : null,
+      email: r.email,
+      currentName: r.current_name,
+      orderName: r.order_name,
+      orderNumber: r.order_number,
+      orderDate: r.order_date,
+    }));
+  }
+
   async update(id: string, data: Partial<Profile>): Promise<Profile> {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id });

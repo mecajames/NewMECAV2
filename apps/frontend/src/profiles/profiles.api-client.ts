@@ -171,6 +171,23 @@ export const profilesApi = {
     await axios.delete(`/api/profiles/${id}`);
   },
 
+  /**
+   * Admin report: members whose current name differs from the name on their
+   * original membership order (likely changed their name after registering).
+   */
+  getNameMismatches: async (): Promise<Array<{
+    profileId: string;
+    mecaId: string | null;
+    email: string | null;
+    currentName: string;
+    orderName: string;
+    orderNumber: string;
+    orderDate: string;
+  }>> => {
+    const response = await axios.get('/api/profiles/admin/name-mismatches');
+    return response.data;
+  },
+
   getStats: async (): Promise<{ totalUsers: number; totalMembers: number }> => {
     const response = await axios.get('/api/profiles/stats');
     return response.data;
