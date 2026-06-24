@@ -182,6 +182,56 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Admin name correction: set the competitor name on EVERY competition result
+   * (and membership) for a MECA ID to a new value. Used after an admin corrects a
+   * member's legal name so the name shown in results, standings, and Top 10 lists
+   * matches. Returns the number of result rows changed. Audit-logged by caller.
+   */
+  async updateCompetitorNameByMecaId(
+    mecaId: string | number,
+    newName: string,
+    adminId: string,
+  ): Promise<{ resultsUpdated: number; membershipsUpdated: number }> {
+    const name = (newName || '').trim();
+    if (!name) throw new BadRequestException('A name is required.');
+    const id = String(mecaId ?? '').trim();
+    if (!id) throw new BadRequestException('A MECA ID is required.');
+
+    const em = this.em.fork();
+
+    // Results: meca_id is stored as text on competition_results.
+    const results = await em.find(CompetitionResult, { mecaId: id });
+    let resultsUpdated = 0;
+    for (const r of results) {
+      if (r.competitorName !== name) {
+        r.competitorName = name;
+        resultsUpdated++;
+      }
+    }
+
+    // Memberships: meca_id is an integer column — keep competitorName in sync so
+    // FUTURE results and the public profile show the corrected name too.
+    let membershipsUpdated = 0;
+    const mecaIdNum = parseInt(id, 10);
+    if (!isNaN(mecaIdNum)) {
+      const memberships = await em.find(Membership, { mecaId: mecaIdNum });
+      for (const m of memberships) {
+        if (m.competitorName !== name) {
+          m.competitorName = name;
+          membershipsUpdated++;
+        }
+      }
+    }
+
+    await em.flush();
+    this.logger.warn(
+      `Admin ${adminId} set competitor name to "${name}" for MECA ID ${id}: ` +
+        `${resultsUpdated} result(s), ${membershipsUpdated} membership(s) updated`,
+    );
+    return { resultsUpdated, membershipsUpdated };
+  }
+
+  /**
    * Super-admin one-off points override. Sets `pointsEarned` on a single result
    * by hand and LOCKS it (`pointsManualOverride=true`) so the automatic
    * recalculation never overwrites it. Use for edge cases the auto-calc can't

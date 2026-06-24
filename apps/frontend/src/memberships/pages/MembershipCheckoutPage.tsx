@@ -149,6 +149,8 @@ interface FormData {
   enableAutoRenewal: boolean;
   // Newsletter signup
   subscribeNewsletter: boolean;
+  // Required acknowledgement (must be checked to continue)
+  agreeToTerms: boolean;
 }
 
 interface OrderData {
@@ -233,6 +235,8 @@ export default function MembershipCheckoutPage() {
     enableAutoRenewal: false,
     // Newsletter signup
     subscribeNewsletter: true, // Default to checked
+    // Required acknowledgement — must be explicitly checked
+    agreeToTerms: false,
   });
 
   useEffect(() => {
@@ -395,6 +399,12 @@ export default function MembershipCheckoutPage() {
     // Retailer-specific validation
     if (membership?.category === MembershipCategory.RETAIL && !formData.businessName) {
       setError('Business name is required');
+      return false;
+    }
+
+    // Required: the buyer must accept the Terms of Service and Privacy Policy.
+    if (!formData.agreeToTerms) {
+      setError('Please agree to the Terms of Service and Privacy Policy to continue.');
       return false;
     }
 
@@ -1052,6 +1062,9 @@ export default function MembershipCheckoutPage() {
                           />
                         </div>
                       </div>
+                      <p className="text-xs text-gray-400">
+                        Name must match the name on your credit card or PayPal.
+                      </p>
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           Phone Number
@@ -1314,13 +1327,37 @@ export default function MembershipCheckoutPage() {
                     </label>
                   </div>
 
+                  {/* Required: agree to Terms of Service + Privacy Policy. */}
+                  <div className="mb-8 p-4 bg-slate-700/50 rounded-xl border border-slate-600">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.agreeToTerms}
+                        onChange={(e) => setFormData(prev => ({ ...prev, agreeToTerms: e.target.checked }))}
+                        className="mt-1 w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <span className="text-white font-medium">
+                          I agree to the{' '}
+                          <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 underline">
+                            Terms of Service
+                          </a>{' '}
+                          and{' '}
+                          <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 underline">
+                            Privacy Policy
+                          </a>.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
                   {/* Active/blocked accounts can't proceed with a guest purchase
                       (active → emailed sign-in link; blocked → contact support),
                       so hide the dead Continue button for them. */}
                   {existingAccount !== 'active' && existingAccount !== 'blocked' && (
                     <button
                       type="submit"
-                      disabled={creatingPaymentIntent}
+                      disabled={creatingPaymentIntent || !formData.agreeToTerms}
                       className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {creatingPaymentIntent ? (
