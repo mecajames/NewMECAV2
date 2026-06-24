@@ -143,24 +143,18 @@ export default function PublicProfilePage() {
         car_audio_system: carAudioSystem,
       });
 
-      // Save competitor name and relationship for the membership
-      if (targetMembership && profile) {
-        if (isViewingSecondary) {
-          // For secondary profiles, use updateSecondaryDetails (only name/relationship)
-          await membershipsApi.updateSecondaryDetails(
-            targetMembership.id,
-            profile.id, // Master is the requesting user
-            {
-              competitorName: competitorName.trim(),
-              relationshipToMaster: relationshipToMaster || undefined,
-            }
-          );
-        } else {
-          // For primary profile, update competitor name via the membership update
-          await membershipsApi.update(targetMembership.id, {
-            competitorName: competitorName.trim(),
-          });
-        }
+      // Competitor name is LOCKED — it's the member's name in results/standings and
+      // can't be changed here (the input above is read-only; the backend also rejects
+      // a non-admin change). For a secondary membership the RELATIONSHIP is still
+      // editable, so we update only that.
+      if (targetMembership && profile && isViewingSecondary) {
+        await membershipsApi.updateSecondaryDetails(
+          targetMembership.id,
+          profile.id, // Master is the requesting user
+          {
+            relationshipToMaster: relationshipToMaster || undefined,
+          }
+        );
       }
 
       // Refresh the profile in context (only for own profile)
@@ -361,18 +355,11 @@ export default function PublicProfilePage() {
               <div className="grid md:grid-cols-2 gap-6">
                 <div className={isViewingSecondary ? '' : 'md:col-span-2'}>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Competitor Name <span className="text-red-500">*</span>
+                    Competitor Name
                   </label>
-                  <input
-                    type="text"
-                    value={competitorName}
-                    onChange={(e) => setCompetitorName(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
-                    placeholder="Full name as it will appear in results"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    This name will appear in competition results, standings, and Top 10 lists
-                  </p>
+                  <div className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600">
+                    {competitorName || 'N/A'}
+                  </div>
                 </div>
 
                 {isViewingSecondary && (

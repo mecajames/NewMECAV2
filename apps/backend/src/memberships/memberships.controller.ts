@@ -504,6 +504,12 @@ export class MembershipsController {
     if (!isAdminUser(profile) && membership.user?.id !== user.id) {
       throw new ForbiddenException('You can only update your own membership data');
     }
+    // The competitor name is the member's identity in competition results and
+    // standings — it is LOCKED. Only an admin may change it (for corrections);
+    // a member's own update can never alter it.
+    if ('competitorName' in data && !isAdminUser(profile)) {
+      delete (data as any).competitorName;
+    }
     return this.membershipsService.update(id, data);
   }
 
@@ -798,6 +804,14 @@ export class MembershipsController {
     },
   ): Promise<Membership> {
     const { requestingUserId, ...updateData } = data;
+    // Competitor name is locked (results/standings identity) — strip it unless the
+    // requester is an admin. Relationship/vehicle info stay editable.
+    if ('competitorName' in updateData) {
+      const requester = await this.em.fork().findOne(Profile, { id: requestingUserId });
+      if (!isAdminUser(requester)) {
+        delete (updateData as any).competitorName;
+      }
+    }
     return this.masterSecondaryService.updateSecondaryDetails(secondaryMembershipId, requestingUserId, updateData);
   }
 

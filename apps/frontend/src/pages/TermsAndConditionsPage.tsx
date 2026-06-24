@@ -10,7 +10,7 @@ export default function TermsAndConditionsPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-12">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">MECA Terms and Conditions</h1>
-          <p className="text-gray-400">Last updated: November 16, 2025</p>
+          <p className="text-gray-400">Last updated: June 23, 2026</p>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-8 space-y-8">
@@ -45,7 +45,8 @@ export default function TermsAndConditionsPage() {
               <li><a href="#section-20" className="text-orange-500 hover:text-orange-400 hover:underline">USER DATA</a></li>
               <li><a href="#section-21" className="text-orange-500 hover:text-orange-400 hover:underline">ELECTRONIC COMMUNICATIONS, TRANSACTIONS, AND SIGNATURES</a></li>
               <li><a href="#section-22" className="text-orange-500 hover:text-orange-400 hover:underline">MISCELLANEOUS</a></li>
-              <li><a href="#section-23" className="text-orange-500 hover:text-orange-400 hover:underline">CONTACT US</a></li>
+              <li><a href="#section-23" className="text-orange-500 hover:text-orange-400 hover:underline">MEMBERSHIP NAME AND ACCOUNT IDENTITY</a></li>
+              <li><a href="#section-24" className="text-orange-500 hover:text-orange-400 hover:underline">CONTACT US</a></li>
             </ol>
           </div>
 
@@ -338,9 +339,30 @@ export default function TermsAndConditionsPage() {
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
 
-          {/* 23. Contact Us */}
+          {/* 23. Membership Name and Account Identity */}
           <div id="section-23">
-            <h2 className="text-2xl font-bold text-white mb-4">23. CONTACT US</h2>
+            <h2 className="text-2xl font-bold text-white mb-4">23. MEMBERSHIP NAME AND ACCOUNT IDENTITY</h2>
+            <p className="text-gray-300 mb-3">
+              When you place an order for a MECA membership, you must provide your true and complete legal first and last name. The first and last name you provide must match the name on the credit card or other payment method used to complete the transaction, and the billing name and billing address you provide must match the name and address associated with that payment method.
+            </p>
+            <p className="text-gray-300 mb-3">
+              The legal name you provide at the time of your order becomes the name associated with your MECA account, your MECA ID, your membership, and all competition results, scores, points, standings, and awards recorded under your MECA ID. You acknowledge and agree that this name must be your true legal name, and that you will not attempt, by any means, to change the name on your account, membership, or profile to any name that is not your true legal name.
+            </p>
+            <p className="text-gray-300 mb-3">
+              Providing a name that is not your true legal name, providing a name that does not match the name on your payment method, or changing or attempting to change the name on your account to any name that is not your true legal name, is a violation of these Terms and constitutes grounds for action against your account at MECA's sole discretion. Such action may include, but is not limited to: (a) temporarily locking or suspending your account; (b) terminating your membership; and/or (c) retroactively removing any and all points, scores, results, standings, and awards earned during any period of time in which the name on your account did not match your true legal name and/or the name on the payment method used for your order. This applies whether the mismatch occurred before or after these Terms were posted.
+            </p>
+            <p className="text-gray-300 mb-3">
+              MECA reserves the right, in its sole discretion and at any time, to correct the name on your profile and membership to your true legal name, including restoring the name on file with the payment method used for your order.
+            </p>
+            <p className="text-gray-300 mb-4">
+              If you have a legitimate need to update your name (for example, a legal name change, marriage, or a data-entry error), please contact MECA support; such corrections are made at MECA's discretion upon verification.
+            </p>
+            <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
+          </div>
+
+          {/* 24. Contact Us */}
+          <div id="section-24">
+            <h2 className="text-2xl font-bold text-white mb-4">24. CONTACT US</h2>
             <p className="text-gray-300 mb-3">
               In order to resolve a complaint regarding the Site or to receive further information regarding use of the Site, please contact us at:
             </p>

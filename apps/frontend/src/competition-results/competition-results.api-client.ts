@@ -189,6 +189,18 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /**
+   * Admin: set the competitor name on ALL of a member's competition results (and
+   * memberships) for a MECA ID — used after correcting their legal name.
+   */
+  updateCompetitorNameByMecaId: async (
+    mecaId: string | number,
+    name: string,
+  ): Promise<{ resultsUpdated: number; membershipsUpdated: number }> => {
+    const response = await axios.post('/api/competition-results/admin/update-competitor-name', { mecaId, name });
+    return response.data;
+  },
+
   importResults: async (
     eventId: string,
     file: File,

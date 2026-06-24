@@ -484,7 +484,7 @@ export default function ProfilePage() {
 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
-                    {isEditing ? (
+                    {isEditing && !selectedMembership?.mecaId ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           First Name
@@ -510,7 +510,7 @@ export default function ProfilePage() {
                   </div>
 
                   <div>
-                    {isEditing ? (
+                    {isEditing && !selectedMembership?.mecaId ? (
                       <>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           Last Name

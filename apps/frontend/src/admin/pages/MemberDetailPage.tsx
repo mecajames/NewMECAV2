@@ -2727,6 +2727,11 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
     use_billing_for_shipping: member.use_billing_for_shipping || false,
   });
   const [saving, setSaving] = useState(false);
+  // When an admin corrects the name, offer to also rewrite it across all of the
+  // member's competition results + memberships (so standings/Top 10 match).
+  const [alsoUpdateResults, setAlsoUpdateResults] = useState(false);
+  const nameChanged =
+    formData.first_name !== member.first_name || formData.last_name !== member.last_name;
 
   const handleSave = async () => {
     if (!canEdit) return;
@@ -2735,6 +2740,18 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
     try {
       await profilesApi.update(member.id, formData);
 
+      // Optionally propagate the corrected name to all competition results + memberships.
+      if (alsoUpdateResults && nameChanged && member.meca_id) {
+        const newName = `${formData.first_name || ''} ${formData.last_name || ''}`.trim();
+        try {
+          const res = await competitionResultsApi.updateCompetitorNameByMecaId(member.meca_id, newName);
+          alert(`Updated ${res.resultsUpdated} competition result(s) and ${res.membershipsUpdated} membership(s) to "${newName}".`);
+        } catch (e: any) {
+          alert(`Profile saved, but updating results failed: ${e?.response?.data?.message || e?.message || 'unknown error'}`);
+        }
+      }
+
+      setAlsoUpdateResults(false);
       setIsEditing(false);
       onUpdate();
     } catch (error: any) {
@@ -2836,6 +2853,25 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
               <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{member.last_name}</div>
             )}
           </div>
+          {isEditing && nameChanged && member.meca_id && (
+            <div className="md:col-span-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={alsoUpdateResults}
+                  onChange={(e) => setAlsoUpdateResults(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-orange-500 bg-slate-700 border-slate-600 rounded focus:ring-orange-500 cursor-pointer"
+                />
+                <div>
+                  <span className="text-white font-medium">Also update all competition results &amp; standings with this name</span>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Rewrites the competitor name on every result and membership for MECA ID #{member.meca_id} to
+                    &ldquo;{`${formData.first_name || ''} ${formData.last_name || ''}`.trim()}&rdquo;. Use this when correcting a member&apos;s legal name.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
             <div className="px-4 py-2 bg-slate-700 rounded-lg text-gray-400">{member.email}</div>

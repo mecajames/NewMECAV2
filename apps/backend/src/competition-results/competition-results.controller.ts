@@ -127,11 +127,44 @@ export class CompetitionResultsController {
   }
 
   /**
+   * Admin: set the competitor name on ALL of a member's competition results (and
+   * their memberships) for a MECA ID — used after correcting a member's legal name
+   * so results / standings match. Admin only.
+   */
+  @Post('admin/update-competitor-name')
+  @HttpCode(HttpStatus.OK)
+  async updateCompetitorName(
+    @Headers('authorization') authHeader: string,
+    @Headers('x-forwarded-for') ip: string,
+    @Body() body: { mecaId?: string | number; name?: string },
+  ): Promise<{ resultsUpdated: number; membershipsUpdated: number }> {
+    const profile = await this.requireAdmin(authHeader);
+    if (body?.mecaId == null || body.mecaId === '' || !body?.name?.trim()) {
+      throw new BadRequestException('mecaId and name are required.');
+    }
+    const res = await this.competitionResultsService.updateCompetitorNameByMecaId(
+      body.mecaId,
+      body.name,
+      profile.id,
+    );
+    this.adminAuditService.logAction({
+      adminUserId: profile.id,
+      action: 'result_competitor_name_update',
+      resourceType: 'competition_result',
+      resourceId: String(body.mecaId),
+      description: `Set competitor name to "${body.name.trim()}" for MECA ID ${body.mecaId} — ${res.resultsUpdated} result(s), ${res.membershipsUpdated} membership(s)`,
+      newValues: { mecaId: body.mecaId, name: body.name.trim(), ...res },
+      ip,
+    });
+    return res;
+  }
+
+  /**
    * Admin-only auth guard for the back-office maintenance endpoints
    * (backfill, recalculate, etc.). Decodes the Supabase JWT, looks up
    * the local profile, throws 401/403 if not an admin.
    */
-  private async requireAdmin(authHeader?: string): Promise<void> {
+  private async requireAdmin(authHeader?: string): Promise<Profile> {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('No authorization token provided');
     }
@@ -140,6 +173,7 @@ export class CompetitionResultsController {
     if (error || !user) throw new UnauthorizedException('Invalid authorization token');
     const profile = await this.em.fork().findOne(Profile, { id: user.id });
     if (!isAdminUser(profile)) throw new ForbiddenException('Admin access required');
+    return profile!;
   }
 
   @Public()

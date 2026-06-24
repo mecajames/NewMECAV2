@@ -315,6 +315,49 @@ export class ProfilesController {
         delete (data as any).meca_id;
       }
     }
+
+    // IDENTITY LOCK (members): once a member has a MECA ID, their legal name and
+    // email are the ones captured from their credit card at checkout and the ones
+    // their competition RESULTS are recorded under — they must stay in sync. A
+    // member may NOT change first/last name, full name, or email from their My
+    // MECA dashboard. Only an admin/staff can (for genuine corrections). Enforced
+    // SERVER-SIDE so locking the UI fields can't be bypassed via the API: for a
+    // non-admin update of a member profile, strip the identity fields so the
+    // update leaves them untouched. (Internal flows — checkout back-fill, account
+    // provisioning — call the service directly and bypass this controller.)
+    if ('first_name' in data || 'last_name' in data || 'full_name' in data || 'email' in data) {
+      const existingProfile = await this.profilesService.findById(id);
+      const isMember = existingProfile?.meca_id != null && String(existingProfile.meca_id).trim() !== '';
+      if (isMember) {
+        let callerIsAdmin = false;
+        if (authHeader?.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.substring(7);
+            const { data: { user } } = await this.supabaseAdmin.getClient().auth.getUser(token);
+            if (user) {
+              const callerProfile = await this.em.fork().findOne(Profile, { id: user.id });
+              callerIsAdmin = isAdminUser(callerProfile);
+            }
+          } catch {
+            callerIsAdmin = false;
+          }
+        }
+        if (!callerIsAdmin) {
+          const attempted = ['first_name', 'last_name', 'full_name', 'email'].filter((f) => f in (data as any));
+          if (attempted.length) {
+            console.warn(
+              `[IDENTITY LOCK] Blocked non-admin change to ${attempted.join(', ')} on member profile ${id} ` +
+                `(MECA ID ${existingProfile?.meca_id}). Name/email are locked to the card-on-file values.`,
+            );
+          }
+          delete (data as any).first_name;
+          delete (data as any).last_name;
+          delete (data as any).full_name;
+          delete (data as any).email;
+        }
+      }
+    }
+
     return this.profilesService.update(id, data);
   }
 
