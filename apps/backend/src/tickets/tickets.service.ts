@@ -290,13 +290,17 @@ export class TicketsService {
   private async findProfileIdsBySearch(em: EntityManager, search: string): Promise<string[]> {
     const conn = em.getConnection();
     const like = `%${search}%`;
+    // NOTE: meca_id is a NUMERIC column in the DB (the entity decorator says
+    // text, but the actual column is integer). `COALESCE(meca_id, '')` makes
+    // Postgres try to coerce '' to integer → "invalid input syntax for type
+    // integer" (22P02), which 500'd EVERY ticket search. Cast to text first.
     const rows = await conn.execute<any[]>(
       `SELECT id FROM public.profiles
        WHERE first_name ILIKE ?
           OR last_name ILIKE ?
           OR full_name ILIKE ?
           OR email ILIKE ?
-          OR COALESCE(meca_id, '') ILIKE ?
+          OR COALESCE(meca_id::text, '') ILIKE ?
        LIMIT 1000`,
       [like, like, like, like, like],
     );

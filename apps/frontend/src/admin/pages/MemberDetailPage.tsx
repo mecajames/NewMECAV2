@@ -5797,6 +5797,28 @@ function MembershipsTab({ member }: { member: Profile }) {
                         Record Payment
                       </button>
                     )}
+                    {/* Renew — for a membership that IS paid but has EXPIRED.
+                        Opens the same payment modal in 'renew' mode: advances
+                        the term a full year, keeps the MECA ID, and reinstates
+                        any points held during the lapse. (The unpaid case is
+                        handled by Record Payment above.) */}
+                    {membership.paymentStatus === 'paid' && isExpired(membership.endDate || '') && (
+                      <button
+                        onClick={() => {
+                          setApplyPaymentMembership(membership);
+                          setApplyPaymentMode('renew');
+                          setApplyPaymentMethod('cash');
+                          setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                          setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+                          setApplyPaymentError(null);
+                        }}
+                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors inline-flex items-center gap-1.5"
+                        title="Renew this expired membership — advance the term, keep the MECA ID, and reinstate points"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Renew
+                      </button>
+                    )}
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
                     {(membership as any).accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
                       <button
@@ -6930,7 +6952,20 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                         <button
-                          onClick={() => window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')}
+                          onClick={async () => {
+                            // Fetch the PDF through authenticated axios (the
+                            // admin endpoint requires a Bearer token) and open
+                            // the resulting blob — a raw window.open() to the
+                            // API sends no token and dumps a 401 JSON page.
+                            try {
+                              const res = await axios.get(`/api/billing/invoices/${invoice.id}/pdf`, { responseType: 'blob' });
+                              const url = URL.createObjectURL(new Blob([res.data], { type: 'text/html' }));
+                              window.open(url, '_blank');
+                              setTimeout(() => URL.revokeObjectURL(url), 10000);
+                            } catch (err: any) {
+                              alert('Could not open the invoice PDF. Please make sure you are signed in as an admin and try again.');
+                            }
+                          }}
                           className="text-blue-400 hover:text-blue-300"
                         >
                           View PDF

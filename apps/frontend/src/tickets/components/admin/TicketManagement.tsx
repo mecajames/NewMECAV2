@@ -253,29 +253,39 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         sort_order: 'desc',
       };
 
-      if (searchQuery) query.search = searchQuery;
-      // Multi-select → array (empty = no filter). Backend joins with $in.
-      if (statusFilter.length > 0) query.status = statusFilter as any;
-      if (priorityFilter.length > 0) query.priority = priorityFilter as any;
-      if (departmentFilter.length > 0) query.department = departmentFilter as any;
-      if (assigneeFilter.length > 0) query.assigned_to_id = assigneeFilter;
-      if (lastReplyFilter) query.last_reply_by = lastReplyFilter;
-      if (waitingOnFilter) query.waiting_on = waitingOnFilter;
+      const trimmedSearch = searchQuery.trim();
+      if (trimmedSearch) {
+        // A search is a GLOBAL lookup — find the member / MECA ID / subject /
+        // ticket number across EVERY ticket in the system. Deliberately IGNORE
+        // the status/tab/assignee/priority/department filters: otherwise a
+        // resolved, closed, or out-of-tab ticket never matches and search looks
+        // broken. When searching, send the term ALONE with no other constraints.
+        query.search = trimmedSearch;
+      } else {
+        // No search → apply the visible filters + active tab as usual.
+        // Multi-select → array (empty = no filter). Backend joins with $in.
+        if (statusFilter.length > 0) query.status = statusFilter as any;
+        if (priorityFilter.length > 0) query.priority = priorityFilter as any;
+        if (departmentFilter.length > 0) query.department = departmentFilter as any;
+        if (assigneeFilter.length > 0) query.assigned_to_id = assigneeFilter;
+        if (lastReplyFilter) query.last_reply_by = lastReplyFilter;
+        if (waitingOnFilter) query.waiting_on = waitingOnFilter;
 
-      // Tab-specific filters. These pin the relevant fields regardless of
-      // the filter-panel selections so e.g. the "On Hold" tab always shows
-      // on_hold tickets even if the Status dropdown is on something else.
-      if (activeTab === 'assigned') {
-        query.assigned_to_id = currentUserId;
-      } else if (activeTab === 'critical') {
-        query.priority = 'critical';
-        query.status = 'open';
-      } else if (activeTab === 'on_hold') {
-        query.status = 'on_hold';
-      } else if (activeTab === 'unassigned') {
-        // Backend now supports the 'unassigned' sentinel directly — no
-        // more client-side filtering needed.
-        query.assigned_to_id = 'unassigned';
+        // Tab-specific filters. These pin the relevant fields regardless of
+        // the filter-panel selections so e.g. the "On Hold" tab always shows
+        // on_hold tickets even if the Status dropdown is on something else.
+        if (activeTab === 'assigned') {
+          query.assigned_to_id = currentUserId;
+        } else if (activeTab === 'critical') {
+          query.priority = 'critical';
+          query.status = 'open';
+        } else if (activeTab === 'on_hold') {
+          query.status = 'on_hold';
+        } else if (activeTab === 'unassigned') {
+          // Backend now supports the 'unassigned' sentinel directly — no
+          // more client-side filtering needed.
+          query.assigned_to_id = 'unassigned';
+        }
       }
 
       const result = await ticketsApi.getAll(query);
