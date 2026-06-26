@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, Loader2, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { canViewMemberContent } from '../permissions';
 
 /**
  * Wraps member-only page content. Active members (and staff/admin/ED/judge)
@@ -18,14 +19,10 @@ export function MemberOnlyGate({ children }: { children: ReactNode }) {
   const { profile, loading } = useAuth();
 
   // Mirror the backend ActiveMembershipGuard exemptions so the two stay
-  // consistent: active paid membership, or a privileged role.
-  const isActiveMember =
-    !!profile &&
-    (profile.membership_status === 'active' ||
-      profile.is_staff === true ||
-      profile.role === 'admin' ||
-      profile.role === 'event_director' ||
-      profile.role === 'judge');
+  // consistent: active paid membership, or a privileged role. Centralized in
+  // canViewMemberContent() so the gate, the Navbar, and any future caller all
+  // compute "is a member" identically.
+  const isActiveMember = canViewMemberContent(profile);
 
   // Don't flash the gate (or the content) before auth resolves.
   if (loading) {

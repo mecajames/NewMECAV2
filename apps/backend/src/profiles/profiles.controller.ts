@@ -160,7 +160,10 @@ export class ProfilesController {
     return this.profilesService.getStats();
   }
 
-  @Public()
+  // Member-only. The member directory is gated content: dropping @Public()
+  // means the global ActiveMembershipGuard now requires an active membership
+  // (or a privileged role), matching the <MemberOnlyGate> on /members. Returns
+  // sanitized, active-only profiles to the members allowed to view it.
   @Get('public')
   async getPublicProfiles(
     @Query('search') search?: string,
@@ -174,7 +177,8 @@ export class ProfilesController {
     });
   }
 
-  @Public()
+  // Member-only: the individual member profile page (/members/:id). Gated for
+  // the same reason as getPublicProfiles above.
   @Get('public/:id')
   async getPublicProfile(@Param('id') id: string): Promise<Profile> {
     return this.profilesService.findPublicById(id);

@@ -2,6 +2,7 @@ import { Menu, X, User, Calendar, Trophy, LogOut, LayoutDashboard, BookOpen, Awa
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { canViewMemberContent } from '@/auth/permissions';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/notifications';
 import { CartIcon } from '@/shop/components/CartIcon';
@@ -22,6 +23,12 @@ export default function Navbar() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
   const { user, profile, signOut } = useAuth();
+
+  // Member-only nav links (member/team directories, standings, Top 10) are
+  // shown ONLY to active members and privileged roles — matching the route
+  // gate (<MemberOnlyGate>) and the backend ActiveMembershipGuard. Expired /
+  // non-members don't see the links at all.
+  const canSeeMemberContent = canViewMemberContent(profile);
 
   // Use API hooks instead of direct Supabase calls
   const { notifications, refetch: refetchNotifications } = useNotifications(user?.id);
@@ -171,6 +178,8 @@ export default function Navbar() {
                       <Trophy className="h-4 w-4" />
                       Competition Results
                     </button>
+                    {/* Standings, Top 10, and Team Results are member-only. */}
+                    {canSeeMemberContent && (<>
                     <button
                       onClick={() => {
                         navigate('/standings');
@@ -239,6 +248,7 @@ export default function Navbar() {
                         </div>
                       )}
                     </div>
+                    </>)}
                     <button
                       onClick={() => {
                         navigate('/world-records');
@@ -254,8 +264,10 @@ export default function Navbar() {
               )}
             </div>
 
-            {/* Members Dropdown - only show when logged in */}
-            {user && <div className="relative"
+            {/* Members Dropdown — ALWAYS visible. Retailers / Manufacturers are
+                PUBLIC business directories (shown to everyone, logged in or
+                not); the Members & Teams directories inside are member-gated. */}
+            <div className="relative"
               onMouseEnter={() => setMembersMenuOpen(true)}
               onMouseLeave={() => setMembersMenuOpen(false)}
             >
@@ -274,6 +286,9 @@ export default function Navbar() {
               {membersMenuOpen && (
                 <div className="absolute top-full left-0 mt-0 pt-2 w-56">
                   <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2">
+                    {/* Member + Team directories are member-only. Retailers /
+                        Manufacturers below are PUBLIC (shown to everyone). */}
+                    {canSeeMemberContent && (<>
                     <button
                       onClick={() => {
                         navigate('/members');
@@ -294,6 +309,7 @@ export default function Navbar() {
                       <Shield className="h-4 w-4" />
                       Teams Directory
                     </button>
+                    </>)}
                     <button
                       onClick={() => {
                         navigate('/retailers');
@@ -317,7 +333,7 @@ export default function Navbar() {
                   </div>
                 </div>
               )}
-            </div>}
+            </div>
 
             {/* Rulebooks Dropdown */}
             <div className="relative"
@@ -660,6 +676,8 @@ export default function Navbar() {
               <Trophy className="h-5 w-5" />
               Competition Results
             </button>
+            {/* Standings, Top 10, and Team Results are member-only. */}
+            {canSeeMemberContent && (<>
             <button
               onClick={() => {
                 navigate('/standings');
@@ -723,6 +741,7 @@ export default function Navbar() {
               <Trophy className="h-5 w-5" />
               Team Top 10
             </button>
+            </>)}
 
             {/* World Records */}
             <div className="border-t border-slate-700 mt-2 pt-2">
@@ -751,8 +770,10 @@ export default function Navbar() {
                 Members
               </div>
             </div>
-            {user && (
-              <>
+            {/* Member + Team directories are member-only; Retailers /
+                Manufacturers below are PUBLIC (shown to everyone). */}
+            <>
+                {canSeeMemberContent && (<>
                 <button
                   onClick={() => {
                     navigate('/members');
@@ -781,6 +802,7 @@ export default function Navbar() {
                   <Shield className="h-5 w-5" />
                   Teams Directory
                 </button>
+                </>)}
                 <button
                   onClick={() => {
                     navigate('/retailers');
@@ -810,7 +832,6 @@ export default function Navbar() {
                   Manufacturers
                 </button>
               </>
-            )}
 
             {/* Rulebooks Section */}
             <div className="border-t border-slate-700 mt-2 pt-2">

@@ -451,9 +451,12 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
       try {
         await eventsApi.delete(id);
         fetchEvents();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error deleting event:', error);
-        alert('Error deleting event. Please try again.');
+        // Surface the real reason from the server (e.g. "still has 50
+        // competition results") instead of a generic "try again".
+        const serverMessage = error?.response?.data?.message || error?.message;
+        alert(serverMessage || 'Error deleting event. Please try again.');
       }
     }
   };

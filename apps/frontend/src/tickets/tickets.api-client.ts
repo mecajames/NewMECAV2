@@ -503,4 +503,14 @@ export interface TicketUserReport {
       end_date: string | null;
     } | null;
   } | null;
+  // The submitter's most recent other tickets (newest first, excludes the
+  // ticket being viewed). Matched by linked profile + email so it covers both
+  // member and guest-flow submissions.
+  recent_tickets: Array<{
+    id: string;
+    ticket_number: string;
+    title: string;
+    status: string;
+    created_at: string | null;
+  }>;
 }
