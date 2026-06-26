@@ -9,9 +9,10 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { IS_PUBLIC_MEMBER_KEY } from './public-member.decorator';
 import { Profile } from '../profiles/profiles.entity';
+import { Membership } from '../memberships/memberships.entity';
 import { isAdminUser } from './is-admin.helper';
 import { MembershipCompsService } from '../membership-comps/membership-comps.service';
-import { UserRole } from '@newmeca/shared';
+import { UserRole, PaymentStatus } from '@newmeca/shared';
 
 /**
  * Backend enforcement of the "expired members cannot access member-only
@@ -86,8 +87,34 @@ export class ActiveMembershipGuard implements CanActivate {
       return true;
     }
 
-    // Active paid membership
-    if (profile.membership_status === 'active') return true;
+    // Active paid membership.
+    //
+    // `membership_status` is a DENORMALIZED field synced by daily crons
+    // (1 AM / 6 AM). On its own it can be STALE: a membership that lapsed
+    // hours ago still reads 'active' until the next sync, which let
+    // just-expired members through. So we corroborate against the cached
+    // expiry, and — only in the suspicious case — against the source of
+    // truth, so we never falsely lock out a genuinely paid member:
+    //   - expiry in the future, or null (lifetime/forever/comp) → trust it
+    //   - expiry in the PAST → the cached status is likely stale; confirm
+    //     there's really no paid, unexpired membership before continuing on
+    //     to the comp check / rejection.
+    if (profile.membership_status === 'active') {
+      const now = new Date();
+      const expiry = profile.membership_expiry ? new Date(profile.membership_expiry) : null;
+      if (!expiry || expiry >= now) return true;
+
+      // Cached status says active but the cached expiry has passed — verify
+      // against the memberships table before trusting it. This extra query
+      // only runs in this rare stale-status edge, not on the hot path.
+      const validMembership = await em.findOne(Membership, {
+        user: userId,
+        paymentStatus: PaymentStatus.PAID,
+        $or: [{ endDate: null }, { endDate: { $gte: now } }],
+      });
+      if (validMembership) return true;
+      // Otherwise fall through: genuinely lapsed, check comps then reject.
+    }
 
     // Comp period exemption — treat free-period comps as active
     const hasComp = await this.compsService.hasActiveCompPeriod(userId);

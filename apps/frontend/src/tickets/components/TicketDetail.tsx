@@ -2407,6 +2407,44 @@ export function TicketDetail({
                   </div>
                 )}
 
+                {/* Recent tickets from the same user (newest first, excludes
+                    this one). Matched by linked profile + email so it covers
+                    both member and guest-flow submissions. Each links to the
+                    admin detail view in a new tab. */}
+                {userReport.recent_tickets && userReport.recent_tickets.length > 0 && (
+                  <div className="mt-1 pt-3 border-t border-slate-700 space-y-2">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-500">Recent tickets from this user</p>
+                    <div className="space-y-2">
+                      {userReport.recent_tickets.map((t) => (
+                        <a
+                          key={t.id}
+                          href={`/admin/tickets/${t.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-lg bg-slate-900/50 border border-slate-700 px-3 py-2 hover:border-orange-500/50 hover:bg-slate-900 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono text-gray-400 group-hover:text-orange-400 flex items-center gap-1 min-w-0">
+                              <Hash className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{t.ticket_number}</span>
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700 text-gray-300 capitalize flex-shrink-0">
+                              {t.status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-2 mt-1">
+                            <span className="text-white text-xs leading-snug break-words">{t.title}</span>
+                            <ExternalLink className="w-3 h-3 text-gray-500 group-hover:text-orange-400 flex-shrink-0 mt-0.5" />
+                          </div>
+                          {t.created_at && (
+                            <span className="text-[10px] text-gray-500 mt-1 block">{formatDate(t.created_at)}</span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-1 pt-3 border-t border-slate-700 space-y-1">
                   <p className="text-[10px] uppercase tracking-wider text-gray-500">This ticket submission</p>
                   {userReport.submission.created_at && (

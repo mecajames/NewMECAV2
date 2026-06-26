@@ -104,22 +104,22 @@ export class TeamsController {
     return this.teamsService.findAll();
   }
 
-  // Public endpoint - get all public teams for directory
-  @Public()
+  // Member-only: the team directory is gated content. Dropping @Public() makes
+  // the global ActiveMembershipGuard require an active membership (or privileged
+  // role), matching the <MemberOnlyGate> on /teams. (Route path kept as
+  // 'public' for client compatibility.)
   @Get('public')
   async getPublicTeams(): Promise<Team[]> {
     return this.teamsService.findAllPublicTeams();
   }
 
-  // Public endpoint - get public team by ID
-  @Public()
+  // Member-only: individual team profile (/teams/:id). See getPublicTeams.
   @Get('public/:id')
   async getPublicTeamById(@Param('id') id: string): Promise<Team | null> {
     return this.teamsService.getPublicTeamById(id);
   }
 
-  // Public endpoint - get team stats (optionally filtered by season)
-  @Public()
+  // Member-only: team stats for the team profile page (optionally season-filtered).
   @Get('public/:id/stats')
   async getTeamPublicStats(
     @Param('id') id: string,
@@ -128,9 +128,8 @@ export class TeamsController {
     return this.teamsService.getTeamPublicStats(id, seasonId);
   }
 
-  // Public endpoint - full team analytics (leaderboard, charts, class
-  // leaders, wattage/frequency, records, rank), optionally season-filtered
-  @Public()
+  // Member-only: full team analytics (leaderboard, charts, class leaders,
+  // wattage/frequency, records, rank), optionally season-filtered.
   @Get('public/:id/analytics')
   async getTeamAnalytics(
     @Param('id') id: string,

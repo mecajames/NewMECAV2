@@ -245,6 +245,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/members',
         },
         {
+          icon: AlertCircle,
+          title: 'Name Mismatches',
+          description: "Find members whose current name doesn't match the name on their original order",
+          action: 'name-mismatches',
+          color: 'amber',
+          navigateTo: '/admin/name-mismatches',
+        },
+        {
           icon: Users,
           title: 'Team Management',
           description: 'Search teams, fix ownership, and manage team rosters',

@@ -185,13 +185,29 @@ export class TicketsService {
     if (event_id) andClauses.push({ event: event_id });
 
     if (search) {
-      andClauses.push({
-        $or: [
-          { title: { $like: `%${search}%` } },
-          { description: { $like: `%${search}%` } },
-          { ticketNumber: { $like: `%${search}%` } },
-        ],
-      });
+      const like = `%${search}%`;
+      const orClauses: any[] = [
+        { title: { $ilike: like } },
+        { description: { $ilike: like } },
+        { ticketNumber: { $ilike: like } },
+        // Guest-flow tickets carry the submitter's name/email on the ticket
+        // itself (no linked profile), so match those directly too.
+        { guestName: { $ilike: like } },
+        { guestEmail: { $ilike: like } },
+      ];
+      // Also match the LINKED reporter by name / email / MECA ID. Resolved to
+      // profile IDs via a pre-query (same approach as the last_reply_by /
+      // waiting_on filters above) and folded in as a plain FK `$in` predicate
+      // — so searching a member's name (or MECA ID / email) returns EVERY
+      // ticket that member ever filed, not just ones whose title/body happens
+      // to contain the term. Keeping it an FK column condition (rather than a
+      // relation join inside the $or) avoids dropping guest tickets whose
+      // reporter is null.
+      const matchingProfileIds = await this.findProfileIdsBySearch(em, search);
+      if (matchingProfileIds.length > 0) {
+        orClauses.push({ reporter: { $in: matchingProfileIds } });
+      }
+      andClauses.push({ $or: orClauses });
     }
 
     // Last-reply-by filter. Resolved at the SQL level into a set of
@@ -260,6 +276,72 @@ export class TicketsService {
     });
 
     return { data: dataWithLastReply as any, total };
+  }
+
+  /**
+   * Resolve a free-text search term to the set of profile IDs whose name,
+   * email, or MECA ID matches. Used by findAll() so a ticket search by a
+   * member's name / email / MECA ID returns EVERY ticket that member filed
+   * (matched on the reporter FK), not just ones whose title or body contains
+   * the term. Matches first/last/full name so "John", "Smith", and
+   * "John Smith" all resolve. Capped so a very broad term can't balloon the
+   * follow-up `$in`.
+   */
+  private async findProfileIdsBySearch(em: EntityManager, search: string): Promise<string[]> {
+    const conn = em.getConnection();
+    const like = `%${search}%`;
+    const rows = await conn.execute<any[]>(
+      `SELECT id FROM public.profiles
+       WHERE first_name ILIKE ?
+          OR last_name ILIKE ?
+          OR full_name ILIKE ?
+          OR email ILIKE ?
+          OR COALESCE(meca_id, '') ILIKE ?
+       LIMIT 1000`,
+      [like, like, like, like, like],
+    );
+    return rows.map((r: any) => r.id);
+  }
+
+  /**
+   * The most recent tickets filed by the same person, newest first,
+   * excluding the ticket currently being viewed. Matches BOTH the linked
+   * profile (member tickets) AND the email (guest-flow tickets) so staff see
+   * the full history regardless of how each ticket was submitted. Returns a
+   * lightweight shape (id / number / subject / status / date) for the
+   * "Recent tickets" list in the admin User Report panel.
+   */
+  private async findRecentTicketsForUser(
+    em: EntityManager,
+    profileId: string | null,
+    email: string | null,
+    excludeTicketId: string,
+    limit: number,
+  ): Promise<Array<{ id: string; ticket_number: string; title: string; status: string; created_at: string | null }>> {
+    const identityClauses: any[] = [];
+    if (profileId) identityClauses.push({ reporter: profileId });
+    if (email) identityClauses.push({ guestEmail: email });
+    if (identityClauses.length === 0) return [];
+
+    const where: any = {
+      $and: [
+        { id: { $ne: excludeTicketId } },
+        identityClauses.length === 1 ? identityClauses[0] : { $or: identityClauses },
+      ],
+    };
+
+    const tickets = await em.find(Ticket, where, {
+      orderBy: { createdAt: 'DESC' },
+      limit,
+    });
+
+    return tickets.map((t) => ({
+      id: t.id,
+      ticket_number: t.ticketNumber,
+      title: t.title,
+      status: t.status,
+      created_at: t.createdAt ? t.createdAt.toISOString() : null,
+    }));
   }
 
   /**
@@ -636,6 +718,16 @@ export class TicketsService {
       submitterType = 'guest_no_account';
     }
 
+    // The submitter's last few other tickets, so staff can see prior history
+    // at a glance from the User Report panel.
+    const recentTickets = await this.findRecentTicketsForUser(
+      em,
+      profile?.id || null,
+      email,
+      ticketId,
+      5,
+    );
+
     return {
       submitter_type: submitterType,
       name,
@@ -647,6 +739,7 @@ export class TicketsService {
         created_at: ticket.createdAt ? ticket.createdAt.toISOString() : null,
       },
       known_account: knownAccount,
+      recent_tickets: recentTickets,
     };
   }
 

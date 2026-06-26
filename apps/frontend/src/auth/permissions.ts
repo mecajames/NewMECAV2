@@ -51,6 +51,23 @@ export function hasActiveMembership(profile: MaybeProfile): boolean {
   return !!profile && profile.membership_status === 'active';
 }
 
+/**
+ * Can this profile view member-only content — the member/team directories,
+ * member competition results, and the standings/Top-10 pages?
+ *
+ * Single source of truth for the frontend half of the member gate. MUST mirror
+ * the backend ActiveMembershipGuard exemption matrix so the two never diverge:
+ * an ACTIVE paid membership, OR a privileged role (admin / staff / super-admin /
+ * event_director / judge). Expired and 'none'/'inactive'/'pending' members are
+ * NOT members for this purpose. Used by <MemberOnlyGate> and the Navbar.
+ */
+export function canViewMemberContent(profile: MaybeProfile): boolean {
+  if (!profile) return false;
+  if (isAdmin(profile)) return true; // admin, staff, protected super-admins
+  if (profile.role === 'event_director' || profile.role === 'judge') return true;
+  return hasActiveMembership(profile);
+}
+
 /** Event Directors get into ED-only tools regardless of paid-membership status. */
 export function canSeeEDTools(profile: MaybeProfile): boolean {
   if (!profile) return false;

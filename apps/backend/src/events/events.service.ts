@@ -1,9 +1,10 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { Event } from './events.entity';
 import { Season } from '../seasons/seasons.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
 import { EventDirectorAssignment } from '../event-directors/event-director-assignment.entity';
 import {
@@ -642,6 +643,26 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
+
+    // High-value dependents we must NOT silently destroy: competition results
+    // (they drive standings + World Finals invites) and registrations (members
+    // signed up / paid). Surface a specific, actionable reason rather than
+    // letting the DB throw an opaque foreign-key 500. Any OTHER blocking
+    // reference is caught + explained by the global AllExceptionsFilter.
+    const [resultsCount, registrationsCount] = await Promise.all([
+      em.count(CompetitionResult, { event: id }),
+      em.count(EventRegistration, { event: id }),
+    ]);
+    const blockers: string[] = [];
+    if (resultsCount > 0) blockers.push(`${resultsCount} competition result${resultsCount === 1 ? '' : 's'}`);
+    if (registrationsCount > 0) blockers.push(`${registrationsCount} registration${registrationsCount === 1 ? '' : 's'}`);
+    if (blockers.length > 0) {
+      throw new ConflictException(
+        `Can't delete "${event.title}" because it still has ${blockers.join(' and ')}. ` +
+        `Remove or reassign ${blockers.length > 1 ? 'them' : 'it'} first, then delete the event.`,
+      );
+    }
+
     await em.removeAndFlush(event);
   }
 

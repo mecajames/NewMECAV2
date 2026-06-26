@@ -269,7 +269,7 @@ function App() {
               <Route path="/events/:eventId/register" element={<L><EventRegistrationCheckoutPage /></L>} />
               <Route path="/events/:eventId/check-in" element={<L><EventCheckInPage /></L>} />
               <Route path="/results" element={<ResultsPage />} />
-              <Route path="/results/member/:mecaId" element={<L><MemberResultsPage /></L>} />
+              <Route path="/results/member/:mecaId" element={<L><MemberOnlyGate><MemberResultsPage /></MemberOnlyGate></L>} />
               <Route path="/leaderboard" element={<L><MemberOnlyGate><LeaderboardPage /></MemberOnlyGate></L>} />
               <Route path="/standings" element={<L><MemberOnlyGate><StandingsPage /></MemberOnlyGate></L>} />
               <Route path="/team-standings" element={<L><MemberOnlyGate><TeamStandingsPage /></MemberOnlyGate></L>} />
@@ -300,13 +300,14 @@ function App() {
               {/* Public Invoice Payment Route */}
               <Route path="/pay/invoice/:invoiceId" element={<L><InvoicePaymentPage /></L>} />
 
-              {/* Public Member Directory Routes */}
-              <Route path="/members" element={<L><MemberDirectoryPage /></L>} />
-              <Route path="/members/:id" element={<L><MemberProfilePage /></L>} />
+              {/* Member Directory Routes — member-only content. Gated so
+                  expired / non-members never mount the page or fetch data. */}
+              <Route path="/members" element={<L><MemberOnlyGate><MemberDirectoryPage /></MemberOnlyGate></L>} />
+              <Route path="/members/:id" element={<L><MemberOnlyGate><MemberProfilePage /></MemberOnlyGate></L>} />
 
-              {/* Public Team Directory Routes */}
-              <Route path="/teams" element={<L><TeamDirectoryPage /></L>} />
-              <Route path="/teams/:id" element={<L><TeamPublicProfilePage /></L>} />
+              {/* Team Directory Routes — member-only content. */}
+              <Route path="/teams" element={<L><MemberOnlyGate><TeamDirectoryPage /></MemberOnlyGate></L>} />
+              <Route path="/teams/:id" element={<L><MemberOnlyGate><TeamPublicProfilePage /></MemberOnlyGate></L>} />
 
               {/* Public Business Directory Routes */}
               <Route path="/retailers" element={<L><RetailerDirectoryPage /></L>} />
