@@ -26,6 +26,7 @@ import { TicketCannedResponsesController } from './ticket-canned-responses.contr
 import { TicketSystemFiltersController } from './ticket-system-filters.controller';
 import { TicketQuickLinksService } from './ticket-quick-links.service';
 import { TicketQuickLinksController } from './ticket-quick-links.controller';
+import { TicketConfigSyncService } from './ticket-config-sync.service';
 
 @Module({
   imports: [UploadsModule, forwardRef(() => StripeModule), forwardRef(() => PayPalModule), RefundsModule],
@@ -55,6 +56,7 @@ import { TicketQuickLinksController } from './ticket-quick-links.controller';
     SavedTicketFiltersService,
     TicketCannedResponsesService,
     TicketQuickLinksService,
+    TicketConfigSyncService,
   ],
   exports: [
     TicketsService,

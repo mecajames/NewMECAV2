@@ -98,6 +98,19 @@ export default function MemberDetailPage() {
   const [showManualRenewal, setShowManualRenewal] = useState(false);
   const [showAssignSubscription, setShowAssignSubscription] = useState(false);
   const [renewalRefreshKey, setRenewalRefreshKey] = useState(0);
+  // Pre-select state for the per-card Manual Renewal / Assign Subscription
+  // modals. The cards live in <MembershipsTab>, which triggers the openers
+  // below via props (the modals + show flags live here in the parent).
+  const [manualRenewalMembershipId, setManualRenewalMembershipId] = useState<string | null>(null);
+  const [assignSubMembershipId, setAssignSubMembershipId] = useState<string | null>(null);
+  const openManualRenewalFor = (membershipId: string) => {
+    setManualRenewalMembershipId(membershipId);
+    setShowManualRenewal(true);
+  };
+  const openAssignSubscriptionFor = (membershipId: string) => {
+    setAssignSubMembershipId(membershipId);
+    setShowAssignSubscription(true);
+  };
   // "Restore MECA ID & Points" — shown only when the member's latest renewal
   // got a NEW MECA ID because the lapse was 31–45 days (admin-only window).
   const [restoreMecaId, setRestoreMecaId] = useState<{ eligible: boolean; oldMecaId?: number; newMecaId?: number; gapDays?: number } | null>(null);
@@ -1102,16 +1115,9 @@ export default function MemberDetailPage() {
                   Reset Password
                 </button>
               )}
-              {hasPermission('edit_user') && (
-                <button
-                  onClick={() => setShowManualRenewal(true)}
-                  className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
-                  title="Renew an existing membership with a manual cash or check payment"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Manual Renewal
-                </button>
-              )}
+              {/* Manual Renewal moved into the per-membership-card "Manage"
+                  dropdown so it's unambiguous which membership is renewed
+                  (master vs. each secondary). No header-level button. */}
               {hasPermission('edit_user') && restoreMecaId?.eligible && (
                 <button
                   onClick={handleRestoreMecaId}
@@ -1123,16 +1129,9 @@ export default function MemberDetailPage() {
                   {restoringMecaId ? 'Restoring…' : 'Restore MECA ID & Points'}
                 </button>
               )}
-              {hasPermission('edit_user') && (
-                <button
-                  onClick={() => setShowAssignSubscription(true)}
-                  className="px-2.5 py-1.5 bg-slate-700 text-white rounded-md hover:bg-slate-600 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
-                  title="Link a Stripe subscription to a membership (pulls real data from Stripe)"
-                >
-                  <Link2 className="h-3.5 w-3.5" />
-                  Assign Subscription
-                </button>
-              )}
+              {/* Assign Subscription moved into the per-membership-card "Manage"
+                  dropdown — it attaches a Stripe subscription to one specific
+                  membership, so it belongs on that card, not the account header. */}
               {hasPermission('send_emails') && (
                 <button
                   onClick={() => setShowMessageModal(true)}
@@ -1153,8 +1152,9 @@ export default function MemberDetailPage() {
           <ManualRenewalModal
             memberId={member.id}
             memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
+            preselectMembershipId={manualRenewalMembershipId}
             open={showManualRenewal}
-            onClose={() => setShowManualRenewal(false)}
+            onClose={() => { setShowManualRenewal(false); setManualRenewalMembershipId(null); }}
             onSuccess={() => {
               setRenewalRefreshKey(k => k + 1);
               fetchMember();
@@ -1168,8 +1168,9 @@ export default function MemberDetailPage() {
           <AssignSubscriptionModal
             memberId={member.id}
             memberName={`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || 'Member'}
+            preselectMembershipId={assignSubMembershipId}
             open={showAssignSubscription}
-            onClose={() => setShowAssignSubscription(false)}
+            onClose={() => { setShowAssignSubscription(false); setAssignSubMembershipId(null); }}
             onSuccess={() => {
               setRenewalRefreshKey(k => k + 1);
               fetchMember();
@@ -1325,7 +1326,14 @@ export default function MemberDetailPage() {
           {activeTab === 'business' && businessMembershipData && <BusinessInfoTab businessMembershipData={businessMembershipData} onUpdate={fetchMembershipStatusForHeader} />}
           {activeTab === 'media' && <MediaGalleryTab member={member} />}
           {activeTab === 'teams' && <TeamsTab member={member} businessMembershipData={businessMembershipData} />}
-          {activeTab === 'memberships' && <MembershipsTab key={renewalRefreshKey} member={member} />}
+          {activeTab === 'memberships' && (
+            <MembershipsTab
+              key={renewalRefreshKey}
+              member={member}
+              onOpenManualRenewal={openManualRenewalFor}
+              onOpenAssignSubscription={openAssignSubscriptionFor}
+            />
+          )}
           {activeTab === 'orders' && <OrdersInvoicesTab member={member} />}
           {activeTab === 'events' && <EventRegistrationsTab member={member} />}
           {activeTab === 'results' && <CompetitionResultsTab member={member} />}
@@ -3800,7 +3808,7 @@ function TeamsTab({ member, businessMembershipData }: {
           location: teamData.location || '',
           website: teamData.website || '',
           maxMembers: teamData.maxMembers || 50,
-          teamType: teamData.teamType || 'competitive',
+          teamType: (teamData.teamType || 'competitive') as 'competitive' | 'casual' | 'shop' | 'club',
           isPublic: teamData.isPublic ?? true,
           requiresApproval: teamData.requiresApproval ?? true,
         });
@@ -4160,7 +4168,7 @@ function TeamsTab({ member, businessMembershipData }: {
               </div>
               <div>
                 <span className="text-gray-500">Created</span>
-                <p className="text-white">{formatDate(team.createdAt)}</p>
+                <p className="text-white">{formatDate(team.createdAt ?? '')}</p>
               </div>
               <div>
                 <span className="text-gray-500">Public</span>
@@ -4689,7 +4697,11 @@ function isSuperAdmin(profile: Profile | null): boolean {
   return PROTECTED_MECA_IDS.includes(String(profile.meca_id));
 }
 
-function MembershipsTab({ member }: { member: Profile }) {
+function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription }: {
+  member: Profile;
+  onOpenManualRenewal: (membershipId: string) => void;
+  onOpenAssignSubscription: (membershipId: string) => void;
+}) {
   const navigate = useNavigate();
   const { profile: currentUserProfile } = useAuth();
   const { hasPermission } = usePermissions();
@@ -4805,16 +4817,6 @@ function MembershipsTab({ member }: { member: Profile }) {
   const [endDateSuccess, setEndDateSuccess] = useState<string | null>(null);
   const [endDateError, setEndDateError] = useState<string | null>(null);
 
-  const handleStartEditEndDate = (membership: Membership) => {
-    const currentDate = membership.endDate
-      ? new Date(membership.endDate).toISOString().split('T')[0]
-      : '';
-    setEditingEndDateId(membership.id);
-    setEditEndDateValue(currentDate);
-    setEndDateSuccess(null);
-    setEndDateError(null);
-  };
-
   const handleCancelEditEndDate = () => {
     setEditingEndDateId(null);
     setEditEndDateValue('');
@@ -4919,6 +4921,56 @@ function MembershipsTab({ member }: { member: Profile }) {
   const handleMembershipCreated = (result: AdminCreateMembershipResult) => {
     fetchMemberships();
     alert(result.message);
+  };
+
+  // Which membership card's "Manage" dropdown is open (null = none).
+  const [manageMenuId, setManageMenuId] = useState<string | null>(null);
+  // Latest payment per membership (id → { amount, paidAt, status, orderId, invoiceId, ... })
+  // for the "last payment" quick info + order/invoice links on each card.
+  const [lastPaymentByMembership, setLastPaymentByMembership] = useState<Record<string, any>>({});
+
+  // MembershipsTab is re-keyed by renewalRefreshKey in the parent, so it
+  // remounts (and this refetches) after a renewal — no extra dependency needed.
+  useEffect(() => {
+    if (!member?.id) return;
+    axios.get(`/api/payments/user/${member.id}/latest-by-membership`)
+      .then((res) => setLastPaymentByMembership(res.data || {}))
+      .catch(() => setLastPaymentByMembership({}));
+  }, [member?.id]);
+
+  const handleCancelMembership = async (m: Membership) => {
+    const reason = window.prompt('Reason for cancelling this membership? (minimum 5 characters)');
+    if (reason === null) return;
+    if (reason.trim().length < 5) { alert('A reason of at least 5 characters is required.'); return; }
+    try {
+      await membershipsApi.adminCancelImmediately(m.id, reason.trim());
+      fetchMemberships();
+      alert('Membership cancelled.');
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to cancel membership.');
+    }
+  };
+
+  const handleCancelAndRefund = async (m: Membership) => {
+    const amt = (m as any).amountPaid ? `$${(m as any).amountPaid}` : 'the payment';
+    const reason = window.prompt(
+      `Reason for refunding + cancelling this membership? (minimum 5 characters)\n\nThis issues a FULL refund of ${amt} through Stripe/PayPal and cancels the membership.`,
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) { alert('A reason of at least 5 characters is required.'); return; }
+    if (!confirm(`Refund ${amt} and cancel this membership now? The money is returned at the payment processor. This cannot be undone.`)) return;
+    // For duplicate/fraudulent accounts: optionally lock the account so the
+    // member can no longer log in with these credentials.
+    const closeAccount = confirm(
+      'Also CLOSE THE ACCOUNT (block login)?\n\nOK = refund + cancel + disable login (they cannot sign in anymore).\nCancel = refund + cancel only (account stays usable).',
+    );
+    try {
+      const res = await membershipsApi.adminRefund(m.id, reason.trim(), undefined, closeAccount);
+      fetchMemberships();
+      alert(res?.message || 'Refund processed and membership cancelled.');
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to refund membership.');
+    }
   };
 
   const handleDeleteMembership = async (membershipId: string) => {
@@ -5775,28 +5827,78 @@ function MembershipsTab({ member }: { member: Profile }) {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-2 sm:ml-4 self-end sm:self-start">
-                    {/* Record Payment & Reactivate — for any membership that
-                        isn't PAID. Covers cash/check handed to an ED, an offline
-                        deposit, AND recording a Stripe payment (pi_/sub_) whose
-                        webhook never processed so the row stuck unpaid. Marks the
-                        row PAID and re-syncs the profile to active. */}
-                    {membership.paymentStatus !== 'paid' && (
+                    {/* Manage — membership lifecycle actions. Replaces the
+                        standalone Record Payment / Renew buttons with a single
+                        dropdown: Record Payment, Manual Renewal, Cancel, and
+                        Cancel & Refund. */}
+                    <div className="relative">
                       <button
-                        onClick={() => {
-                          setApplyPaymentMembership(membership);
-                          setApplyPaymentMode(isExpired(membership.endDate || '') ? 'renew' : 'reactivate');
-                          setApplyPaymentMethod('cash');
-                          setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
-                          setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
-                          setApplyPaymentError(null);
-                        }}
-                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors inline-flex items-center gap-1.5"
-                        title="Record a cash, check, or Stripe payment and reactivate the account"
+                        onClick={() => setManageMenuId(manageMenuId === membership.id ? null : membership.id)}
+                        className="px-3 py-1.5 text-sm bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors inline-flex items-center gap-1.5"
+                        title="Manage this membership"
                       >
-                        <DollarSign className="h-4 w-4" />
-                        Record Payment
+                        Manage
+                        <ChevronDown className="h-4 w-4" />
                       </button>
-                    )}
+                      {manageMenuId === membership.id && (
+                        <div
+                          className="absolute right-0 mt-1 w-60 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-30 py-1"
+                          onMouseLeave={() => setManageMenuId(null)}
+                        >
+                          <button
+                            onClick={() => {
+                              setManageMenuId(null);
+                              setApplyPaymentMembership(membership);
+                              // Pick the right mode: paid+expired → renew (new
+                              // term); unpaid → renew if lapsed else reactivate;
+                              // paid+active → record an extra payment only.
+                              setApplyPaymentMode(
+                                membership.paymentStatus !== 'paid'
+                                  ? (isExpired(membership.endDate || '') ? 'renew' : 'reactivate')
+                                  : (isExpired(membership.endDate || '') ? 'renew' : 'payment_only'),
+                              );
+                              setApplyPaymentMethod('cash');
+                              setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+                              setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+                              setApplyPaymentError(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                          >
+                            <DollarSign className="h-4 w-4 text-emerald-400" />
+                            Record Payment
+                          </button>
+                          <button
+                            onClick={() => { setManageMenuId(null); onOpenManualRenewal(membership.id); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                          >
+                            <RefreshCw className="h-4 w-4 text-blue-400" />
+                            Manual Renewal
+                          </button>
+                          <button
+                            onClick={() => { setManageMenuId(null); onOpenAssignSubscription(membership.id); }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                          >
+                            <Link2 className="h-4 w-4 text-purple-400" />
+                            Assign Subscription
+                          </button>
+                          <div className="border-t border-slate-700 my-1" />
+                          <button
+                            onClick={() => { setManageMenuId(null); handleCancelMembership(membership); }}
+                            className="w-full text-left px-4 py-2 text-sm text-amber-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                          >
+                            <X className="h-4 w-4" />
+                            Cancel membership
+                          </button>
+                          <button
+                            onClick={() => { setManageMenuId(null); handleCancelAndRefund(membership); }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                            Cancel &amp; Refund
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     {/* Add Secondary button - only for non-secondary memberships with paid status */}
                     {(membership as any).accountType !== 'secondary' && membership.paymentStatus === 'paid' && (
                       <button
@@ -5932,6 +6034,45 @@ function MembershipsTab({ member }: { member: Profile }) {
                   </div>
                 </div>
               )}
+
+              {/* Last payment for THIS membership — quick info + deep links to
+                  the full order / invoice (the payment itself is shown inline). */}
+              {lastPaymentByMembership[membership.id] && (() => {
+                const lp = lastPaymentByMembership[membership.id];
+                return (
+                  <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm">
+                        <span className="text-gray-400">Last payment: </span>
+                        <span className="text-white font-medium">${Number(lp.amount).toFixed(2)}</span>
+                        {lp.paidAt && (
+                          <span className="text-gray-400"> · {new Date(lp.paidAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                        )}
+                        {lp.status && (
+                          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full capitalize ${lp.status === 'refunded' ? 'bg-orange-500/10 text-orange-400' : 'bg-green-500/10 text-green-400'}`}>
+                            {lp.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        {lp.orderId && (
+                          <a href={`/admin/billing/orders/${lp.orderId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" /> View order{lp.orderNumber ? ` ${lp.orderNumber}` : ''}
+                          </a>
+                        )}
+                        {lp.invoiceId && (
+                          <a href={`/admin/billing/invoices/${lp.invoiceId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" /> View invoice
+                          </a>
+                        )}
+                        {!lp.orderId && !lp.invoiceId && (
+                          <span className="text-gray-500">No order/invoice — use "Rebuild billing records"</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Comps section — admin grant/list/revoke for free periods,
                   free secondary slots, and renewal discounts. Hidden when
@@ -6719,8 +6860,54 @@ function MembershipsTab({ member }: { member: Profile }) {
 function OrdersInvoicesTab({ member }: { member: Profile }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'orders' | 'invoices'>('orders');
+  const [activeSubTab, setActiveSubTab] = useState<'orders' | 'invoices' | 'payments'>('orders');
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  // James-only billing backfill (rebuild missing Order/Invoice/Payment records).
+  const { profile: currentProfile } = useAuth();
+  const isOwner = String((currentProfile as any)?.meca_id) === '202401';
+  const [reloadKey, setReloadKey] = useState(0);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillReport, setBackfillReport] = useState<any | null>(null);
+  const [refundingRow, setRefundingRow] = useState<string | null>(null);
+
+  // Refund + cancel (and optionally close the account) from a billing row —
+  // resolves the membership the payment/order/invoice belongs to on the server.
+  const handleRefundRow = async (kind: 'payment' | 'order' | 'invoice', id: string) => {
+    const reason = window.prompt(
+      `Reason for refunding + cancelling the membership linked to this ${kind}? (minimum 5 characters)\n\nThis issues a FULL refund through Stripe/PayPal and cancels the membership.`,
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) { alert('A reason of at least 5 characters is required.'); return; }
+    if (!confirm(`Refund and cancel the membership linked to this ${kind}? The money is returned at the payment processor. This cannot be undone.`)) return;
+    const closeAccount = confirm(
+      'Also CLOSE THE ACCOUNT (block login)?\n\nOK = refund + cancel + disable login (they cannot sign in anymore).\nCancel = refund + cancel only.',
+    );
+    setRefundingRow(id);
+    try {
+      const res = await axios.post('/api/memberships/admin/refund-by-billing', { kind, id, reason: reason.trim(), closeAccount });
+      alert(res.data?.message || 'Refund processed and membership cancelled.');
+      setReloadKey((k) => k + 1);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Refund failed.');
+    } finally {
+      setRefundingRow(null);
+    }
+  };
+
+  const runBackfill = async (apply: boolean) => {
+    setBackfilling(true);
+    try {
+      const res = await axios.post(`/api/payments/admin/backfill-member/${member.id}?dryRun=${apply ? 'false' : 'true'}`);
+      setBackfillReport({ ...res.data, applied: apply });
+      if (apply) setReloadKey((k) => k + 1); // refresh the lists
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Backfill failed.');
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -6728,14 +6915,19 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
         setLoading(true);
         // axios (not raw fetch) — the interceptor attaches the Authorization
         // header; bare fetch sent these unauthenticated and they 401'd.
-        const [ordersRes, invoicesRes] = await Promise.all([
+        // Payments are fetched too: subscription renewals (and some other
+        // flows) write a Payment row even when no Order/Invoice was created,
+        // so without this the admin can't see money that actually came in.
+        const [ordersRes, invoicesRes, paymentsRes] = await Promise.all([
           axios.get(`/api/orders/user/${member.id}`),
           axios.get(`/api/invoices/user/${member.id}`),
+          axios.get(`/api/payments/user/${member.id}`).catch(() => ({ data: [] })),
         ]);
         setOrders(ordersRes.data?.data || ordersRes.data || []);
         setInvoices(invoicesRes.data?.data || invoicesRes.data || []);
+        setPayments(paymentsRes.data?.data || paymentsRes.data || []);
       } catch (error) {
-        console.error('Error fetching orders/invoices:', error);
+        console.error('Error fetching orders/invoices/payments:', error);
       } finally {
         setLoading(false);
       }
@@ -6744,7 +6936,19 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
     if (member.id) {
       fetchData();
     }
-  }, [member.id]);
+  }, [member.id, reloadKey]);
+
+  const handleResendInvoice = async (invoiceId: string) => {
+    setResendingId(invoiceId);
+    try {
+      await axios.post(`/api/invoices/${invoiceId}/resend`);
+      alert('Invoice email re-sent.');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to resend the invoice.');
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -6786,7 +6990,47 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-white mb-6">Orders & Invoices</h2>
+      <h2 className="text-2xl font-bold text-white mb-6">Orders, Invoices &amp; Payments</h2>
+
+      {/* Owner-only: rebuild missing billing records for this member. Older
+          subscription buyers can have a membership but no Order/Invoice/Payment
+          (capture gap) — this reconstructs them from the membership + gateway
+          data. Preview first; Apply writes the records (no emails sent). */}
+      {isOwner && (
+        <div className="bg-slate-800 rounded-xl border border-orange-500/30 p-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-white font-medium">Rebuild billing records</p>
+              <p className="text-sm text-gray-400">
+                Recreate any missing Order / Invoice / Payment rows for this member's paid memberships. Owner-only. No emails are sent.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => runBackfill(false)}
+                disabled={backfilling}
+                className="px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-50"
+              >
+                {backfilling ? 'Working…' : 'Preview'}
+              </button>
+              <button
+                onClick={() => runBackfill(true)}
+                disabled={backfilling}
+                className="px-3 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg disabled:opacity-50"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+          {backfillReport && (
+            <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${backfillReport.applied ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'}`}>
+              {backfillReport.applied
+                ? `✓ Applied — created ${backfillReport.created?.payments ?? 0} payment(s) and ${backfillReport.created?.orders ?? 0} order/invoice record(s).`
+                : `Preview — ${backfillReport.memberships_missing_payment?.length ?? 0} membership(s) with no payment and ${backfillReport.payments_missing_order?.length ?? 0} payment(s) missing an order/invoice would be rebuilt. Click Apply to commit.`}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <div className="flex gap-4 mb-6">
@@ -6809,6 +7053,16 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
           }`}
         >
           Invoices ({invoices.length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('payments')}
+          className={`px-4 py-2 rounded-lg font-medium ${
+            activeSubTab === 'payments'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Payments ({payments.length})
         </button>
       </div>
 
@@ -6871,6 +7125,15 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                           <Eye className="h-3 w-3" />
                           View Details
                         </a>
+                        {order.status !== 'refunded' && (
+                          <button
+                            onClick={() => handleRefundRow('order', order.id)}
+                            disabled={refundingRow === order.id}
+                            className="ml-2 inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {refundingRow === order.id ? '…' : 'Cancel & Refund'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -6930,14 +7193,119 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                       </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm">
                         <button
-                          onClick={() => window.open(`/api/invoices/${invoice.id}/pdf`, '_blank')}
+                          onClick={async () => {
+                            // Fetch the PDF through authenticated axios (the
+                            // admin endpoint requires a Bearer token) and open
+                            // the resulting blob — a raw window.open() to the
+                            // API sends no token and dumps a 401 JSON page.
+                            try {
+                              const res = await axios.get(`/api/billing/invoices/${invoice.id}/pdf`, { responseType: 'blob' });
+                              const url = URL.createObjectURL(new Blob([res.data], { type: 'text/html' }));
+                              window.open(url, '_blank');
+                              setTimeout(() => URL.revokeObjectURL(url), 10000);
+                            } catch (err: any) {
+                              alert('Could not open the invoice PDF. Please make sure you are signed in as an admin and try again.');
+                            }
+                          }}
                           className="text-blue-400 hover:text-blue-300"
                         >
                           View PDF
                         </button>
+                        <button
+                          onClick={() => handleResendInvoice(invoice.id)}
+                          disabled={resendingId === invoice.id}
+                          className="ml-3 text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                          title="Email this invoice to the member again"
+                        >
+                          {resendingId === invoice.id ? 'Sending…' : 'Resend'}
+                        </button>
+                        {invoice.status !== 'refunded' && (
+                          <button
+                            onClick={() => handleRefundRow('invoice', invoice.id)}
+                            disabled={refundingRow === invoice.id}
+                            className="ml-3 text-red-400 hover:text-red-300 disabled:opacity-50"
+                            title="Refund + cancel the membership linked to this invoice"
+                          >
+                            {refundingRow === invoice.id ? '…' : 'Cancel & Refund'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Payments List */}
+      {activeSubTab === 'payments' && (
+        <>
+          {payments.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <DollarSign className="h-16 w-16 mx-auto mb-4 text-gray-500" />
+              <p>No payments found</p>
+            </div>
+          ) : (
+            <div className="bg-gray-800/50 rounded-lg overflow-x-auto">
+              <table className="min-w-[600px] w-full divide-y divide-gray-700">
+                <thead className="bg-gray-800">
+                  <tr>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Method</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reference</th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
+                    <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase">Amount</th>
+                    <th className="px-4 sm:px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {payments.map((p: any) => {
+                    const ref = p.stripePaymentIntentId || p.stripe_payment_intent_id || p.externalPaymentId || p.external_payment_id || '—';
+                    const when = p.paidAt || p.paid_at || p.createdAt || p.created_at;
+                    const status = p.paymentStatus || p.payment_status || 'unknown';
+                    const refunded = parseFloat(p.amountRefunded || p.amount_refunded || '0');
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-700/50">
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                          {when ? formatDate(when) : '—'}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {(p.paymentType || p.payment_type || '—').toString().replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                          {(p.paymentMethod || p.payment_method || '—').toString().replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-xs font-mono text-blue-400 break-all">
+                          {ref}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(status)}`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-white text-right">
+                          {formatCurrency(p.amount || 0)}
+                          {refunded > 0 && (
+                            <span className="block text-xs text-orange-400">−{formatCurrency(refunded)} refunded</span>
+                          )}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-center">
+                          {status !== 'refunded' && (
+                            <button
+                              onClick={() => handleRefundRow('payment', p.id)}
+                              disabled={refundingRow === p.id}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {refundingRow === p.id ? '…' : 'Cancel & Refund'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

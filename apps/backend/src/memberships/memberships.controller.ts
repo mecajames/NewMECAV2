@@ -29,6 +29,9 @@ import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 import { ZodError } from 'zod';
 import { MembershipsService, AdminAssignMembershipDto, CreateMembershipDto, AdminCreateMembershipResult } from './memberships.service';
 import { Membership } from './memberships.entity';
+import { Payment } from '../payments/payments.entity';
+import { Order } from '../orders/orders.entity';
+import { Invoice } from '../invoices/invoices.entity';
 import { MecaIdService } from './meca-id.service';
 import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembershipInfo, MasterMembershipInfo } from './master-secondary.service';
 import { MembershipSyncService } from './membership-sync.service';
@@ -1318,11 +1321,12 @@ export class MembershipsController {
   async refundMembership(
     @Param('id') membershipId: string,
     @Headers('authorization') authHeader: string,
-    @Body() data: { reason: string; amountCents?: number },
+    @Body() data: { reason: string; amountCents?: number; closeAccount?: boolean },
   ): Promise<{
     success: boolean;
     membership: Membership;
     stripeRefund: { id: string; amount: number; status: string } | null;
+    accountClosed: boolean;
     message: string;
   }> {
     const { profile } = await this.requireAdmin(authHeader);
@@ -1335,14 +1339,76 @@ export class MembershipsController {
     }
 
     const partialNote = data.amountCents !== undefined ? ` (partial: ${data.amountCents} cents)` : '';
-    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId}${partialNote}. Reason: ${data.reason}`);
+    const closeNote = data.closeAccount ? ' + CLOSE ACCOUNT' : '';
+    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId}${partialNote}${closeNote}. Reason: ${data.reason}`);
 
     return this.membershipsService.refundMembership(
       membershipId,
       data.reason,
       profile?.id || 'unknown',
       data.amountCents,
+      data.closeAccount === true,
     );
+  }
+
+  /**
+   * Refund + cancel (and optionally close the account) from a billing ROW — a
+   * payment, order, or invoice. Resolves the membership the row belongs to
+   * (payment → membership; order → its payment → membership; invoice → order →
+   * payment → membership) and runs the same membership refund. Lets the admin
+   * refund directly from the Orders / Invoices / Payments lists.
+   */
+  @Post('admin/refund-by-billing')
+  @HttpCode(HttpStatus.OK)
+  async refundByBilling(
+    @Headers('authorization') authHeader: string,
+    @Body() data: { kind: 'payment' | 'order' | 'invoice'; id: string; reason: string; amountCents?: number; closeAccount?: boolean },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (!data.reason || data.reason.trim().length < 5) {
+      throw new BadRequestException('A reason (at least 5 characters) is required for refund');
+    }
+    if (!data.id || !['payment', 'order', 'invoice'].includes(data.kind)) {
+      throw new BadRequestException('A valid billing kind (payment/order/invoice) and id are required');
+    }
+
+    const membershipId = await this.resolveMembershipForBillingRow(data.kind, data.id);
+    if (!membershipId) {
+      throw new BadRequestException(
+        `Couldn't find a membership linked to this ${data.kind}. Refund it from the membership card instead.`,
+      );
+    }
+
+    this.logger.log(`Admin ${profile?.email} refunding membership ${membershipId} via ${data.kind} ${data.id}${data.closeAccount ? ' + CLOSE ACCOUNT' : ''}`);
+    return this.membershipsService.refundMembership(
+      membershipId,
+      data.reason,
+      profile?.id || 'unknown',
+      data.amountCents,
+      data.closeAccount === true,
+    );
+  }
+
+  /** Walk payment/order/invoice → the membership it belongs to. */
+  private async resolveMembershipForBillingRow(kind: string, id: string): Promise<string | null> {
+    const em = this.em.fork();
+    const membershipIdFromPayment = async (paymentId: string): Promise<string | null> => {
+      const p = await em.findOne(Payment, { id: paymentId }, { populate: ['membership'] });
+      return (p?.membership as any)?.id ?? null;
+    };
+    const membershipIdFromOrder = async (orderId: string): Promise<string | null> => {
+      const o = await em.findOne(Order, { id: orderId }, { populate: ['payment'] });
+      const payId = (o?.payment as any)?.id;
+      return payId ? membershipIdFromPayment(payId) : null;
+    };
+    if (kind === 'payment') return membershipIdFromPayment(id);
+    if (kind === 'order') return membershipIdFromOrder(id);
+    if (kind === 'invoice') {
+      const inv = await em.findOne(Invoice, { id }, { populate: ['order'] });
+      const ordId = (inv?.order as any)?.id;
+      return ordId ? membershipIdFromOrder(ordId) : null;
+    }
+    return null;
   }
 
   /**

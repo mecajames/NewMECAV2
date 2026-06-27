@@ -15,6 +15,8 @@ export interface Profile {
   membership_status: string;
   membership_expiry?: string;
   meca_id?: string;
+  meca_id_invalidated_at?: string | null;
+  restricted_to_billing?: boolean;
   profile_picture_url?: string;
   billing_street?: string;
   billing_city?: string;

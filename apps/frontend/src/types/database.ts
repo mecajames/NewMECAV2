@@ -1,5 +1,7 @@
 // Database Types
-export { UserRole } from '@newmeca/shared';
+// Import (local binding so UserRole is usable as a type below) AND re-export.
+import { UserRole } from '@newmeca/shared';
+export { UserRole };
 export type MembershipStatus = 'none' | 'active' | 'expired' | 'pending' | 'inactive';
 export type EventStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled' | 'not_public';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'unpaid' | 'partially_paid';
@@ -26,6 +28,7 @@ export interface Profile {
   membership_status: MembershipStatus | string;
   membership_expiry?: string;
   meca_id?: string;
+  meca_id_invalidated_at?: string | null;
   profile_picture_url?: string;
   profile_images?: string[];
   // Primary address fields

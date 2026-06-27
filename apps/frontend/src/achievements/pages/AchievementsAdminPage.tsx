@@ -915,7 +915,7 @@ export default function AchievementsAdminPage() {
                 >
                   <option value="">All Groups</option>
                   {uniqueGroups.map((group) => (
-                    <option key={group} value={group}>{group}</option>
+                    <option key={group} value={group ?? ''}>{group}</option>
                   ))}
                 </select>
 
@@ -1129,7 +1129,7 @@ export default function AchievementsAdminPage() {
                 >
                   <option value="">All Groups</option>
                   {uniqueGroups.map((group) => (
-                    <option key={group} value={group}>{group}</option>
+                    <option key={group} value={group ?? ''}>{group}</option>
                   ))}
                 </select>
 

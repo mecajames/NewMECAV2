@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle,
-  Eye, MessageSquare, Settings, Users, FileText, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
-  TrendingUp, TrendingDown, Minus, Star, Bell, Check, Heart
+  Eye, MessageSquare, Settings, Users, Image, BarChart3, UserPlus, Crown, LogOut, Trash2, Plus, X, Loader2,
+  TrendingUp, TrendingDown, Minus, Star, Bell, Check
 } from 'lucide-react';
 import { notificationsApi, Notification } from '@/notifications/notifications.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
@@ -13,7 +13,7 @@ import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
 import { competitionFormatsApi } from '@/competition-formats';
 import { teamsApi, Team, TeamType, TeamMemberRole, CreateTeamDto, UpgradeEligibilityResponse, MemberLookupResult, MyTeamsResponse, TeamPublicStats } from '@/teams';
-import { Camera, Globe, MapPin, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink, ShoppingBag } from 'lucide-react';
+import { Camera, HelpCircle, Upload, Edit3, Shield, ShieldCheck, UserCog, Ticket, Gavel, ClipboardList, Search, Filter, Store, ExternalLink } from 'lucide-react';
 import { getMyJudgeProfile, getMyAssignments as getMyJudgeAssignments, EventJudgeAssignment } from '@/judges';
 import { getMyEventDirectorProfile, getMyEDAssignments, EventDirectorAssignment, EventDirector } from '@/event-directors';
 import { getMyRetailerListing, getMyManufacturerListing } from '@/api-client/business-listings.api-client';
@@ -24,11 +24,9 @@ import {
 } from 'recharts';
 import { EventRatingsPanel } from '@/ratings';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
-import { countries as isoCountries, getStatesForCountry } from '@/utils/countries';
 import { AchievementsGallery } from '@/achievements';
 import { SocialShareButtons } from '@/shared/components';
-import { membershipsApi, Membership, MemberCancelMembershipModal, MembershipCard, TeamUpgradeModal } from '@/memberships';
-import type { CardData } from '@/memberships';
+import { membershipsApi, Membership, MemberCancelMembershipModal, TeamUpgradeModal } from '@/memberships';
 import { Vote } from 'lucide-react';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
 import { billingApi, Invoice } from '@/api-client/billing.api-client';
@@ -103,12 +101,8 @@ export default function MyMecaDashboardPage() {
   // Active membership for displaying membership type badge
   const [activeMembership, setActiveMembership] = useState<Membership | null>(null);
 
-  // Card data for ID Card tab
-  const [cardData, setCardData] = useState<CardData | null>(null);
-  const [cardLoading, setCardLoading] = useState(false);
-
   // Auto-renewal/subscription status
-  const [subscriptionStatus, setSubscriptionStatus] = useState<{
+  const [_subscriptionStatus, setSubscriptionStatus] = useState<{
     autoRenewalStatus: 'on' | 'legacy' | 'off';
     stripeSubscriptionId: string | null;
     hadLegacySubscription: boolean;
@@ -118,7 +112,6 @@ export default function MyMecaDashboardPage() {
       cancelAtPeriodEnd: boolean;
     } | null;
   } | null>(null);
-  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [disableAutoRenewalLoading, setDisableAutoRenewalLoading] = useState(false);
   const [showDisableAutoRenewalModal, setShowDisableAutoRenewalModal] = useState(false);
   const [disableAutoRenewalReason, setDisableAutoRenewalReason] = useState('');
@@ -155,12 +148,6 @@ export default function MyMecaDashboardPage() {
 
   // Event Registrations filter state
   const [seasons, setSeasons] = useState<Season[]>([]);
-  const [registrationFilters, setRegistrationFilters] = useState({
-    search: '',
-    seasonId: '',
-    country: '',
-    state: '',
-  });
 
   // Analytics filter state
   const [analyticsFilters, setAnalyticsFilters] = useState({
@@ -363,33 +350,7 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  const fetchCardData = async () => {
-    setCardLoading(true);
-    try {
-      const data = await membershipsApi.getMyCardData();
-      setCardData(data);
-    } catch {
-      // Silently ignore - card data is optional
-    } finally {
-      setCardLoading(false);
-    }
-  };
-
   // (Membership Card data is now loaded on the standalone /membership/card page; no dashboard prefetch.)
-
-  // Open Stripe Billing Portal for managing payment methods and subscriptions
-  const handleOpenBillingPortal = async () => {
-    setBillingPortalLoading(true);
-    try {
-      const result = await membershipsApi.getBillingPortalUrl(window.location.href);
-      window.open(result.url, '_blank');
-    } catch (error: any) {
-      console.error('Error opening billing portal:', error);
-      alert(error.response?.data?.message || 'Failed to open billing portal. Please try again.');
-    } finally {
-      setBillingPortalLoading(false);
-    }
-  };
 
   // Disable auto-renewal for the member
   const handleDisableAutoRenewal = async () => {
@@ -719,12 +680,17 @@ export default function MyMecaDashboardPage() {
       name: team.name,
       description: team.description || '',
       bio: team.bio || '',
-      team_type: team.teamType,
+      team_type:
+        team.teamType === 'retailer' || team.teamType === 'manufacturer'
+          ? 'shop'
+          : team.teamType === 'competitor_team'
+            ? 'competitive'
+            : team.teamType,
       location: team.location || '',
-      max_members: team.maxMembers,
+      max_members: team.maxMembers ?? 0,
       website: team.website || '',
-      is_public: team.isPublic,
-      requires_approval: team.requiresApproval,
+      is_public: team.isPublic ?? false,
+      requires_approval: team.requiresApproval ?? false,
     });
     setShowEditTeamModal(true);
   };
@@ -1338,80 +1304,6 @@ export default function MyMecaDashboardPage() {
     }
   };
 
-  const renderCard = () => {
-    if (cardLoading) {
-      return (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
-        </div>
-      );
-    }
-
-    if (!cardData) {
-      return (
-        <div className="bg-slate-800 rounded-xl p-8 text-center">
-          <CreditCard className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">No Active Membership</h3>
-          <p className="text-slate-400 mb-6">
-            You need an active MECA membership to view your digital ID card.
-          </p>
-          <button
-            onClick={() => navigate('/membership')}
-            className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-          >
-            Get a Membership
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-6">
-        <div className="bg-slate-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-2">Your Digital Membership Card</h3>
-          <p className="text-slate-400 text-sm mb-6">
-            This is your official MECA membership card. You can print it or show it on your phone at events.
-          </p>
-          <div className="flex justify-center">
-            <MembershipCard
-              memberName={cardData.memberName}
-              mecaId={cardData.mecaId}
-              memberSince={cardData.memberSince}
-              expirationDate={cardData.expirationDate}
-              membershipId={cardData.membershipId}
-            />
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-6">
-          <h4 className="text-md font-semibold text-white mb-3">Card Details</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-slate-500 text-xs uppercase tracking-wider">Name</p>
-              <p className="text-white">{cardData.memberName}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs uppercase tracking-wider">MECA ID</p>
-              <p className="text-orange-400 font-bold">{cardData.mecaId ?? 'Pending'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs uppercase tracking-wider">Membership Type</p>
-              <p className="text-white">{cardData.membershipType}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs uppercase tracking-wider">Status</p>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                cardData.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-              }`}>
-                {cardData.isActive ? 'Active' : 'Expired'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const renderOverview = () => (
     <>
       {/* Stats Grid */}
@@ -1909,7 +1801,7 @@ export default function MyMecaDashboardPage() {
               ))}
               {registrations.length > 3 && (
                 <button
-                  onClick={() => handleTabChange('events')}
+                  onClick={() => handleTabChange('overview')}
                   className="text-orange-500 hover:text-orange-400 text-sm font-medium"
                 >
                   View all {registrations.length} registrations
@@ -2231,48 +2123,6 @@ export default function MyMecaDashboardPage() {
       </div>
     </div>
   );
-
-  const renderGallery = () => {
-    const profileImages = profile?.profile_images || [];
-
-    return (
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-white">Photo Gallery</h2>
-          <button
-            onClick={() => navigate('/public-profile')}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            Manage Photos
-          </button>
-        </div>
-
-        {profileImages.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {profileImages.map((imageUrl, index) => (
-              <div
-                key={index}
-                className="aspect-square rounded-lg overflow-hidden bg-slate-700 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all"
-                onClick={() => window.open(imageUrl, '_blank')}
-              >
-                <img
-                  src={imageUrl}
-                  alt={`Gallery image ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <Image className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">Your competition photos will appear here</p>
-            <p className="text-gray-500 text-sm">Upload photos from your public profile page</p>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderTeam = () => {
     if (teamLoading) {
@@ -3726,309 +3576,6 @@ export default function MyMecaDashboardPage() {
           </div>
         )}
 
-      </div>
-    );
-  };
-
-  const renderEvents = () => {
-    // Get unique country codes from registrations, then resolve to ISO names
-    const uniqueCountryCodes = [...new Set(
-      registrations
-        .map(reg => reg.event?.venue_country)
-        .filter(Boolean)
-    )].sort() as string[];
-
-    // Map country codes to { code, name } using ISO data, falling back to code as name
-    const countryOptions = uniqueCountryCodes.map(code => {
-      const iso = isoCountries.find(c => c.code === code);
-      return { code, name: iso ? iso.name : code };
-    }).sort((a, b) => a.name.localeCompare(b.name));
-
-    // Get state options: if a country is selected, show full ISO state list for that country;
-    // otherwise show unique state codes from registrations
-    const stateOptions = registrationFilters.country
-      ? getStatesForCountry(registrationFilters.country)
-      : [...new Set(
-          registrations
-            .map(reg => reg.event?.venue_state)
-            .filter(Boolean)
-        )].sort().map(code => {
-          // Try to resolve state code from all countries in registrations
-          for (const cc of uniqueCountryCodes) {
-            const states = getStatesForCountry(cc);
-            const found = states.find(s => s.code === code);
-            if (found) return found;
-          }
-          return { code: code as string, name: code as string };
-        });
-
-    // Split registrations into paid/regular and interested
-    const paidRegistrations = registrations.filter(reg => reg.status !== 'interested');
-    const interestedRegistrations = registrations.filter(reg => reg.status === 'interested');
-
-    // Filter registrations based on current filters
-    const applyFilters = (regs: any[]) => regs.filter(reg => {
-      const event = reg.event;
-      if (!event) return false;
-
-      // Search filter - search in event title, venue name, city
-      if (registrationFilters.search) {
-        const searchLower = registrationFilters.search.toLowerCase();
-        const matchesSearch =
-          event.title?.toLowerCase().includes(searchLower) ||
-          event.venue_name?.toLowerCase().includes(searchLower) ||
-          event.venue_city?.toLowerCase().includes(searchLower);
-        if (!matchesSearch) return false;
-      }
-
-      // Season filter
-      if (registrationFilters.seasonId && event.season_id !== registrationFilters.seasonId) {
-        return false;
-      }
-
-      // Country filter
-      if (registrationFilters.country && event.venue_country !== registrationFilters.country) {
-        return false;
-      }
-
-      // State filter
-      if (registrationFilters.state && event.venue_state !== registrationFilters.state) {
-        return false;
-      }
-
-      return true;
-    });
-
-    const filteredRegistrations = applyFilters(paidRegistrations);
-    const filteredInterestedRegistrations = applyFilters(interestedRegistrations);
-
-    const clearFilters = () => {
-      setRegistrationFilters({
-        search: '',
-        seasonId: '',
-        country: '',
-        state: '',
-      });
-    };
-
-    const hasActiveFilters = registrationFilters.search || registrationFilters.seasonId ||
-                             registrationFilters.country || registrationFilters.state;
-
-    return (
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Calendar className="h-6 w-6 text-orange-500" />
-            Event Registrations
-          </h2>
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1"
-            >
-              <X className="h-4 w-4" />
-              Clear Filters
-            </button>
-          )}
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search events..."
-              value={registrationFilters.search}
-              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, search: e.target.value }))}
-              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Season Filter */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <select
-              value={registrationFilters.seasonId}
-              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, seasonId: e.target.value }))}
-              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
-            >
-              <option value="">All Seasons</option>
-              {seasons.map(season => (
-                <option key={season.id} value={season.id}>
-                  {season.name} {season.is_current && '(Current)'}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Country Filter */}
-          <div className="relative">
-            <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <select
-              value={registrationFilters.country}
-              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, country: e.target.value, state: '' }))}
-              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
-            >
-              <option value="">All Countries</option>
-              {countryOptions.map(country => (
-                <option key={country.code} value={country.code}>{country.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* State Filter */}
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <select
-              value={registrationFilters.state}
-              onChange={(e) => setRegistrationFilters(prev => ({ ...prev, state: e.target.value }))}
-              className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none cursor-pointer"
-              disabled={!registrationFilters.country && stateOptions.length === 0}
-            >
-              <option value="">All States</option>
-              {stateOptions.map(state => (
-                <option key={state.code} value={state.code}>{state.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Results count */}
-        {paidRegistrations.length > 0 && (
-          <div className="text-sm text-gray-400 mb-4">
-            Showing {filteredRegistrations.length} of {paidRegistrations.length} registration{paidRegistrations.length !== 1 ? 's' : ''}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
-          </div>
-        ) : filteredRegistrations.length > 0 ? (
-          <div className="space-y-4">
-            {filteredRegistrations.map((reg) => (
-              <div
-                key={reg.id}
-                className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
-                onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-white mb-1">
-                      {reg.event?.title}
-                    </h4>
-                    <div className="space-y-1 text-sm text-gray-400">
-                      <p className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {reg.event?.venue_name}
-                        {reg.event?.venue_city && `, ${reg.event.venue_city}`}
-                        {reg.event?.venue_state && `, ${getStatesForCountry(reg.event?.venue_country || 'US').find(s => s.code === reg.event?.venue_state)?.name || reg.event.venue_state}`}
-                        {reg.event?.venue_country && reg.event.venue_country !== 'US' && `, ${isoCountries.find(c => c.code === reg.event?.venue_country)?.name || reg.event.venue_country}`}
-                      </p>
-                      <p className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </p>
-                      {reg.event?.season_id && (
-                        <p className="text-xs text-gray-500">
-                          Season: {seasons.find(s => s.id === reg.event?.season_id)?.name || 'Unknown'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                      reg.status === 'confirmed'
-                        ? 'bg-green-500/10 text-green-400'
-                        : reg.status === 'pending'
-                        ? 'bg-yellow-500/10 text-yellow-400'
-                        : 'bg-red-500/10 text-red-400'
-                    }`}
-                  >
-                    {reg.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : paidRegistrations.length > 0 ? (
-          <div className="text-center py-12">
-            <Search className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">No registrations match your filters</p>
-            <button
-              onClick={clearFilters}
-              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Clear Filters
-            </button>
-          </div>
-        ) : interestedRegistrations.length === 0 ? (
-          <div className="text-center py-12">
-            <Calendar className="h-16 w-16 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">No event registrations yet</p>
-            <button
-              onClick={() => navigate('/events')}
-              className="px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Browse Events
-            </button>
-          </div>
-        ) : null}
-
-        {/* Events I'm Interested In */}
-        {filteredInterestedRegistrations.length > 0 && (
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <Heart className="h-5 w-5 text-pink-500" />
-              Events I'm Interested In
-            </h3>
-            <div className="space-y-3">
-              {filteredInterestedRegistrations.map((reg) => (
-                <div
-                  key={reg.id}
-                  className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-between"
-                  onClick={() => reg.event && navigate(`/events/${reg.event.id}`)}
-                >
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-white mb-1">
-                      {reg.event?.title}
-                    </h4>
-                    <div className="space-y-1 text-sm text-gray-400">
-                      <p className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {reg.event?.venue_name}
-                        {reg.event?.venue_city && `, ${reg.event.venue_city}`}
-                        {reg.event?.venue_state && `, ${getStatesForCountry(reg.event?.venue_country || 'US').find(s => s.code === reg.event?.venue_state)?.name || reg.event.venue_state}`}
-                      </p>
-                      <p className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {reg.event && new Date(reg.event.event_date).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-pink-500/10 text-pink-400 flex items-center gap-1">
-                      <Heart className="h-3 w-3 fill-current" />
-                      Interested
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     );
   };

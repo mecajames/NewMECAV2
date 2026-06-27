@@ -223,6 +223,7 @@ export default function CouponsAdminPage() {
       codeSuffix: '',
       codeLength: 8,
       useManualCode: true,
+      quantity: 1,
     });
     setShowForm(true);
   };
@@ -616,7 +617,7 @@ export default function CouponsAdminPage() {
                     Applicable Membership Types <span className="text-gray-500">(leave empty for all)</span>
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {membershipTypes.filter(t => t.is_active).map(t => (
+                    {membershipTypes.filter(t => t.isActive).map(t => (
                       <label key={t.id} className="flex items-center gap-2 text-gray-300 text-sm cursor-pointer">
                         <input
                           type="checkbox"

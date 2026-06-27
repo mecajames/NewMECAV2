@@ -290,13 +290,17 @@ export class TicketsService {
   private async findProfileIdsBySearch(em: EntityManager, search: string): Promise<string[]> {
     const conn = em.getConnection();
     const like = `%${search}%`;
+    // NOTE: meca_id is a NUMERIC column in the DB (the entity decorator says
+    // text, but the actual column is integer). `COALESCE(meca_id, '')` makes
+    // Postgres try to coerce '' to integer → "invalid input syntax for type
+    // integer" (22P02), which 500'd EVERY ticket search. Cast to text first.
     const rows = await conn.execute<any[]>(
       `SELECT id FROM public.profiles
        WHERE first_name ILIKE ?
           OR last_name ILIKE ?
           OR full_name ILIKE ?
           OR email ILIKE ?
-          OR COALESCE(meca_id, '') ILIKE ?
+          OR COALESCE(meca_id::text, '') ILIKE ?
        LIMIT 1000`,
       [like, like, like, like, like],
     );
@@ -1567,6 +1571,15 @@ export class TicketsService {
       byDepartment[dept] = await em.count(Ticket, { department: dept });
     }
 
+    // Any tickets whose status isn't one of the 9 known statuses (legacy /
+    // null / typo values). Surfaced explicitly so the status cards always sum
+    // to `total` — otherwise such tickets silently vanish from the breakdown
+    // and the totals look broken.
+    const uncategorized = Math.max(
+      0,
+      total - (open + inProgress + awaitingResponse + pendingInternalReview + escalated + onHold + resolved + reopened + closed),
+    );
+
     return {
       total,
       open,
@@ -1578,6 +1591,7 @@ export class TicketsService {
       resolved,
       reopened,
       closed,
+      uncategorized,
       by_priority: {
         low: lowPriority,
         medium: mediumPriority,

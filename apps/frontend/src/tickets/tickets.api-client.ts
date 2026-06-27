@@ -129,9 +129,15 @@ export interface TicketStats {
   open: number;
   in_progress: number;
   awaiting_response: number;
+  pending_internal_review: number;
+  escalated: number;
   on_hold: number;
   resolved: number;
+  reopened: number;
   closed: number;
+  // Tickets whose status isn't one of the known statuses (legacy/null/typo).
+  // Surfaced so the status cards always sum to `total`.
+  uncategorized: number;
   by_priority: {
     low: number;
     medium: number;

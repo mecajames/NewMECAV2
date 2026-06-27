@@ -78,14 +78,6 @@ export default function RulebookArchivePage() {
 
   const uniqueSeasons = Array.from(new Set(rulebooks.map((rb) => rb.season))).sort().reverse();
 
-  const groupedByCategory = filteredRulebooks.reduce((acc, rulebook) => {
-    if (!acc[rulebook.category]) {
-      acc[rulebook.category] = [];
-    }
-    acc[rulebook.category].push(rulebook);
-    return acc;
-  }, {} as Record<string, Rulebook[]>);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-12">

@@ -600,7 +600,7 @@ export default function ScoreSheetEditorPage() {
 
 // Reusable component for mapping rule sections
 function MappingSection({
-  title, rules, templates, section, onAdd, onUpdate, onRemove,
+  title, rules, templates, onAdd, onUpdate, onRemove,
 }: {
   title: string;
   rules: Array<{ pattern: string; template: string; priority?: number }>;

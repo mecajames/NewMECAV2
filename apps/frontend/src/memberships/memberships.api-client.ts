@@ -26,6 +26,7 @@ export interface Membership {
   mecaId?: number | string;
   // Subscription / Auto-Renewal fields
   stripeSubscriptionId?: string;
+  paypalSubscriptionId?: string;
   hadLegacySubscription?: boolean;
   // Competitor info
   competitorName?: string;
@@ -997,15 +998,18 @@ export const membershipsApi = {
     membershipId: string,
     reason: string,
     amountCents?: number,
+    closeAccount?: boolean,
   ): Promise<{
     success: boolean;
     membership: Membership;
     stripeRefund: { id: string; amount: number; status: string } | null;
+    accountClosed?: boolean;
     message: string;
   }> => {
     const response = await axios.post(`/api/memberships/${membershipId}/admin/refund`, {
       reason,
       amountCents,
+      closeAccount,
     });
     return response.data;
   },

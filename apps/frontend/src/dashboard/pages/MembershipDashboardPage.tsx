@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertCircle, AlertTriangle, Eye } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 import { billingApi, MyTransaction } from '@/api-client/billing.api-client';
@@ -603,9 +603,12 @@ export default function MembershipDashboardPage() {
       {/* Cancel Membership Modal */}
       {showCancelMembershipModal && activeMembership && (
         <MemberCancelMembershipModal
-          membership={activeMembership}
+          isOpen={showCancelMembershipModal}
           onClose={() => setShowCancelMembershipModal(false)}
-          onCancelled={handleMembershipCancelled}
+          onSuccess={handleMembershipCancelled}
+          membershipId={activeMembership.id}
+          membershipType={activeMembership.membershipTypeConfig?.name || 'Membership'}
+          endDate={activeMembership.endDate}
         />
       )}
 
@@ -636,6 +639,7 @@ export default function MembershipDashboardPage() {
             }
           }}
           secondary={editingSecondary}
+          requestingUserId={profile?.id || ''}
         />
       )}
     </div>

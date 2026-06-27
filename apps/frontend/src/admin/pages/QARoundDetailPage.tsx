@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, ClipboardCheck, Users, Play, CheckCheck, Plus, Trash2,
+  ArrowLeft, Users, Play, CheckCheck, Plus, Trash2,
   ChevronRight, ChevronDown, CheckCircle2, AlertCircle, Clock, Circle, Wrench,
-  ArrowRightFromLine, Image as ImageIcon, ExternalLink, MessageSquare,
+  ArrowRightFromLine, Image as ImageIcon, ExternalLink,
   Pencil, PauseCircle, PlayCircle, EyeOff, ListChecks, Star,
 } from 'lucide-react';
 import { qaApi } from '@/api-client/qa.api-client';

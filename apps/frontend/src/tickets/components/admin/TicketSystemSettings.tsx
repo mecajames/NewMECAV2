@@ -14,6 +14,8 @@ import {
 import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { reportError } from './error-helper';
 import { TicketSettingsMap, TicketDepartmentResponse } from '@newmeca/shared';
+import { useAuth } from '@/auth/contexts/AuthContext';
+import axios from '@/lib/axios';
 
 export function TicketSystemSettings() {
   const [settings, setSettings] = useState<TicketSettingsMap | null>(null);
@@ -21,6 +23,31 @@ export function TicketSystemSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
+
+  // Owner-only (James, MECA 202401) configuration-sync tool.
+  const { profile } = useAuth();
+  const isOwner = String((profile as any)?.meca_id) === '202401';
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncReport, setSyncReport] = useState<any | null>(null);
+  const [syncMode, setSyncMode] = useState<'preview' | 'applied' | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const runConfigSync = async (apply: boolean) => {
+    if (apply && !window.confirm(
+      'Apply the configuration sync to THIS environment now?\n\nIt will create/rename/deactivate departments, sync categories & routing, and MOVE tickets out of any retired department into its successor. No tickets are deleted. Run a Preview first if you haven\'t.',
+    )) return;
+    setSyncRunning(true);
+    setSyncError(null);
+    try {
+      const res = await axios.post(`/api/tickets/admin/config-sync?dryRun=${apply ? 'false' : 'true'}`);
+      setSyncReport(res.data);
+      setSyncMode(apply ? 'applied' : 'preview');
+    } catch (err: any) {
+      setSyncError(err?.response?.data?.message || err?.message || 'Sync failed.');
+    } finally {
+      setSyncRunning(false);
+    }
+  };
 
   // Local form state
   const [formData, setFormData] = useState<TicketSettingsMap>({
@@ -298,6 +325,133 @@ export function TicketSystemSettings() {
           </div>
         </div>
       </div>
+
+      {/* Configuration Sync — OWNER ONLY (James, MECA 202401). Mirrors the
+          canonical ticket setup (departments, categories, routing) into THIS
+          environment and moves tickets out of retired departments. */}
+      {isOwner && (
+        <div className="bg-slate-800 rounded-xl border border-orange-500/40 p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-orange-500/10 rounded-lg text-orange-400">
+              <RefreshCw className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-white font-medium">Configuration Sync</h3>
+                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300">Owner only</span>
+              </div>
+              <p className="text-sm text-gray-400 mt-1">
+                Sync this environment's <strong>departments, categories, and routing</strong> to the
+                canonical setup. Tickets in any retired department are <strong>moved</strong> to its
+                successor (default: Triage) — nothing is deleted. Always <strong>Preview</strong> first;
+                it writes nothing and shows exactly what Apply would change.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => runConfigSync(false)}
+              disabled={syncRunning}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncRunning ? 'animate-spin' : ''}`} />
+              Preview changes
+            </button>
+            <button
+              onClick={() => runConfigSync(true)}
+              disabled={syncRunning}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              Apply sync
+            </button>
+            {syncRunning && <span className="text-sm text-gray-400">Running…</span>}
+          </div>
+
+          {syncError && (
+            <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+              {syncError}
+            </div>
+          )}
+
+          {syncReport && (
+            <div className="space-y-4">
+              <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                syncMode === 'applied'
+                  ? 'bg-green-500/10 border border-green-500/30 text-green-300'
+                  : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
+              }`}>
+                {syncMode === 'applied'
+                  ? '✓ Applied — changes saved to this environment.'
+                  : 'Preview only — nothing was saved. Click "Apply sync" to commit these changes.'}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Departments</p>
+                  <p className="text-white">
+                    {syncReport.departments.created.length} created · {syncReport.departments.updated.length} updated · {syncReport.departments.deactivated.length} retired · {syncReport.departments.unchanged} unchanged
+                  </p>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Categories</p>
+                  <p className="text-white">
+                    {syncReport.categories.created.length} created · {syncReport.categories.updated.length} updated · {syncReport.categories.unchanged} unchanged
+                  </p>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Routing rules</p>
+                  <p className="text-white">
+                    {syncReport.routing_rules.created.length} created · {syncReport.routing_rules.updated.length} updated · {syncReport.routing_rules.unchanged} unchanged
+                  </p>
+                </div>
+              </div>
+
+              {(syncReport.departments.created.length > 0 || syncReport.departments.deactivated.length > 0) && (
+                <div className="text-xs text-gray-400 space-y-1">
+                  {syncReport.departments.created.length > 0 && <p><span className="text-green-400">Created:</span> {syncReport.departments.created.join(', ')}</p>}
+                  {syncReport.departments.deactivated.length > 0 && <p><span className="text-amber-400">Retired:</span> {syncReport.departments.deactivated.join(', ')}</p>}
+                </div>
+              )}
+
+              <div>
+                <p className="text-white text-sm font-medium mb-2">
+                  Tickets moved: <span className="text-orange-400">{syncReport.tickets_moved_count}</span>
+                </p>
+                {syncReport.tickets_moved.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-slate-700">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-900/60 text-gray-400">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Ticket</th>
+                          <th className="text-left px-3 py-2 font-medium">Subject</th>
+                          <th className="text-left px-3 py-2 font-medium">From → To</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700">
+                        {syncReport.tickets_moved.map((t: any) => (
+                          <tr key={t.ticket_number}>
+                            <td className="px-3 py-2 font-mono text-gray-300 whitespace-nowrap">{t.ticket_number}</td>
+                            <td className="px-3 py-2 text-white">{t.title}</td>
+                            <td className="px-3 py-2 text-gray-300 whitespace-nowrap">{t.from} <span className="text-gray-500">→</span> {t.to}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {syncReport.warnings?.length > 0 && (
+                <div className="px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+                  {syncReport.warnings.map((w: string, i: number) => <p key={i}>⚠ {w}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

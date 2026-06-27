@@ -30,6 +30,12 @@ interface MembershipRow {
 interface Props {
   memberId: string;
   memberName: string;
+  /**
+   * When opened from a specific membership card's "Manage" dropdown, the id of
+   * that membership — it's pre-selected as the assignment target so the admin
+   * links the subscription to exactly the card they clicked.
+   */
+  preselectMembershipId?: string | null;
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
@@ -47,7 +53,7 @@ function errMsg(err: unknown, fallback: string): string {
   return e?.response?.data?.message || e?.message || fallback;
 }
 
-export default function AssignSubscriptionModal({ memberId, memberName, open, onClose, onSuccess }: Props) {
+export default function AssignSubscriptionModal({ memberId, memberName, preselectMembershipId, open, onClose, onSuccess }: Props) {
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -61,7 +67,9 @@ export default function AssignSubscriptionModal({ memberId, memberName, open, on
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    setError(null); setSuccess(null); setSelectedId(null);
+    setError(null); setSuccess(null);
+    // Pre-select the card the admin launched from (if any).
+    setSelectedId(preselectMembershipId ?? null);
     setSubId(''); setPreview(null);
     axios.get(`/api/memberships/user/${memberId}/all`)
       .then(res => {
@@ -70,7 +78,7 @@ export default function AssignSubscriptionModal({ memberId, memberName, open, on
       })
       .catch(err => setError(err.response?.data?.message || err.message || 'Failed to load memberships'))
       .finally(() => setLoading(false));
-  }, [open, memberId]);
+  }, [open, memberId, preselectMembershipId]);
 
   if (!open) return null;
 

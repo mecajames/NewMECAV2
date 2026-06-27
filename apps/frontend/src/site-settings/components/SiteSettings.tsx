@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, Eye, EyeOff, CreditCard, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 
 interface HeroSlide {
   url: string;
@@ -43,7 +43,6 @@ export default function SiteSettings() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailTemplate, setTestEmailTemplate] = useState('');
   const [taskResult, setTaskResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
     hero_image_urls: [] as HeroSlide[],

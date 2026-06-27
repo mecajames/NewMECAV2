@@ -1825,7 +1825,7 @@ export class StripeController {
     try {
       const piRaw = (invoice as any).payment_intent;
       const chargeRaw = (invoice as any).charge;
-      await this.paymentFulfillmentService.recordSubscriptionPayment({
+      const renewalPayment = await this.paymentFulfillmentService.recordSubscriptionPayment({
         membershipId: membership.id,
         userId: membership.user?.id ?? null,
         invoiceId: invoice.id ?? null,
@@ -1841,6 +1841,12 @@ export class StripeController {
         billingReason: invoice.billing_reason ?? null,
         source: 'stripe_invoice_paid_webhook',
       });
+      // Also produce the Order + Invoice for the renewal — previously renewals
+      // only wrote a Payment, so they were invisible in the member's
+      // Orders/Invoices and in revenue reporting.
+      if (renewalPayment) {
+        await this.paymentFulfillmentService.ensureOrderInvoiceForMembershipPayment(renewalPayment.id);
+      }
     } catch (err) {
       console.error('Failed to record subscription renewal payment row (non-critical):', err);
     }
@@ -2128,9 +2134,20 @@ export class StripeController {
       const stripe = new (await import('stripe')).default(process.env.STRIPE_SECRET_KEY!, {
         apiVersion: '2025-02-24.acacia',
       });
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
-      const invoice = stripeSubscription.latest_invoice as Stripe.Invoice | null;
-      const paymentIntentId = typeof invoice?.payment_intent === 'string' ? invoice.payment_intent : invoice?.payment_intent?.id;
+      // Expand latest_invoice.payment_intent — WITHOUT this, `latest_invoice`
+      // comes back as a bare string id, so payment_intent is undefined and the
+      // Order/Invoice were never created (the original bug: subscription members
+      // showed 0 orders / 0 invoices).
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId, {
+        expand: ['latest_invoice.payment_intent'],
+      });
+      const invoice = (typeof stripeSubscription.latest_invoice === 'object'
+        ? stripeSubscription.latest_invoice
+        : null) as Stripe.Invoice | null;
+      const paymentIntentId = typeof invoice?.payment_intent === 'string'
+        ? invoice.payment_intent
+        : invoice?.payment_intent?.id;
+      const subTax = await this.taxService.calculateTax(membershipConfig.price);
 
       if (paymentIntentId) {
         // Build metadata for order/invoice creation
@@ -2139,7 +2156,6 @@ export class StripeController {
           membershipId: membership.id,
           mecaId: String(mecaId),
         };
-        const subTax = await this.taxService.calculateTax(membershipConfig.price);
         await this.paymentFulfillmentService.createOrderAndInvoice(
           {
             transactionId: paymentIntentId,
@@ -2151,6 +2167,30 @@ export class StripeController {
           'membership',
           subTax.taxAmount.toFixed(2),
         );
+      } else if (invoice?.id) {
+        // Rare: paid invoice with no resolvable payment_intent. Still record the
+        // Payment (keyed on the invoice id) and build the Order+Invoice from it,
+        // so the initial subscription never ends up with zero billing records.
+        const initialPayment = await this.paymentFulfillmentService.recordSubscriptionPayment({
+          membershipId: membership.id,
+          userId: profile.id,
+          invoiceId: invoice.id,
+          customerId: typeof invoice.customer === 'string'
+            ? invoice.customer
+            : ((invoice.customer as any)?.id ?? null),
+          subscriptionId,
+          amount: membershipConfig.price,
+          currency: invoice.currency ?? 'usd',
+          status: PaymentStatus.PAID,
+          billingReason: 'subscription_create',
+          source: 'stripe_checkout_session_completed',
+        });
+        if (initialPayment) {
+          await this.paymentFulfillmentService.ensureOrderInvoiceForMembershipPayment(
+            initialPayment.id,
+            subTax.taxAmount.toFixed(2),
+          );
+        }
       }
 
     } catch (error) {

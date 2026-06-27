@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  CreditCard, Search, Filter, Loader2, Eye, Check, Truck,
-  Package, X, ChevronDown, FileText, ArrowLeft,
+  CreditCard, Search, Loader2, Eye, Check, Truck,
+  Package, X, ArrowLeft,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Pagination } from '@/shared/components';

@@ -860,6 +860,252 @@ export class PaymentFulfillmentService {
     return payment;
   }
 
+  /**
+   * Create the Order + Invoice for an EXISTING membership Payment row, so a
+   * subscription payment ends up as the full Order+Invoice+Payment triple
+   * (not just a Payment). Operates on a KNOWN payment id — no payment-intent
+   * lookup — so it can never mint a duplicate Payment. Idempotent: if an Order
+   * already exists for the payment it no-ops. Used by the subscription
+   * renewal + initial webhook paths and the backfill tool.
+   */
+  async ensureOrderInvoiceForMembershipPayment(
+    paymentId: string,
+    taxAmount: string = '0.00',
+    opts: { sendEmail?: boolean } = {},
+  ): Promise<{ created: boolean; orderNumber?: string; invoiceNumber?: string }> {
+    const sendEmail = opts.sendEmail !== false; // default true (webhook paths)
+    try {
+      const em = this.em.fork();
+      const payment = await em.findOne(Payment, { id: paymentId }, { populate: ['membership', 'user'] });
+      if (!payment) {
+        this.logger.warn(`ensureOrderInvoiceForMembershipPayment: payment ${paymentId} not found`);
+        return { created: false };
+      }
+
+      // Idempotency — one Order per payment.
+      const existingOrder = await em.findOne(Order, { payment: payment.id });
+      if (existingOrder) {
+        this.logger.log(`Order ${existingOrder.orderNumber} already exists for payment ${paymentId}; skipping`);
+        return { created: false, orderNumber: existingOrder.orderNumber };
+      }
+
+      const membershipId = (payment.membership as any)?.id;
+      const membership = membershipId
+        ? await em.findOne(Membership, { id: membershipId }, { populate: ['membershipTypeConfig', 'user'] })
+        : null;
+      const userId = (payment.user as any)?.id ?? membership?.user?.id;
+      const amount = Number(payment.amount);
+      const cfg: any = membership?.membershipTypeConfig;
+
+      const items = [{
+        description: `MECA Membership: ${cfg?.name || cfg?.category || 'Annual'}`,
+        quantity: 1,
+        unitPrice: amount.toFixed(2),
+        itemType: OrderItemType.MEMBERSHIP,
+        referenceId: cfg?.id,
+        metadata: { membershipCategory: cfg?.category },
+      }];
+
+      const hasBilling = !!(membership && (membership.billingFirstName || membership.billingAddress));
+      const billingAddress = hasBilling ? {
+        name: [membership!.billingFirstName, membership!.billingLastName].filter(Boolean).join(' ') || undefined,
+        address1: membership!.billingAddress || undefined,
+        city: membership!.billingCity || undefined,
+        state: membership!.billingState || undefined,
+        postalCode: membership!.billingPostalCode || undefined,
+        country: membership!.billingCountry || 'US',
+      } : undefined;
+
+      const reference = payment.externalPaymentId || payment.stripePaymentIntentId || payment.transactionId || payment.id;
+
+      const { order, invoice } = await em.transactional(async () => {
+        const createdOrder = await this.ordersService.createFromPayment({
+          paymentId: payment.id,
+          userId,
+          orderType: OrderType.MEMBERSHIP,
+          items,
+          billingAddress: billingAddress?.name ? billingAddress : undefined,
+          tax: taxAmount,
+          discount: '0.00',
+          notes: `Subscription payment: ${reference}`,
+        });
+        const createdInvoice = await this.invoicesService.createFromOrder(createdOrder.id);
+        const p = await em.findOne(Payment, { id: payment.id });
+        if (p) p.order = em.getReference(Order, createdOrder.id) as any;
+        this.logger.log(
+          `Order ${createdOrder.orderNumber} + Invoice ${createdInvoice.invoiceNumber} created for subscription payment ${payment.id}`,
+        );
+        return { order: createdOrder, invoice: createdInvoice };
+      });
+
+      // Suppressed for the backfill tool so historical members aren't emailed
+      // old invoices; webhook paths leave it on.
+      if (sendEmail && invoice) {
+        this.invoicesService.sendInvoice(invoice.id).catch((e) => this.logger.error(`Failed to send invoice email: ${e}`));
+      }
+      return { created: true, orderNumber: order?.orderNumber, invoiceNumber: invoice?.invoiceNumber };
+    } catch (error) {
+      this.logger.error(`ensureOrderInvoiceForMembershipPayment failed for ${paymentId}: ${error}`);
+      return { created: false };
+    }
+  }
+
+  /**
+   * Reconstruct missing billing records for ONE member. For each PAID
+   * membership with no Payment row, create a Payment (from the membership's
+   * stored amount + gateway ids) plus its Order+Invoice; and for any existing
+   * membership Payment with no Order, create the Order+Invoice. Invoice emails
+   * are suppressed (we don't re-email historical members). `dryRun` reports
+   * what WOULD be created without writing anything. Owner-gated at the
+   * controller. Idempotent — safe to re-run.
+   */
+  async backfillMemberBilling(
+    memberId: string,
+    opts: { dryRun: boolean },
+  ): Promise<{
+    dry_run: boolean;
+    member_id: string;
+    memberships_missing_payment: Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>;
+    payments_missing_order: Array<{ payment_id: string; amount: number; reference: string | null }>;
+    created: { payments: number; orders: number };
+  }> {
+    const { dryRun } = opts;
+    const em = this.em.fork();
+    const report = {
+      dry_run: dryRun,
+      member_id: memberId,
+      memberships_missing_payment: [] as Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>,
+      payments_missing_order: [] as Array<{ payment_id: string; amount: number; reference: string | null }>,
+      created: { payments: 0, orders: 0 },
+    };
+
+    // Pass 1: PAID memberships with no Payment row at all.
+    const memberships = await em.find(
+      Membership,
+      { user: memberId, paymentStatus: PaymentStatus.PAID },
+      { populate: ['membershipTypeConfig'] },
+    );
+    for (const m of memberships) {
+      const hasPayment = (await em.count(Payment, { membership: m.id })) > 0;
+      if (hasPayment) continue;
+      const amount = Number((m as any).amountPaid ?? 0);
+      report.memberships_missing_payment.push({
+        membership_id: m.id,
+        meca_id: m.mecaId != null ? String(m.mecaId) : null,
+        type: (m.membershipTypeConfig as any)?.name ?? null,
+        amount,
+      });
+      if (dryRun) continue;
+
+      const isPaypal = !!(m as any).paypalCaptureId;
+      const pi = (m as any).stripePaymentIntentId || undefined;
+      const payment = em.create(Payment, {
+        user: em.getReference(Profile, memberId),
+        membership: em.getReference(Membership, m.id),
+        paymentType: PaymentType.MEMBERSHIP,
+        paymentMethod: isPaypal ? PaymentMethod.PAYPAL : PaymentMethod.STRIPE,
+        paymentStatus: PaymentStatus.PAID,
+        amount: amount.toFixed(2),
+        currency: 'USD',
+        stripePaymentIntentId: pi,
+        externalPaymentId: (m as any).stripeSubscriptionId || undefined,
+        paypalCaptureId: isPaypal ? (m as any).paypalCaptureId : undefined,
+        transactionId: pi || (m as any).paypalCaptureId || (m as any).stripeSubscriptionId || undefined,
+        paidAt: m.startDate || (m as any).createdAt || new Date(),
+        description: 'Backfilled membership payment',
+        paymentMetadata: { source: 'billing_backfill' },
+      } as any);
+      await em.persistAndFlush(payment);
+      report.created.payments++;
+      const r = await this.ensureOrderInvoiceForMembershipPayment(payment.id, '0.00', { sendEmail: false });
+      if (r.created) report.created.orders++;
+    }
+
+    // Pass 2: existing membership Payments with no Order (e.g. historical
+    // renewals). Fresh fork so it sees pass-1's committed order links.
+    const em2 = this.em.fork();
+    const orderlessPayments = await em2.find(Payment, {
+      user: memberId,
+      paymentType: PaymentType.MEMBERSHIP,
+      order: null,
+    } as any);
+    for (const p of orderlessPayments) {
+      report.payments_missing_order.push({
+        payment_id: p.id,
+        amount: Number(p.amount),
+        reference: p.externalPaymentId || p.stripePaymentIntentId || p.transactionId || null,
+      });
+      if (dryRun) continue;
+      const r = await this.ensureOrderInvoiceForMembershipPayment(p.id, '0.00', { sendEmail: false });
+      if (r.created) report.created.orders++;
+    }
+
+    return report;
+  }
+
+  /**
+   * GLOBAL billing backfill across ALL members. Finds the distinct set of
+   * members that have either a paid membership with no Payment, or a membership
+   * Payment with no Order, then runs the per-member backfill for each and
+   * aggregates the totals. Scoped by a single query so it only touches affected
+   * members. dryRun reports counts without writing. Owner-gated at controller.
+   */
+  async backfillAllBilling(opts: { dryRun: boolean }): Promise<{
+    dry_run: boolean;
+    members_affected: number;
+    memberships_missing_payment: number;
+    payments_missing_order: number;
+    created: { payments: number; orders: number };
+  }> {
+    const { dryRun } = opts;
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    // Members needing a backfill: a paid membership with no Payment, OR a
+    // membership Payment with no Order. (membership_id IS NOT NULL identifies
+    // membership payments without depending on the payment_type enum string.)
+    const rows = await conn.execute<Array<{ user_id: string }>>(`
+      SELECT DISTINCT user_id FROM (
+        SELECT m.user_id
+          FROM public.memberships m
+         WHERE m.payment_status = 'paid'
+           AND m.user_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM public.payments p WHERE p.membership_id = m.id)
+        UNION
+        SELECT p.user_id
+          FROM public.payments p
+         WHERE p.membership_id IS NOT NULL
+           AND p.order_id IS NULL
+           AND p.user_id IS NOT NULL
+      ) q
+    `);
+    const memberIds = (rows as Array<{ user_id: string }>).map((r) => r.user_id).filter(Boolean);
+
+    const agg = {
+      dry_run: dryRun,
+      members_affected: memberIds.length,
+      memberships_missing_payment: 0,
+      payments_missing_order: 0,
+      created: { payments: 0, orders: 0 },
+    };
+
+    for (const memberId of memberIds) {
+      try {
+        const r = await this.backfillMemberBilling(memberId, { dryRun });
+        agg.memberships_missing_payment += r.memberships_missing_payment.length;
+        agg.payments_missing_order += r.payments_missing_order.length;
+        agg.created.payments += r.created.payments;
+        agg.created.orders += r.created.orders;
+      } catch (e) {
+        this.logger.error(`backfillAllBilling: member ${memberId} failed: ${e}`);
+      }
+    }
+    this.logger.log(
+      `backfillAllBilling (${dryRun ? 'DRY-RUN' : 'APPLIED'}): ${memberIds.length} members, ` +
+      `${agg.created.payments} payments + ${agg.created.orders} orders created`,
+    );
+    return agg;
+  }
+
   async createOrderAndInvoice(
     params: PaymentFulfillmentParams,
     amountPaid: number,

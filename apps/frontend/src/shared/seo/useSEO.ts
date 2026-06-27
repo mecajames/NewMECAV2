@@ -7,9 +7,8 @@ import {
   generateLocalBusinessSchema,
   generateFAQSchema,
 } from './json-ld';
-import type { LocalBusinessData } from './json-ld';
 import type { FAQItem } from './json-ld';
-import type { SEOProps, EventSEOData, ProductSEOData, ProfileSEOData, RetailerSEOData, FAQPageSEOData } from './seo.types';
+import type { SEOProps, EventSEOData, ProductSEOData, ProfileSEOData, RetailerSEOData } from './seo.types';
 
 /**
  * Truncate text to a maximum length, adding ellipsis if needed

@@ -11,14 +11,6 @@ import { getStorageUrl } from '@/lib/storage';
 // Types
 // =============================================================================
 
-interface CategoryData {
-  id: string;
-  name: string;
-  description: string | null;
-  display_order: number;
-  questions: QuestionData[];
-}
-
 interface QuestionData {
   id: string;
   title: string;
