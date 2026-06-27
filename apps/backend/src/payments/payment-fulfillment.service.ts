@@ -965,15 +965,24 @@ export class PaymentFulfillmentService {
   ): Promise<{
     dry_run: boolean;
     member_id: string;
+    member_name: string | null;
+    meca_id: string | null;
     memberships_missing_payment: Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>;
     payments_missing_order: Array<{ payment_id: string; amount: number; reference: string | null }>;
     created: { payments: number; orders: number };
   }> {
     const { dryRun } = opts;
     const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: memberId });
+    const memberName = profile
+      ? (`${(profile as any).first_name || ''} ${(profile as any).last_name || ''}`.trim()
+          || (profile as any).full_name || profile.email || null)
+      : null;
     const report = {
       dry_run: dryRun,
       member_id: memberId,
+      member_name: memberName,
+      meca_id: (profile as any)?.meca_id != null ? String((profile as any).meca_id) : null,
       memberships_missing_payment: [] as Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>,
       payments_missing_order: [] as Array<{ payment_id: string; amount: number; reference: string | null }>,
       created: { payments: 0, orders: 0 },
@@ -1052,10 +1061,20 @@ export class PaymentFulfillmentService {
    */
   async backfillAllBilling(opts: { dryRun: boolean }): Promise<{
     dry_run: boolean;
-    members_affected: number;
-    memberships_missing_payment: number;
-    payments_missing_order: number;
-    created: { payments: number; orders: number };
+    totals: {
+      members_affected: number;
+      memberships_missing_payment: number;
+      payments_missing_order: number;
+      created: { payments: number; orders: number };
+    };
+    members: Array<{
+      member_id: string;
+      member_name: string | null;
+      meca_id: string | null;
+      memberships_missing_payment: Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>;
+      payments_missing_order: Array<{ payment_id: string; amount: number; reference: string | null }>;
+      created: { payments: number; orders: number };
+    }>;
   }> {
     const { dryRun } = opts;
     const em = this.em.fork();
@@ -1080,30 +1099,45 @@ export class PaymentFulfillmentService {
     `);
     const memberIds = (rows as Array<{ user_id: string }>).map((r) => r.user_id).filter(Boolean);
 
-    const agg = {
-      dry_run: dryRun,
+    const totals = {
       members_affected: memberIds.length,
       memberships_missing_payment: 0,
       payments_missing_order: 0,
       created: { payments: 0, orders: 0 },
     };
+    const members: Array<{
+      member_id: string;
+      member_name: string | null;
+      meca_id: string | null;
+      memberships_missing_payment: Array<{ membership_id: string; meca_id: string | null; type: string | null; amount: number }>;
+      payments_missing_order: Array<{ payment_id: string; amount: number; reference: string | null }>;
+      created: { payments: number; orders: number };
+    }> = [];
 
     for (const memberId of memberIds) {
       try {
         const r = await this.backfillMemberBilling(memberId, { dryRun });
-        agg.memberships_missing_payment += r.memberships_missing_payment.length;
-        agg.payments_missing_order += r.payments_missing_order.length;
-        agg.created.payments += r.created.payments;
-        agg.created.orders += r.created.orders;
+        totals.memberships_missing_payment += r.memberships_missing_payment.length;
+        totals.payments_missing_order += r.payments_missing_order.length;
+        totals.created.payments += r.created.payments;
+        totals.created.orders += r.created.orders;
+        members.push({
+          member_id: r.member_id,
+          member_name: r.member_name,
+          meca_id: r.meca_id,
+          memberships_missing_payment: r.memberships_missing_payment,
+          payments_missing_order: r.payments_missing_order,
+          created: r.created,
+        });
       } catch (e) {
         this.logger.error(`backfillAllBilling: member ${memberId} failed: ${e}`);
       }
     }
     this.logger.log(
       `backfillAllBilling (${dryRun ? 'DRY-RUN' : 'APPLIED'}): ${memberIds.length} members, ` +
-      `${agg.created.payments} payments + ${agg.created.orders} orders created`,
+      `${totals.created.payments} payments + ${totals.created.orders} orders created`,
     );
-    return agg;
+    return { dry_run: dryRun, totals, members };
   }
 
   async createOrderAndInvoice(
