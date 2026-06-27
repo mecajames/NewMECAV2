@@ -7,17 +7,13 @@ import {
   ArrowLeft,
   Download,
   ChevronRight,
-  Users,
   AlertCircle,
-  UserPlus,
   Eye,
-  Pencil,
-  Car,
   Calendar,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { billingApi, Invoice, MyTransaction, MyPayment } from '../../api-client/billing.api-client';
-import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES, DunningStatus } from '@/memberships';
+import { membershipsApi, Membership, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, DunningStatus } from '@/memberships';
 
 type BillingTab = 'overview' | 'memberships' | 'shop_orders' | 'event_registrations' | 'world_finals' | 'payments' | 'invoices';
 
@@ -61,7 +57,7 @@ export default function BillingPage() {
   const [membership, setMembership] = useState<Membership | null>(null);
   const [dunning, setDunning] = useState<DunningStatus | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
-  const [secondaryMemberships, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
+  const [, setSecondaryMemberships] = useState<SecondaryMembershipInfo[]>([]);
   const [showAddSecondaryModal, setShowAddSecondaryModal] = useState(false);
   const [showEditSecondaryModal, setShowEditSecondaryModal] = useState(false);
   const [editingSecondary, setEditingSecondary] = useState<SecondaryMembershipInfo | null>(null);
@@ -131,22 +127,10 @@ export default function BillingPage() {
     }
   };
 
-  const handleEditSecondary = (secondary: SecondaryMembershipInfo) => {
-    setEditingSecondary(secondary);
-    setShowEditSecondaryModal(true);
-  };
-
   const handleSecondaryEdited = () => {
     fetchBillingData();
     setShowEditSecondaryModal(false);
     setEditingSecondary(null);
-  };
-
-  // Helper to get relationship label
-  const getRelationshipLabel = (relationship?: string): string => {
-    if (!relationship) return '';
-    const found = RELATIONSHIP_TYPES.find((r) => r.value === relationship);
-    return found ? found.label : relationship;
   };
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -538,7 +522,7 @@ export default function BillingPage() {
                       <div>
                         <p className="text-white font-medium">{invoice.invoiceNumber}</p>
                         <p className="text-gray-400 text-sm">{formatDate(invoice.createdAt)}</p>
-                        {invoice.metadata?.subscription_id && (
+                        {!!invoice.metadata?.subscription_id && (
                           <p className="text-gray-500 text-xs font-mono mt-0.5">
                             Sub: {String(invoice.metadata.subscription_id)}
                           </p>

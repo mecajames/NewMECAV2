@@ -765,11 +765,6 @@ export default function AdminUserWizard({
     return role?.displayName || roleName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  const getRoleDescription = (roleName: string): string => {
-    const role = availableRoles.find((r) => r.name === roleName);
-    return role?.description || '';
-  };
-
   // Staff-assignable roles from the database (exclude system roles users shouldn't self-assign)
   const staffRoles = availableRoles.filter((r) => !['user', 'competitor'].includes(r.name));
 

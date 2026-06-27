@@ -21,6 +21,7 @@ import type { Request, Response } from 'express';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { UserRole } from '@newmeca/shared';
 import { TicketsService } from './tickets.service';
+import { TicketConfigSyncService } from './ticket-config-sync.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketPurchasesService } from './ticket-purchases.service';
 import { Ticket } from './ticket.entity';
@@ -43,6 +44,7 @@ import {
 export class TicketsController {
   constructor(
     private readonly ticketsService: TicketsService,
+    private readonly configSyncService: TicketConfigSyncService,
     private readonly customFieldsService: TicketCustomFieldsService,
     private readonly purchasesService: TicketPurchasesService,
     private readonly supabaseAdmin: SupabaseAdminService,
@@ -263,6 +265,28 @@ export class TicketsController {
   ) {
     await this.requireAdmin(authHeader);
     return this.ticketsService.getTicketUserReport(id);
+  }
+
+  /**
+   * OWNER-ONLY (James, MECA 202401): sync this environment's ticket
+   * configuration (departments, categories, routing) to the canonical seed and
+   * move any tickets out of departments that get deactivated. Pass
+   * ?dryRun=true (default) for a no-write PREVIEW that returns the exact report
+   * of what would change; ?dryRun=false to APPLY. Idempotent.
+   */
+  @Post('admin/config-sync')
+  @HttpCode(HttpStatus.OK)
+  async syncTicketConfig(
+    @Headers('authorization') authHeader: string,
+    @Query('dryRun') dryRun?: string,
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (String((profile as any)?.meca_id) !== '202401') {
+      throw new ForbiddenException('This action is restricted to the system owner (MECA 202401).');
+    }
+    // Safe default: preview unless explicitly told to apply.
+    const isDryRun = dryRun !== 'false';
+    return this.configSyncService.syncTicketConfig(profile!.id, { dryRun: isDryRun });
   }
 
   @Put(':id')

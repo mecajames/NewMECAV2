@@ -2,16 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, ClipboardCheck, CheckCircle2, AlertCircle, Clock, Circle,
-  ChevronDown, ChevronUp, MessageSquare, Upload, ExternalLink, Image as ImageIcon,
+  ChevronDown, ChevronUp, Upload, ExternalLink, Image as ImageIcon,
   CheckCheck, X
 } from 'lucide-react';
 import { qaApi, uploadQaScreenshot } from '@/api-client/qa.api-client';
-import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function QAReviewPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const [assignment, setAssignment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});

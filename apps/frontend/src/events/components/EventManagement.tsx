@@ -3,7 +3,7 @@ import { Calendar, Plus, X, Search, TrendingUp, Mail, Loader2, ChevronLeft, Chev
 import { scrollToTop } from '@/shared/utils/scrollToTop';
 import { eventsApi, Event, MultiDayResultsMode } from '@/events';
 import { useFormatOrder, compareFormatNames } from '@/competition-formats';
-import { profilesApi, Profile } from '@/profiles';
+import { Profile } from '@/profiles';
 import { getAllEventDirectors } from '@/event-directors/event-directors.api-client';
 import { seasonsApi, Season } from '@/seasons';
 import { competitionResultsApi } from '@/competition-results';
@@ -83,7 +83,7 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
   const [geocodeEndDate, setGeocodeEndDate] = useState('2026-12-31');
   const [geocodeCount, setGeocodeCount] = useState<number | null>(null);
   const [geocodeCountLoading, setGeocodeCountLoading] = useState(false);
-  const [geocodeJobId, setGeocodeJobId] = useState<string | null>(null);
+  const [_geocodeJobId, setGeocodeJobId] = useState<string | null>(null);
   const [geocodeProgress, setGeocodeProgress] = useState<{
     total: number; completed: number; updated: number; skipped: number; failed: number; done: boolean; currentEvent?: string;
   } | null>(null);

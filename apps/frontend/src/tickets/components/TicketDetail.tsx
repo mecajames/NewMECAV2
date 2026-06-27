@@ -2530,18 +2530,27 @@ export function TicketDetail({
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) closeModal();
             }}
           >
-            <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-lg p-6 border border-slate-700">
-              <h3 className="text-xl font-bold text-white mb-1">
-                Submit {Noun}
-              </h3>
-              <p className="text-sm text-gray-400 mb-4">
-                Choose what should happen after the {noun} is posted.
-              </p>
+            {/* flex-col + viewport-capped height: the header and footer stay
+                pinned while the options list scrolls. Without this, a short
+                (landscape tablet) viewport cut the title off the top and the
+                Submit button off the bottom with no way to reach them. */}
+            <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-lg border border-slate-700 flex flex-col max-h-[calc(100dvh-2rem)]">
+              <div className="p-6 pb-4 flex-shrink-0">
+                <h3 className="text-xl font-bold text-white mb-1">
+                  Submit {Noun}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  Choose what should happen after the {noun} is posted.
+                </p>
+              </div>
+
+              {/* Scrollable body — the only part that scrolls on short screens */}
+              <div className="px-6 pb-2 overflow-y-auto flex-1 min-h-0">
 
               {/* Visible-only when internal-note is on: an explicit reminder
                   so the admin can tell at a glance the customer won't see
@@ -2706,7 +2715,11 @@ export function TicketDetail({
                 </div>
               )}
 
-              <div className="mt-6 flex items-center justify-end gap-3">
+              </div>
+
+              {/* Pinned footer — always visible so Cancel / Submit are reachable
+                  even when the body scrolls on a short viewport. */}
+              <div className="px-6 py-4 flex items-center justify-end gap-3 flex-shrink-0 border-t border-slate-700">
                 <button
                   type="button"
                   onClick={closeModal}

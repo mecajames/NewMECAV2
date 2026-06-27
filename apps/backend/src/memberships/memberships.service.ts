@@ -3890,10 +3890,12 @@ export class MembershipsService {
     reason: string,
     adminId: string,
     amountCents?: number,
+    closeAccount: boolean = false,
   ): Promise<{
     success: boolean;
     membership: Membership;
     stripeRefund: { id: string; amount: number; status: string } | null;
+    accountClosed: boolean;
     message: string;
   }> {
     const em = this.em.fork();
@@ -3963,6 +3965,23 @@ export class MembershipsService {
 
     await em.flush();
 
+    // Optionally CLOSE the account (full refund only): block login so the
+    // member can no longer sign in with these credentials. Enforced on every
+    // API request by the auth/maintenance guard (login_banned / can_login).
+    // Used for duplicate/fraudulent accounts that are being refunded + shut down.
+    let accountClosed = false;
+    if (closeAccount && !isPartial && membership.user) {
+      const u: any = membership.user;
+      u.login_banned = true;
+      u.login_banned_at = new Date();
+      u.login_banned_by = em.getReference(Profile, adminId);
+      u.login_banned_reason = `Account closed after membership refund: ${reason}`;
+      u.can_login = false;
+      await em.flush();
+      accountClosed = true;
+      this.logger.log(`Account ${membership.user.id} closed (login banned) after refund of membership ${membershipId}`);
+    }
+
     // Sync profile membership status (full refund only — partial keeps it active)
     if (!isPartial && membership.user) {
       await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
@@ -4009,9 +4028,10 @@ export class MembershipsService {
       success: true,
       membership,
       stripeRefund,
+      accountClosed,
       message: (membership.stripePaymentIntentId || membership.paypalCaptureId)
-        ? `Membership ${isPartial ? 'partially ' : ''}refunded $${refundedAmountDollars.toFixed(2)}`
-        : 'Membership cancelled. No captured payment to refund.',
+        ? `Membership ${isPartial ? 'partially ' : ''}refunded $${refundedAmountDollars.toFixed(2)}${accountClosed ? ' and account closed' : ''}`
+        : `Membership cancelled. No captured payment to refund.${accountClosed ? ' Account closed.' : ''}`,
     };
   }
 

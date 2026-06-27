@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, Trophy, Mail, Bell, Send, CheckCircle2, Clock, ArrowLeft, RefreshCw,
-  Users, MailCheck, TicketCheck, Settings, Package, Plus, Trash2, Save, DollarSign, BarChart3,
-  ChevronDown, ChevronUp, Edit2, X, Eye, Upload, Image
+  Search, Trophy, Send, ArrowLeft, RefreshCw,
+  Settings, Package, Plus, Trash2, Save, DollarSign, BarChart3,
+  Edit2, X, Eye, Upload, Image
 } from 'lucide-react';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import {
@@ -15,18 +15,6 @@ import { seasonsApi } from '@/seasons/seasons.api-client';
 import { competitionClassesApi, type CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 
 type AdminTab = 'qualifications' | 'config' | 'packages' | 'addons' | 'stats';
-
-const KNOWN_FORMATS = ['SPL', 'SQL', 'SQ', 'MECA', 'Install'];
-
-const FORMAT_COLORS: Record<string, string> = {
-  SPL: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  SQL: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  SQ: 'bg-green-500/20 text-green-400 border-green-500/30',
-  MECA: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  Install: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-};
-
-const toLocal = (d: string) => d ? d.split('.')[0].slice(0, 16) : '';
 
 // Sub-group prefixes for class categorization within a format (order matters — longest match first)
 const CLASS_SUBGROUP_PREFIXES = [
@@ -66,7 +54,7 @@ export default function WorldFinalsAdminPage() {
   const [seasons, setSeasons] = useState<any[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sendingInvitation, setSendingInvitation] = useState<string | null>(null);
   const [sendingAllInvitations, setSendingAllInvitations] = useState(false);

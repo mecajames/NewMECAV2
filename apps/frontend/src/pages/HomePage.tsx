@@ -195,7 +195,7 @@ export default function HomePage() {
   const totalSlides = Math.ceil(upcomingEvents.length / 3);
 
   // SEO
-  const seoData = useHomeSEO(heroSettings.subtitle);
+  const seoData = useHomeSEO(heroSettings.defaultSubtitle);
 
   return (
     <>

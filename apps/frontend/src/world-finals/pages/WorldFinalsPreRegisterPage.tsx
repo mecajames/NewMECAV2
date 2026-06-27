@@ -131,11 +131,6 @@ export default function WorldFinalsPreRegisterPage() {
   const isEarlyBird = selectedPkg?._pricingTier === 'early_bird';
   const addonItems = selectedGroup?.addonItems || [];
 
-  // Find the event for pricing tier display
-  const selectedEvent = selectedGroup?.events?.find((e: any) =>
-    e.packages?.some((p: any) => p.id === selectedPackageId)
-  );
-
   const toggleClass = (cls: any) => {
     setSelectedClasses(prev => {
       const exists = prev.find(c => c.class_name === cls.class_name);
@@ -292,7 +287,6 @@ export default function WorldFinalsPreRegisterPage() {
               const location = [evt.venue_name, evt.city, evt.state].filter(Boolean).join(', ');
               const eventDate = evt.event_date ? new Date(evt.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : null;
               const earlyDeadline = evt.early_bird_deadline ? new Date(evt.early_bird_deadline) : null;
-              const closeDate = evt.registration_close_date ? new Date(evt.registration_close_date) : null;
               const tierIsEarly = evt.pricingTier === 'early_bird';
               return (
                 <div key={evt.id} className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 mb-2 flex flex-wrap items-center gap-4 text-sm">

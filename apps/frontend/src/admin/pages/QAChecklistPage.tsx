@@ -2,15 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ClipboardCheck, Plus, ChevronRight, ChevronDown, CheckCircle2,
-  AlertCircle, Clock, Circle, Users, BarChart3, ArrowRightFromLine,
+  Clock, Circle, Users, BarChart3,
   Pencil, PauseCircle, PlayCircle, Trash2,
 } from 'lucide-react';
 import { qaApi } from '@/api-client/qa.api-client';
-import { useAuth } from '@/auth/contexts/AuthContext';
 
 export default function QAChecklistPage() {
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const [rounds, setRounds] = useState<any[]>([]);
   const [myAssignments, setMyAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

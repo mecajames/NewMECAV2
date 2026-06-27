@@ -12,9 +12,12 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { PaymentsService } from './payments.service';
+import { PaymentFulfillmentService } from './payment-fulfillment.service';
 import { Payment } from './payments.entity';
 import { Membership } from '../memberships/memberships.entity';
 import { Profile } from '../profiles/profiles.entity';
@@ -26,6 +29,8 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => PaymentFulfillmentService))
+    private readonly fulfillment: PaymentFulfillmentService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -88,6 +93,62 @@ export class PaymentsController {
   ): Promise<Payment[]> {
     await this.requireAdminOrOwner(authHeader, userId);
     return this.paymentsService.findByUser(userId, page, limit);
+  }
+
+  /**
+   * Latest payment per membership for a member (admin/owner) — powers the
+   * "last payment" quick info + order/invoice deep-links on the membership card.
+   */
+  @Get('user/:userId/latest-by-membership')
+  async getLatestByMembership(
+    @Headers('authorization') authHeader: string,
+    @Param('userId') userId: string,
+  ) {
+    await this.requireAdminOrOwner(authHeader, userId);
+    return this.paymentsService.getLatestPaymentByMembership(userId);
+  }
+
+  /**
+   * OWNER-ONLY: reconstruct missing billing records (Payment / Order / Invoice)
+   * for ONE member, so historical members (esp. subscription buyers) show their
+   * orders/invoices/payments. ?dryRun=true (default) = no-write PREVIEW that
+   * reports what would be created; ?dryRun=false = APPLY. Invoice emails are
+   * suppressed. Idempotent — safe to re-run.
+   */
+  @Post('admin/backfill-member/:memberId')
+  @HttpCode(HttpStatus.OK)
+  async backfillMemberBilling(
+    @Headers('authorization') authHeader: string,
+    @Param('memberId') memberId: string,
+    @Query('dryRun') dryRun?: string,
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (String((profile as any)?.meca_id) !== '202401') {
+      throw new ForbiddenException('Billing backfill is restricted to the system owner (MECA 202401).');
+    }
+    const isDryRun = dryRun !== 'false';
+    return this.fulfillment.backfillMemberBilling(memberId, { dryRun: isDryRun });
+  }
+
+  /**
+   * OWNER-ONLY (James, MECA 202401): GLOBAL billing backfill — reconstruct
+   * missing Payment / Order / Invoice records across ALL members (esp.
+   * historical subscription buyers). ?dryRun=true (default) reports counts of
+   * what would be created; ?dryRun=false applies. Invoice emails suppressed.
+   * Idempotent.
+   */
+  @Post('admin/backfill-all')
+  @HttpCode(HttpStatus.OK)
+  async backfillAllBilling(
+    @Headers('authorization') authHeader: string,
+    @Query('dryRun') dryRun?: string,
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (String((profile as any)?.meca_id) !== '202401') {
+      throw new ForbiddenException('Billing backfill is restricted to the system owner (MECA 202401).');
+    }
+    const isDryRun = dryRun !== 'false';
+    return this.fulfillment.backfillAllBilling({ dryRun: isDryRun });
   }
 
   @Get('user/:userId/stats')

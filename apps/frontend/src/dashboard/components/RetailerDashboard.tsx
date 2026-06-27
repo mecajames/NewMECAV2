@@ -36,7 +36,7 @@ interface RetailerDashboardProps {
 
 type ListingType = 'retailer' | 'manufacturer';
 
-export default function RetailerDashboard({ onNavigate }: RetailerDashboardProps) {
+export default function RetailerDashboard({ onNavigate: _onNavigate }: RetailerDashboardProps) {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);

@@ -603,7 +603,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <div className="flex items-center gap-2 text-gray-400 mb-2">
             <BarChart3 className="w-4 h-4" />
@@ -646,6 +646,54 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
           </div>
           <p className="text-2xl font-bold text-green-400">{stats?.resolved || 0}</p>
         </div>
+        {/* Closed — usually the largest bucket of "done" tickets. Shown so the
+            status cards actually add up to Total (open + in_progress + awaiting
+            + on_hold + resolved + closed + the rare ones below = total). */}
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-600/50">
+          <div className="flex items-center gap-2 text-gray-300 mb-2">
+            <XCircle className="w-4 h-4" />
+            <span className="text-xs uppercase">Closed</span>
+          </div>
+          <p className="text-2xl font-bold text-gray-300">{stats?.closed || 0}</p>
+        </div>
+        {/* Rare statuses — only rendered when there are any, so they don't
+            clutter the row but the totals still reconcile when present. */}
+        {!!stats?.escalated && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-red-500/30">
+            <div className="flex items-center gap-2 text-red-400 mb-2">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-xs uppercase">Escalated</span>
+            </div>
+            <p className="text-2xl font-bold text-red-400">{stats.escalated}</p>
+          </div>
+        )}
+        {!!stats?.pending_internal_review && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-indigo-500/30">
+            <div className="flex items-center gap-2 text-indigo-400 mb-2">
+              <Eye className="w-4 h-4" />
+              <span className="text-xs uppercase">Pending Review</span>
+            </div>
+            <p className="text-2xl font-bold text-indigo-400">{stats.pending_internal_review}</p>
+          </div>
+        )}
+        {!!stats?.reopened && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-amber-500/30">
+            <div className="flex items-center gap-2 text-amber-400 mb-2">
+              <RotateCcw className="w-4 h-4" />
+              <span className="text-xs uppercase">Reopened</span>
+            </div>
+            <p className="text-2xl font-bold text-amber-400">{stats.reopened}</p>
+          </div>
+        )}
+        {!!stats?.uncategorized && (
+          <div className="bg-slate-800 rounded-xl p-4 border border-pink-500/40">
+            <div className="flex items-center gap-2 text-pink-400 mb-2">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-xs uppercase">Other status</span>
+            </div>
+            <p className="text-2xl font-bold text-pink-400">{stats.uncategorized}</p>
+          </div>
+        )}
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
           <div className="flex items-center gap-2 text-gray-400 mb-2">
             <TrendingUp className="w-4 h-4" />

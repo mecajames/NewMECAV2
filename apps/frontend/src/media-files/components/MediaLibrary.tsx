@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, Trash2, Image as ImageIcon, FileText, Film, File, ExternalLink, Search, X, FolderOpen } from 'lucide-react';
 import { getStorageUrl } from '@/lib/storage';
 import { MediaType, MediaFile } from '@/media-files';

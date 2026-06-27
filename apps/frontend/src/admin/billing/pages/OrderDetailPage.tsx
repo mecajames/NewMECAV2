@@ -403,7 +403,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Payment Info */}
-            {(order.payment || order.metadata?.subscription_id || order.metadata?.gateway) && (
+            {!!(order.payment || order.metadata?.subscription_id || order.metadata?.gateway) && (
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
                   <CreditCard className="h-5 w-5 text-green-400" />
@@ -418,7 +418,7 @@ export default function OrderDetailPage() {
                       </span>
                     </div>
                   )}
-                  {order.metadata?.subscription_id && (
+                  {!!order.metadata?.subscription_id && (
                     <div>
                       <span className="text-gray-400">Subscription ID: </span>
                       <span className="text-blue-400 font-mono text-xs">
@@ -426,7 +426,7 @@ export default function OrderDetailPage() {
                       </span>
                     </div>
                   )}
-                  {order.metadata?.transaction_id && (
+                  {!!order.metadata?.transaction_id && (
                     <div>
                       <span className="text-gray-400">Transaction ID: </span>
                       <span className="text-gray-300 font-mono text-xs">
@@ -434,7 +434,7 @@ export default function OrderDetailPage() {
                       </span>
                     </div>
                   )}
-                  {order.metadata?.gateway && (
+                  {!!order.metadata?.gateway && (
                     <div>
                       <span className="text-gray-400">Gateway: </span>
                       <span className="text-gray-300 capitalize">
@@ -442,7 +442,7 @@ export default function OrderDetailPage() {
                       </span>
                     </div>
                   )}
-                  {order.metadata?.payment_type && (
+                  {!!order.metadata?.payment_type && (
                     <div>
                       <span className="text-gray-400">Payment Type: </span>
                       <span className="text-gray-300">

@@ -44,6 +44,46 @@ export class PaymentsService {
     );
   }
 
+  /**
+   * For a member, the LATEST payment per membership — with the linked order +
+   * invoice ids — so the membership card can show "last payment" quick info
+   * and deep-link to the full order/invoice. Keyed by membership id.
+   */
+  async getLatestPaymentByMembership(userId: string): Promise<Record<string, {
+    paymentId: string;
+    amount: number;
+    paidAt: string | null;
+    status: string;
+    method: string;
+    orderId: string | null;
+    orderNumber: string | null;
+    invoiceId: string | null;
+  }>> {
+    const em = this.em.fork();
+    const payments = await em.find(
+      Payment,
+      { user: userId, membership: { $ne: null } } as any,
+      { populate: ['order'], orderBy: { paidAt: 'DESC', createdAt: 'DESC' } },
+    );
+    const map: Record<string, any> = {};
+    for (const p of payments) {
+      const mId = (p.membership as any)?.id;
+      if (!mId || map[mId]) continue; // first seen = latest (ordered desc)
+      const order: any = p.order;
+      map[mId] = {
+        paymentId: p.id,
+        amount: Number(p.amount),
+        paidAt: p.paidAt ? p.paidAt.toISOString() : (p.createdAt ? p.createdAt.toISOString() : null),
+        status: p.paymentStatus,
+        method: p.paymentMethod,
+        orderId: order?.id ?? null,
+        orderNumber: order?.orderNumber ?? null,
+        invoiceId: order?.invoiceId ?? null,
+      };
+    }
+    return map;
+  }
+
   async findByMembership(membershipId: string): Promise<Payment[]> {
     const em = this.em.fork();
 

@@ -1571,6 +1571,15 @@ export class TicketsService {
       byDepartment[dept] = await em.count(Ticket, { department: dept });
     }
 
+    // Any tickets whose status isn't one of the 9 known statuses (legacy /
+    // null / typo values). Surfaced explicitly so the status cards always sum
+    // to `total` — otherwise such tickets silently vanish from the breakdown
+    // and the totals look broken.
+    const uncategorized = Math.max(
+      0,
+      total - (open + inProgress + awaitingResponse + pendingInternalReview + escalated + onHold + resolved + reopened + closed),
+    );
+
     return {
       total,
       open,
@@ -1582,6 +1591,7 @@ export class TicketsService {
       resolved,
       reopened,
       closed,
+      uncategorized,
       by_priority: {
         low: lowPriority,
         medium: mediumPriority,

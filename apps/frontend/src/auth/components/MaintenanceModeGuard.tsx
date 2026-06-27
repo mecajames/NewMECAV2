@@ -38,7 +38,7 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
       try {
         const { data: settings } = await axios.get('/api/site-settings', { _background: true } as any);
         const settingsMap: Record<string, string> = {};
-        settings.forEach(s => {
+        settings.forEach((s: { setting_key: string; setting_value: string }) => {
           settingsMap[s.setting_key] = s.setting_value;
         });
 

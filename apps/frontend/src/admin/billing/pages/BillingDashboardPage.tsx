@@ -15,6 +15,8 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
+import { useAuth } from '@/auth/contexts/AuthContext';
+import axios from '@/lib/axios';
 
 interface SubscriptionStats {
   active: number;
@@ -40,6 +42,27 @@ export default function BillingDashboardPage() {
     message: string;
     errors?: string[];
   } | null>(null);
+
+  // James-only (MECA 202401) global billing backfill.
+  const { profile } = useAuth();
+  const isJames = String((profile as any)?.meca_id) === '202401';
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillReport, setBackfillReport] = useState<any | null>(null);
+
+  const runGlobalBackfill = async (apply: boolean) => {
+    if (apply && !window.confirm(
+      'Run the GLOBAL billing backfill across ALL members now?\n\nThis creates missing Payment/Order/Invoice records for every affected member. No member emails are sent. It is idempotent (safe to re-run). Run a Preview first.',
+    )) return;
+    setBackfilling(true);
+    try {
+      const res = await axios.post(`/api/payments/admin/backfill-all?dryRun=${apply ? 'false' : 'true'}`);
+      setBackfillReport({ ...res.data, applied: apply });
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Backfill failed.');
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   // Mobile action menu
   const [menuOpen, setMenuOpen] = useState(false);
@@ -269,6 +292,45 @@ export default function BillingDashboardPage() {
                   <li key={idx}>{err}</li>
                 ))}
               </ul>
+            )}
+          </div>
+        )}
+
+        {/* James-only (MECA 202401): GLOBAL billing backfill — rebuild missing
+            Payment/Order/Invoice records across ALL members. Preview first. */}
+        {isJames && (
+          <div className="mb-8 bg-slate-800 rounded-xl border border-orange-500/30 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-white">Billing Backfill (all members)</h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  Reconstruct missing Payment / Order / Invoice records across every member (e.g. older subscription buyers).
+                  Owner-only. No emails are sent. Idempotent — safe to re-run.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => runGlobalBackfill(false)}
+                  disabled={backfilling}
+                  className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-50"
+                >
+                  {backfilling ? 'Working…' : 'Preview'}
+                </button>
+                <button
+                  onClick={() => runGlobalBackfill(true)}
+                  disabled={backfilling}
+                  className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg disabled:opacity-50"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+            {backfillReport && (
+              <div className={`mt-4 text-sm rounded-lg px-4 py-3 ${backfillReport.applied ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'}`}>
+                {backfillReport.applied
+                  ? `✓ Applied across ${backfillReport.members_affected} member(s) — created ${backfillReport.created?.payments ?? 0} payment(s) and ${backfillReport.created?.orders ?? 0} order/invoice record(s).`
+                  : `Preview — ${backfillReport.members_affected} member(s) affected: ${backfillReport.memberships_missing_payment ?? 0} membership(s) with no payment and ${backfillReport.payments_missing_order ?? 0} payment(s) missing an order/invoice would be rebuilt. Click Apply to commit.`}
+              </div>
             )}
           </div>
         )}
