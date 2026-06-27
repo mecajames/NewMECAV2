@@ -7023,10 +7023,31 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
             </div>
           </div>
           {backfillReport && (
-            <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${backfillReport.applied ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'}`}>
-              {backfillReport.applied
-                ? `✓ Applied — created ${backfillReport.created?.payments ?? 0} payment(s) and ${backfillReport.created?.orders ?? 0} order/invoice record(s).`
-                : `Preview — ${backfillReport.memberships_missing_payment?.length ?? 0} membership(s) with no payment and ${backfillReport.payments_missing_order?.length ?? 0} payment(s) missing an order/invoice would be rebuilt. Click Apply to commit.`}
+            <div className="mt-3 space-y-2">
+              <div className={`text-sm rounded-lg px-3 py-2 ${backfillReport.applied ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'}`}>
+                {backfillReport.applied
+                  ? `✓ Applied — created ${backfillReport.created?.payments ?? 0} payment(s) and ${backfillReport.created?.orders ?? 0} order/invoice record(s).`
+                  : (
+                    ((backfillReport.memberships_missing_payment?.length ?? 0) + (backfillReport.payments_missing_order?.length ?? 0)) === 0
+                      ? 'Preview — nothing to repair; this member already has complete billing records.'
+                      : `Preview — ${backfillReport.memberships_missing_payment?.length ?? 0} membership(s) with no payment and ${backfillReport.payments_missing_order?.length ?? 0} payment(s) missing an order/invoice would be rebuilt. Click Apply to commit.`
+                  )}
+              </div>
+              {/* Detail of exactly what's missing + what will be created (preview only). */}
+              {!backfillReport.applied && (
+                <>
+                  {backfillReport.memberships_missing_payment?.map((mm: any) => (
+                    <div key={mm.membership_id} className="text-xs text-gray-300 pl-1">
+                      • Membership <span className="text-gray-400">{mm.type || 'Membership'}</span> (${Number(mm.amount).toFixed(2)}) has no payment → <span className="text-emerald-400">will create payment + order + invoice</span>
+                    </div>
+                  ))}
+                  {backfillReport.payments_missing_order?.map((pm: any) => (
+                    <div key={pm.payment_id} className="text-xs text-gray-300 pl-1">
+                      • Payment ${Number(pm.amount).toFixed(2)} <span className="text-gray-500 font-mono">{pm.reference || ''}</span> has no order → <span className="text-emerald-400">will create order + invoice</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           )}
         </div>

@@ -47,19 +47,72 @@ export default function BillingDashboardPage() {
   const { profile } = useAuth();
   const isJames = String((profile as any)?.meca_id) === '202401';
   const [backfilling, setBackfilling] = useState(false);
-  const [backfillReport, setBackfillReport] = useState<any | null>(null);
+  const [backfillPreview, setBackfillPreview] = useState<any | null>(null);
+  const [backfillProgress, setBackfillProgress] = useState<{ current: number; total: number; name: string } | null>(null);
+  const [backfillResult, setBackfillResult] = useState<{ members: number; payments: number; orders: number } | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
 
-  const runGlobalBackfill = async (apply: boolean) => {
-    if (apply && !window.confirm(
-      'Run the GLOBAL billing backfill across ALL members now?\n\nThis creates missing Payment/Order/Invoice records for every affected member. No member emails are sent. It is idempotent (safe to re-run). Run a Preview first.',
-    )) return;
+  // PREVIEW: dry-run across all members → full per-member breakdown, no writes.
+  const previewBackfill = async () => {
     setBackfilling(true);
+    setBackfillError(null);
+    setBackfillResult(null);
     try {
-      const res = await axios.post(`/api/payments/admin/backfill-all?dryRun=${apply ? 'false' : 'true'}`);
-      setBackfillReport({ ...res.data, applied: apply });
+      const res = await axios.post(`/api/payments/admin/backfill-all?dryRun=true`);
+      setBackfillPreview(res.data);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Backfill failed.');
+      setBackfillError(err?.response?.data?.message || 'Preview failed.');
     } finally {
+      setBackfilling(false);
+    }
+  };
+
+  // APPLY: process members one at a time so we can show real progress (and so a
+  // failure on one member doesn't abort the rest). Uses the previewed member
+  // list; fetches it first if there's no preview yet.
+  const applyBackfill = async () => {
+    let members: any[] = backfillPreview?.members || [];
+    if (!backfillPreview) {
+      setBackfilling(true);
+      try {
+        const res = await axios.post(`/api/payments/admin/backfill-all?dryRun=true`);
+        setBackfillPreview(res.data);
+        members = res.data?.members || [];
+      } catch (err: any) {
+        setBackfillError(err?.response?.data?.message || 'Could not load the member list.');
+        setBackfilling(false);
+        return;
+      }
+    }
+    if (members.length === 0) {
+      alert('Nothing to backfill — every member already has complete billing records.');
+      return;
+    }
+    if (!window.confirm(
+      `Apply the billing backfill to ${members.length} member(s)?\n\nIt creates the missing Payment/Order/Invoice records. No member emails are sent. Idempotent — safe to re-run.`,
+    )) return;
+
+    setBackfilling(true);
+    setBackfillError(null);
+    setBackfillResult(null);
+    const tally = { members: 0, payments: 0, orders: 0 };
+    try {
+      for (let i = 0; i < members.length; i++) {
+        const m = members[i];
+        setBackfillProgress({ current: i + 1, total: members.length, name: m.member_name || m.meca_id || m.member_id });
+        try {
+          const res = await axios.post(`/api/payments/admin/backfill-member/${m.member_id}?dryRun=false`);
+          tally.members += 1;
+          tally.payments += res.data?.created?.payments ?? 0;
+          tally.orders += res.data?.created?.orders ?? 0;
+        } catch {
+          // keep going — one member's failure shouldn't stop the sweep
+        }
+      }
+      setBackfillResult(tally);
+      setBackfillPreview(null); // previewed work is now done
+    } finally {
+      setBackfillProgress(null);
       setBackfilling(false);
     }
   };
@@ -310,14 +363,14 @@ export default function BillingDashboardPage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => runGlobalBackfill(false)}
+                  onClick={previewBackfill}
                   disabled={backfilling}
                   className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg disabled:opacity-50"
                 >
-                  {backfilling ? 'Working…' : 'Preview'}
+                  {backfilling && !backfillProgress ? 'Scanning…' : 'Preview'}
                 </button>
                 <button
-                  onClick={() => runGlobalBackfill(true)}
+                  onClick={applyBackfill}
                   disabled={backfilling}
                   className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg disabled:opacity-50"
                 >
@@ -325,11 +378,79 @@ export default function BillingDashboardPage() {
                 </button>
               </div>
             </div>
-            {backfillReport && (
-              <div className={`mt-4 text-sm rounded-lg px-4 py-3 ${backfillReport.applied ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'}`}>
-                {backfillReport.applied
-                  ? `✓ Applied across ${backfillReport.members_affected} member(s) — created ${backfillReport.created?.payments ?? 0} payment(s) and ${backfillReport.created?.orders ?? 0} order/invoice record(s).`
-                  : `Preview — ${backfillReport.members_affected} member(s) affected: ${backfillReport.memberships_missing_payment ?? 0} membership(s) with no payment and ${backfillReport.payments_missing_order ?? 0} payment(s) missing an order/invoice would be rebuilt. Click Apply to commit.`}
+
+            {backfillError && (
+              <div className="mt-4 text-sm rounded-lg px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-300">{backfillError}</div>
+            )}
+
+            {/* Live progress while applying */}
+            {backfillProgress && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-sm text-gray-300 mb-1">
+                  <span>Repairing {backfillProgress.current} of {backfillProgress.total} — {backfillProgress.name}</span>
+                  <span>{Math.round((backfillProgress.current / backfillProgress.total) * 100)}%</span>
+                </div>
+                <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-orange-500 transition-all" style={{ width: `${(backfillProgress.current / backfillProgress.total) * 100}%` }} />
+                </div>
+              </div>
+            )}
+
+            {/* Apply result */}
+            {backfillResult && (
+              <div className="mt-4 text-sm rounded-lg px-4 py-3 bg-green-500/10 border border-green-500/30 text-green-300">
+                ✓ Done — repaired {backfillResult.members} member(s): created {backfillResult.payments} payment(s) and {backfillResult.orders} order/invoice record(s).
+              </div>
+            )}
+
+            {/* Preview detail: totals + per-member breakdown of what will be repaired */}
+            {backfillPreview && !backfillResult && (
+              <div className="mt-4">
+                <div className="text-sm rounded-lg px-4 py-3 bg-blue-500/10 border border-blue-500/30 text-blue-200">
+                  {backfillPreview.totals.members_affected === 0 ? (
+                    <span>Nothing to repair — every member already has complete billing records.</span>
+                  ) : (
+                    <span>
+                      <strong>{backfillPreview.totals.members_affected}</strong> member(s) affected ·{' '}
+                      <strong>{backfillPreview.totals.memberships_missing_payment}</strong> membership(s) with no payment ·{' '}
+                      <strong>{backfillPreview.totals.payments_missing_order}</strong> payment(s) missing an order/invoice.
+                      {' '}Applying will create the missing records (nothing existing is replaced). Click <strong>Apply</strong> to commit.
+                    </span>
+                  )}
+                </div>
+
+                {backfillPreview.members.length > 0 && (
+                  <div className="mt-3 max-h-80 overflow-y-auto rounded-lg border border-slate-700 divide-y divide-slate-700">
+                    {backfillPreview.members.map((m: any) => (
+                      <div key={m.member_id} className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-white font-medium">{m.member_name || 'Member'}</span>
+                          {m.meca_id && <span className="text-orange-400 font-mono text-xs">#{m.meca_id}</span>}
+                        </div>
+                        {m.memberships_missing_payment.length > 0 && (
+                          <ul className="text-gray-300 space-y-0.5 mb-1">
+                            {m.memberships_missing_payment.map((mm: any) => (
+                              <li key={mm.membership_id}>
+                                • Membership <span className="text-gray-400">{mm.type || 'Membership'}</span> (${Number(mm.amount).toFixed(2)}) has no payment →{' '}
+                                <span className="text-emerald-400">will create payment + order + invoice</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {m.payments_missing_order.length > 0 && (
+                          <ul className="text-gray-300 space-y-0.5">
+                            {m.payments_missing_order.map((pm: any) => (
+                              <li key={pm.payment_id}>
+                                • Payment ${Number(pm.amount).toFixed(2)} <span className="text-gray-500 font-mono text-xs">{pm.reference || ''}</span> has no order →{' '}
+                                <span className="text-emerald-400">will create order + invoice</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
