@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Calendar, Trophy, Award, CreditCard, Mail, Clock, CheckCircle, XCircle, Eye, MessageSquare, Settings, Users, FileText } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
+import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 import axios from '@/lib/axios';
 
 interface EventHostingRequest {
@@ -27,12 +28,27 @@ export default function UserDashboard() {
   const [hostingRequests, setHostingRequests] = useState<EventHostingRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<EventHostingRequest | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [stats, setStats] = useState({
-    totalEvents: 0,
-    totalPoints: 0,
-    bestPlacement: null as number | null,
-  });
   const [loading, setLoading] = useState(true);
+
+  // Season filter — stats + the two lists default to the current season.
+  const { seasonId, setSeasonId } = useSeasonFilter();
+
+  // Results carry season_id directly; registrations via their event. null = all time.
+  const filteredResults = useMemo(
+    () => (seasonId ? results.filter((r: any) => r.season_id === seasonId) : results),
+    [results, seasonId],
+  );
+  const filteredRegistrations = useMemo(
+    () => (seasonId ? registrations.filter((r: any) => r.event?.season_id === seasonId) : registrations),
+    [registrations, seasonId],
+  );
+  const stats = useMemo(() => {
+    const totalEvents = filteredResults.length;
+    const totalPoints = filteredResults.reduce((sum: number, r: any) => sum + (r.points_earned || 0), 0);
+    const bestPlacement =
+      filteredResults.length > 0 ? Math.min(...filteredResults.map((r: any) => r.placement)) : null;
+    return { totalEvents, totalPoints, bestPlacement };
+  }, [filteredResults]);
 
   useEffect(() => {
     if (profile) {
@@ -57,21 +73,6 @@ export default function UserDashboard() {
 
       if (competitorResults) {
         setResults(competitorResults);
-
-        const totalPoints = competitorResults.reduce(
-          (sum: number, r: any) => sum + (r.points_earned || 0),
-          0
-        );
-        const bestPlacement =
-          competitorResults.length > 0
-            ? Math.min(...competitorResults.map((r: any) => r.placement))
-            : null;
-
-        setStats({
-          totalEvents: competitorResults.length,
-          totalPoints,
-          bestPlacement,
-        });
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -139,6 +140,10 @@ export default function UserDashboard() {
           )}
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">My Stats</h2>
+          <SeasonSelect value={seasonId} onChange={setSeasonId} />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <div className="flex items-center gap-4">
@@ -146,7 +151,7 @@ export default function UserDashboard() {
                 <User className="h-6 w-6 text-orange-500" />
               </div>
               <div>
-                <p className="text-gray-400 text-sm">Membership</p>
+                <p className="text-gray-400 text-sm">Membership <span className="text-[10px] text-slate-500 uppercase">· live</span></p>
                 <p className="text-white font-semibold capitalize">
                   {profile?.membership_status}
                 </p>
@@ -312,9 +317,9 @@ export default function UserDashboard() {
               <div className="text-center py-12">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
               </div>
-            ) : registrations.length > 0 ? (
+            ) : filteredRegistrations.length > 0 ? (
               <div className="space-y-4">
-                {registrations.slice(0, 5).map((reg) => (
+                {filteredRegistrations.slice(0, 5).map((reg) => (
                   <div
                     key={reg.id}
                     className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors cursor-pointer"
@@ -369,9 +374,9 @@ export default function UserDashboard() {
               <div className="text-center py-12">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-500 border-r-transparent"></div>
               </div>
-            ) : results.length > 0 ? (
+            ) : filteredResults.length > 0 ? (
               <div className="space-y-4">
-                {results.slice(0, 5).map((result) => (
+                {filteredResults.slice(0, 5).map((result) => (
                   <div
                     key={result.id}
                     className="bg-slate-700 rounded-lg p-4 hover:bg-slate-600 transition-colors"
