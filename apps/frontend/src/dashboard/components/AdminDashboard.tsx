@@ -24,6 +24,7 @@ import { eventRegistrationsApi } from '@/event-registrations';
 import { billingApi } from '@/api-client/billing.api-client';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { qaApi } from '@/api-client/qa.api-client';
+import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 
 type AdminView = 'overview' | 'events' | 'results' | 'pending-results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
 
@@ -80,11 +81,22 @@ export default function AdminDashboard() {
     return {};
   });
 
+  // Season filter for the season-scoped stat cards (Events, Registrations,
+  // Revenue). Users/Online are live and ignore it. Defaults to current season.
+  const { seasonId, setSeasonId, dateRange, loading: seasonsLoading } = useSeasonFilter();
+
   useEffect(() => {
-    fetchStats();
     fetchQaAssignments();
     fetchPendingResultsCount();
   }, []);
+
+  // (Re)fetch stats whenever the selected season changes. Wait for seasons to
+  // load first so we default to the current season instead of flashing all-time.
+  useEffect(() => {
+    if (seasonsLoading) return;
+    fetchStats(seasonId, dateRange.startDate, dateRange.endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seasonsLoading, seasonId, dateRange.startDate, dateRange.endDate]);
 
   const fetchPendingResultsCount = async () => {
     try {
@@ -101,13 +113,20 @@ export default function AdminDashboard() {
     localStorage.setItem('adminDashboardExpandedSections', JSON.stringify(expandedSections));
   }, [expandedSections]);
 
-  const fetchStats = async () => {
+  const fetchStats = async (
+    seasonId: string | null,
+    startDate?: string,
+    endDate?: string,
+  ) => {
     try {
       const [profileStats, eventStats, registrationStats, billingStats, onlineCount] = await Promise.all([
         profilesApi.getStats(),
-        eventsApi.getStats(),
-        eventRegistrationsApi.getStats(),
-        billingApi.getDashboardStats().catch(() => null),
+        eventsApi.getStats(seasonId ?? undefined),
+        eventRegistrationsApi.getStats(seasonId ?? undefined),
+        // Money has no season tag — scope it by the season's date range.
+        billingApi
+          .getDashboardStats(seasonId ? { startDate, endDate } : undefined)
+          .catch(() => null),
         userActivityApi.getOnlineCount().catch(() => 0),
       ]);
 
@@ -742,11 +761,15 @@ export default function AdminDashboard() {
       )}
 
       {/* Stats Grid */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Overview</h2>
+        <SeasonSelect value={seasonId} onChange={setSeasonId} />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Total Active Users</p>
+              <p className="text-slate-400 text-sm">Total Active Users <span className="text-[10px] text-slate-500 uppercase">· live</span></p>
               <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
             </div>
             <Users className="h-8 w-8 text-blue-500" />
@@ -756,7 +779,7 @@ export default function AdminDashboard() {
         <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Currently Online</p>
+              <p className="text-slate-400 text-sm">Currently Online <span className="text-[10px] text-slate-500 uppercase">· live</span></p>
               <p className="text-2xl font-bold text-white mt-1">{stats.onlineCount}</p>
             </div>
             <div className="relative">

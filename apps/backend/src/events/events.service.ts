@@ -755,9 +755,11 @@ export class EventsService {
     };
   }
 
-  async getStats(): Promise<{ totalEvents: number }> {
+  async getStats(seasonId?: string): Promise<{ totalEvents: number }> {
     const em = this.em.fork();
-    const totalEvents = await em.count(Event, {});
+    const where: any = {};
+    if (seasonId) where.season = seasonId;
+    const totalEvents = await em.count(Event, where);
     return { totalEvents };
   }
 

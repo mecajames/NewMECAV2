@@ -602,109 +602,37 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-          <div className="flex items-center gap-2 text-gray-400 mb-2">
-            <BarChart3 className="w-4 h-4" />
-            <span className="text-xs uppercase">Total</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{stats?.total || 0}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-blue-500/30">
-          <div className="flex items-center gap-2 text-blue-400 mb-2">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-xs uppercase">Open</span>
-          </div>
-          <p className="text-2xl font-bold text-blue-400">{stats?.open || 0}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-orange-500/30">
-          <div className="flex items-center gap-2 text-orange-400 mb-2">
-            <Clock className="w-4 h-4" />
-            <span className="text-xs uppercase">In Progress</span>
-          </div>
-          <p className="text-2xl font-bold text-orange-400">{stats?.in_progress || 0}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-yellow-500/30">
-          <div className="flex items-center gap-2 text-yellow-400 mb-2">
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-xs uppercase">Awaiting Response</span>
-          </div>
-          <p className="text-2xl font-bold text-yellow-400">{stats?.awaiting_response || 0}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-purple-500/30">
-          <div className="flex items-center gap-2 text-purple-400 mb-2">
-            <PauseCircle className="w-4 h-4" />
-            <span className="text-xs uppercase">On Hold</span>
-          </div>
-          <p className="text-2xl font-bold text-purple-400">{stats?.on_hold || 0}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-4 border border-green-500/30">
-          <div className="flex items-center gap-2 text-green-400 mb-2">
-            <CheckCircle className="w-4 h-4" />
-            <span className="text-xs uppercase">Resolved</span>
-          </div>
-          <p className="text-2xl font-bold text-green-400">{stats?.resolved || 0}</p>
-        </div>
-        {/* Closed — usually the largest bucket of "done" tickets. Shown so the
-            status cards actually add up to Total (open + in_progress + awaiting
-            + on_hold + resolved + closed + the rare ones below = total). */}
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-600/50">
-          <div className="flex items-center gap-2 text-gray-300 mb-2">
-            <XCircle className="w-4 h-4" />
-            <span className="text-xs uppercase">Closed</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-300">{stats?.closed || 0}</p>
-        </div>
-        {/* Rare statuses — only rendered when there are any, so they don't
-            clutter the row but the totals still reconcile when present. */}
-        {!!stats?.escalated && (
-          <div className="bg-slate-800 rounded-xl p-4 border border-red-500/30">
-            <div className="flex items-center gap-2 text-red-400 mb-2">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-xs uppercase">Escalated</span>
+      {/* Stats Cards — one compact row. Cards share the width evenly and only
+          wrap when the viewport is genuinely too narrow (e.g. mobile). Rare
+          statuses are inserted only when present so the totals still reconcile.
+          Data-driven so a card's presence never pushes Avg Time onto a 2nd row. */}
+      <div className="flex flex-wrap gap-3">
+        {[
+          { show: true, label: 'Total', value: stats?.total ?? 0, Icon: BarChart3, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white' },
+          { show: true, label: 'Open', value: stats?.open ?? 0, Icon: AlertCircle, border: 'border-blue-500/30', accent: 'text-blue-400', val: 'text-blue-400' },
+          { show: true, label: 'In Progress', value: stats?.in_progress ?? 0, Icon: Clock, border: 'border-orange-500/30', accent: 'text-orange-400', val: 'text-orange-400' },
+          { show: true, label: 'Awaiting Response', value: stats?.awaiting_response ?? 0, Icon: MessageSquare, border: 'border-yellow-500/30', accent: 'text-yellow-400', val: 'text-yellow-400' },
+          { show: true, label: 'On Hold', value: stats?.on_hold ?? 0, Icon: PauseCircle, border: 'border-purple-500/30', accent: 'text-purple-400', val: 'text-purple-400' },
+          { show: true, label: 'Resolved', value: stats?.resolved ?? 0, Icon: CheckCircle, border: 'border-green-500/30', accent: 'text-green-400', val: 'text-green-400' },
+          // Closed — shown so the status cards add up to Total.
+          { show: true, label: 'Closed', value: stats?.closed ?? 0, Icon: XCircle, border: 'border-slate-600/50', accent: 'text-gray-300', val: 'text-gray-300' },
+          // Rare statuses — only when present, so they don't clutter the row.
+          { show: !!stats?.escalated, label: 'Escalated', value: stats?.escalated ?? 0, Icon: AlertCircle, border: 'border-red-500/30', accent: 'text-red-400', val: 'text-red-400' },
+          { show: !!stats?.pending_internal_review, label: 'Pending Review', value: stats?.pending_internal_review ?? 0, Icon: Eye, border: 'border-indigo-500/30', accent: 'text-indigo-400', val: 'text-indigo-400' },
+          { show: !!stats?.reopened, label: 'Reopened', value: stats?.reopened ?? 0, Icon: RotateCcw, border: 'border-amber-500/30', accent: 'text-amber-400', val: 'text-amber-400' },
+          { show: !!stats?.uncategorized, label: 'Other status', value: stats?.uncategorized ?? 0, Icon: AlertCircle, border: 'border-pink-500/40', accent: 'text-pink-400', val: 'text-pink-400' },
+          { show: true, label: 'Avg Time', value: stats?.average_resolution_time_hours ? `${stats.average_resolution_time_hours}h` : 'N/A', Icon: TrendingUp, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white' },
+        ]
+          .filter((c) => c.show)
+          .map((c) => (
+            <div key={c.label} className={`flex-1 min-w-[104px] bg-slate-800 rounded-lg p-3 border ${c.border}`}>
+              <div className={`flex items-start gap-1.5 mb-1.5 min-h-[1.75rem] ${c.accent}`}>
+                <c.Icon className="w-4 h-4 shrink-0 mt-px" />
+                <span className="text-[10px] font-semibold uppercase tracking-wide leading-tight">{c.label}</span>
+              </div>
+              <p className={`text-xl font-bold leading-none ${c.val}`}>{c.value}</p>
             </div>
-            <p className="text-2xl font-bold text-red-400">{stats.escalated}</p>
-          </div>
-        )}
-        {!!stats?.pending_internal_review && (
-          <div className="bg-slate-800 rounded-xl p-4 border border-indigo-500/30">
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-              <Eye className="w-4 h-4" />
-              <span className="text-xs uppercase">Pending Review</span>
-            </div>
-            <p className="text-2xl font-bold text-indigo-400">{stats.pending_internal_review}</p>
-          </div>
-        )}
-        {!!stats?.reopened && (
-          <div className="bg-slate-800 rounded-xl p-4 border border-amber-500/30">
-            <div className="flex items-center gap-2 text-amber-400 mb-2">
-              <RotateCcw className="w-4 h-4" />
-              <span className="text-xs uppercase">Reopened</span>
-            </div>
-            <p className="text-2xl font-bold text-amber-400">{stats.reopened}</p>
-          </div>
-        )}
-        {!!stats?.uncategorized && (
-          <div className="bg-slate-800 rounded-xl p-4 border border-pink-500/40">
-            <div className="flex items-center gap-2 text-pink-400 mb-2">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-xs uppercase">Other status</span>
-            </div>
-            <p className="text-2xl font-bold text-pink-400">{stats.uncategorized}</p>
-          </div>
-        )}
-        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-          <div className="flex items-center gap-2 text-gray-400 mb-2">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-xs uppercase">Avg Time</span>
-          </div>
-          <p className="text-2xl font-bold text-white">
-            {stats?.average_resolution_time_hours
-              ? `${stats.average_resolution_time_hours}h`
-              : 'N/A'}
-          </p>
-        </div>
+          ))}
       </div>
 
       {/* Priority Distribution */}
