@@ -3,6 +3,7 @@ import { EntityManager, raw } from '@mikro-orm/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
 import { Role } from '../permissions/permission.entity';
+import { resolveSlugToId } from '../common/slug.util';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { isAdminUser, isProtectedAccount } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
@@ -532,6 +533,11 @@ export class ProfilesService {
 
   async findPublicById(id: string): Promise<Profile> {
     const em = this.em.fork();
+    const resolved = await resolveSlugToId(em.getConnection(), 'profiles', id);
+    if (!resolved) {
+      throw new NotFoundException(`Public profile with ID ${id} not found`);
+    }
+    id = resolved;
     // Server-enforced expired-member privacy: only ACTIVE members appear on
     // the public side. Expired members are treated as the general public —
     // their profile data is not returned to anonymous callers, even with

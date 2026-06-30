@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { RulebookStatus } from '@newmeca/shared';
 import { Rulebook } from './rulebooks.entity';
+import { resolveSlugToId } from '../common/slug.util';
 
 @Injectable()
 export class RulebooksService {
@@ -26,6 +27,11 @@ export class RulebooksService {
 
   async findById(id: string): Promise<Rulebook> {
     const em = this.em.fork();
+    const resolved = await resolveSlugToId(em.getConnection(), 'rulebooks', id);
+    if (!resolved) {
+      throw new NotFoundException(`Rulebook with ID ${id} not found`);
+    }
+    id = resolved;
     const rulebook = await em.findOne(Rulebook, { id });
     if (!rulebook) {
       throw new NotFoundException(`Rulebook with ID ${id} not found`);

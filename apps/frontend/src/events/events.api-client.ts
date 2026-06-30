@@ -30,6 +30,7 @@ export interface Event {
   has_gate_fee?: boolean;
   gate_fee?: number;
   season_id?: string;
+  slug?: string;
   points_multiplier?: number;
   format?: string;
   formats?: string[];
