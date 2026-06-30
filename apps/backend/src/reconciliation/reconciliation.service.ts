@@ -35,9 +35,6 @@ const REPORT_KEY = 'reconciliation_last_report';
 const LIVE_REPORT_KEY = 'reconciliation_live_last_report';
 const ALERT_MARKER_KEY = 'reconciliation_last_alert_date';
 const LIVE_ALERT_MARKER_KEY = 'reconciliation_live_last_alert_date';
-// Stable advisory-lock id so concurrent instances/cluster workers can't both
-// fire the nightly alert (the duplicate-email lesson from the analytics report).
-const RECON_LOCK_ID = 815623002;
 const SAMPLE_LIMIT = 25;
 // Cap per-record live verify calls so a busy window can't fan out unbounded
 // gateway API calls. If exceeded, the report says so (no silent truncation).
@@ -573,32 +570,24 @@ export class ReconciliationService {
     },
   ): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
-    let claimed = false;
-    const em = this.em.fork();
+    // Idempotent across instances: a single INSERT into cron_send_log (PK on
+    // job_key + range_id) means only ONE instance can claim today's alert, even
+    // when every instance fires the cron at the same instant. The previous
+    // advisory-lock scheme ran via getConnection().execute() on a pooled,
+    // autocommit connection (not the transaction's), so the lock released
+    // immediately and didn't actually serialise concurrent firings.
     try {
-      claimed = await em.transactional(async (tem) => {
-        await tem.getConnection().execute('SELECT pg_advisory_xact_lock(?)', [RECON_LOCK_ID]);
-        const marker = await tem.findOne(SiteSettings, { setting_key: opts.markerKey });
-        if (marker && marker.setting_value === today) return false;
-        if (marker) {
-          marker.setting_value = today;
-          marker.updated_at = new Date();
-        } else {
-          tem.create(SiteSettings, {
-            setting_key: opts.markerKey,
-            setting_value: today,
-            setting_type: 'string',
-            description: 'Last date a reconciliation critical-alert email was sent (duplicate-send guard).',
-          } as any);
-        }
-        return true;
-      });
-    } catch (err) {
-      this.logger.error(`Reconciliation alert claim failed (skipping alert): ${err}`);
-      return;
-    }
-    if (!claimed) {
-      this.logger.log('Reconciliation alert already sent today by another instance — skipping.');
+      await this.em.getConnection().execute(
+        'INSERT INTO cron_send_log (job_key, range_id) VALUES (?, ?)',
+        [opts.markerKey, today],
+      );
+    } catch (err: any) {
+      const code = err?.code ?? err?.cause?.code;
+      if (code === '23505' || /duplicate key|unique/i.test(String(err?.message ?? ''))) {
+        this.logger.log('Reconciliation alert already sent today by another instance — skipping.');
+      } else {
+        this.logger.error(`Reconciliation alert claim failed (skipping alert): ${err}`);
+      }
       return;
     }
 

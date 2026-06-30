@@ -56,6 +56,25 @@ export class ScheduledTasksService {
     return appEnv === 'production' || appEnv === 'prod';
   }
 
+  /**
+   * Housekeeping: prune the cron idempotency log (cron_send_log) so it can't
+   * grow unbounded. Rows older than 180 days are long past any dedup window;
+   * keeping a few months is enough to eyeball recent sends. The DELETE is
+   * idempotent, so it's harmless that every instance runs it. Runs monthly.
+   */
+  @Cron('0 3 1 * *', { name: 'prune-cron-send-log' })
+  async pruneCronSendLog(): Promise<void> {
+    try {
+      await this.em.getConnection().execute(
+        `DELETE FROM cron_send_log WHERE sent_at < now() - interval '180 days'`,
+      );
+      this.logger.log('Pruned cron_send_log rows older than 180 days.');
+    } catch (err) {
+      // Non-fatal (e.g. table not yet migrated) — never let housekeeping throw.
+      this.logger.error(`Failed to prune cron_send_log: ${err}`);
+    }
+  }
+
   // =============================================================================
   // MEMBERSHIP STATUS RECONCILE — keep profiles.membership_status accurate.
   // The denormalized label had no job maintaining it, so lapsed members stayed

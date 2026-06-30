@@ -5,14 +5,10 @@ import { EmailService } from '../email/email.service';
 import { AnalyticsService, SummaryStats, TopPage, TrafficSource } from './analytics.service';
 import { SearchConsoleService } from './search-console.service';
 import { Profile } from '../profiles/profiles.entity';
-import { SiteSettings } from '../site-settings/site-settings.entity';
 import { adminRecipientWhere } from '../auth/is-admin.helper';
 
-// Stable, arbitrary 32-bit key for the Postgres advisory lock that serialises
-// the weekly-analytics send across processes/instances (so two app instances —
-// or PM2 cluster workers — can't both fire the cron and double-send).
-const WEEKLY_ANALYTICS_LOCK_ID = 815623001;
-const WEEKLY_ANALYTICS_MARKER_KEY = 'analytics_weekly_last_sent_range';
+// Idempotency key for the weekly-analytics send in the cron_send_log table.
+const WEEKLY_ANALYTICS_JOB_KEY = 'weekly_analytics';
 
 interface SearchQueryData {
   query: string;
@@ -116,41 +112,33 @@ export class AnalyticsEmailService {
 
   /**
    * Atomically claim the weekly send for a given date range. Returns true if THIS
-   * call won the claim (and should send), false if it was already claimed.
+   * instance won the claim (and should send), false if it was already claimed.
    *
-   * A transaction-level advisory lock serialises concurrent firings (instances /
-   * cluster workers that hit the cron at the same instant); a persisted marker in
-   * site_settings remembers the last range sent so firings minutes/hours apart
-   * (e.g. instances in different timezones) also de-duplicate. We don't rely on a
-   * unique constraint on site_settings (it isn't enforced in this DB).
+   * The claim is a single INSERT into cron_send_log, whose PRIMARY KEY is
+   * (job_key, range_id). Postgres guarantees exactly one INSERT of a given key
+   * can succeed, so even when EVERY app instance fires this cron at the same
+   * instant (they all do now — the cron is timezone-pinned) only one insert wins
+   * and the rest get a unique-violation (23505) and bail. This replaced an
+   * advisory-lock + site_settings-marker scheme that did NOT serialise: the
+   * advisory lock ran via getConnection().execute() on a pooled, autocommit
+   * connection (not the transaction's), so it was released immediately and gave
+   * no mutual exclusion — every simultaneous firing sent a copy.
    */
   private async claimWeeklySend(rangeId: string): Promise<boolean> {
-    const em = this.em.fork();
     try {
-      return await em.transactional(async (tem) => {
-        // Hold the lock until commit so a concurrent firing waits, then sees the marker.
-        await tem.getConnection().execute('SELECT pg_advisory_xact_lock(?)', [WEEKLY_ANALYTICS_LOCK_ID]);
-
-        const existing = await tem.findOne(SiteSettings, { setting_key: WEEKLY_ANALYTICS_MARKER_KEY });
-        if (existing && existing.setting_value === rangeId) {
-          return false; // already sent this week's report
-        }
-        if (existing) {
-          existing.setting_value = rangeId;
-          existing.updated_at = new Date();
-        } else {
-          tem.create(SiteSettings, {
-            setting_key: WEEKLY_ANALYTICS_MARKER_KEY,
-            setting_value: rangeId,
-            setting_type: 'string',
-            description: 'Last weekly analytics report date range that was emailed (duplicate-send guard).',
-          } as any);
-        }
-        return true;
-      });
-    } catch (err) {
-      // If the guard itself fails, fall back to sending rather than silently dropping
-      // the report — a rare duplicate beats never delivering it.
+      await this.em.getConnection().execute(
+        'INSERT INTO cron_send_log (job_key, range_id) VALUES (?, ?)',
+        [WEEKLY_ANALYTICS_JOB_KEY, rangeId],
+      );
+      return true; // our INSERT succeeded → we won the claim
+    } catch (err: any) {
+      const code = err?.code ?? err?.cause?.code;
+      const message = String(err?.message ?? '');
+      if (code === '23505' || /duplicate key|unique/i.test(message)) {
+        return false; // another instance already claimed this range
+      }
+      // Unknown failure: fall back to sending rather than silently dropping the
+      // report — a rare duplicate beats never delivering it.
       this.logger.error(`Weekly analytics idempotency claim failed (will send anyway): ${err}`);
       return true;
     }
