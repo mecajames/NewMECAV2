@@ -358,6 +358,47 @@ export class ReconciliationService {
     return Math.round(parseFloat(String(v ?? '0')) * 100);
   }
 
+  /**
+   * Stripe charges whose money is recorded outside the `payments` table:
+   *   • `shop_orders` — store their own Stripe PI + charge id;
+   *   • `memberships` — subscription (invoice) charges are recorded here keyed by
+   *     the Stripe subscription id, with no payments row of their own.
+   * Pulled un-windowed (a renewal charge's subscription/order can predate the
+   * window) so the orphan check never false-flags them as "money never recorded".
+   */
+  private async loadNonPaymentStripeIndexes(): Promise<{
+    shopOrderStripeIds: Set<string>;
+    membershipSubscriptionIds: Set<string>;
+  }> {
+    const shopOrderStripeIds = new Set<string>();
+    const membershipSubscriptionIds = new Set<string>();
+    const conn = this.em.fork().getConnection();
+    try {
+      const shopRows = await conn.execute<Array<{ pi: string | null; ch: string | null }>>(
+        `SELECT stripe_payment_intent_id AS pi, stripe_charge_id AS ch
+           FROM shop_orders
+          WHERE stripe_payment_intent_id IS NOT NULL OR stripe_charge_id IS NOT NULL`,
+      );
+      for (const r of shopRows) {
+        if (r.pi) shopOrderStripeIds.add(r.pi);
+        if (r.ch) shopOrderStripeIds.add(r.ch);
+      }
+    } catch (err) {
+      this.logger.error(`loadNonPaymentStripeIndexes: shop_orders lookup failed: ${err}`);
+    }
+    try {
+      const subRows = await conn.execute<Array<{ sub: string }>>(
+        `SELECT DISTINCT stripe_subscription_id AS sub
+           FROM memberships
+          WHERE stripe_subscription_id IS NOT NULL`,
+      );
+      for (const r of subRows) if (r.sub) membershipSubscriptionIds.add(r.sub);
+    } catch (err) {
+      this.logger.error(`loadNonPaymentStripeIndexes: memberships lookup failed: ${err}`);
+    }
+    return { shopOrderStripeIds, membershipSubscriptionIds };
+  }
+
   private async stripeLiveChecks(
     localPayments: Payment[],
     localRefunds: Refund[],
@@ -391,14 +432,29 @@ export class ReconciliationService {
     }
     const chargeByPi = new Map(chargesRes.charges.filter((c) => c.paymentIntentId).map((c) => [c.paymentIntentId as string, c]));
 
+    // Some Stripe money is recorded outside the `payments` ledger and must not be
+    // mistaken for an orphan:
+    //   • shop orders store their own PI/charge id in `shop_orders`;
+    //   • subscription (invoice) charges land in `memberships` keyed by the Stripe
+    //     subscription id, with no payments row of their own.
+    // Pull both indexes so the orphan check below recognises them as recorded.
+    const { shopOrderStripeIds, membershipSubscriptionIds } = await this.loadNonPaymentStripeIndexes();
+
+    const isRecorded = (c: { paymentIntentId: string | null; id: string; subscriptionId: string | null }): boolean =>
+      (!!c.paymentIntentId && localStripeIds.has(c.paymentIntentId)) ||
+      (!!c.paymentIntentId && shopOrderStripeIds.has(c.paymentIntentId)) ||
+      shopOrderStripeIds.has(c.id) ||
+      (!!c.subscriptionId && membershipSubscriptionIds.has(c.subscriptionId));
+
     const out: ReconCheck[] = [];
 
-    // 1. Gateway→DB: succeeded charge with no local payment.
+    // 1. Gateway→DB: succeeded charge with no local record (payment, shop order, or
+    //    subscription-backed membership).
     const orphans = chargesRes.charges
-      .filter((c) => c.status === 'succeeded' && (!c.paymentIntentId || !localStripeIds.has(c.paymentIntentId)))
-      .map((c) => ({ chargeId: c.id, paymentIntentId: c.paymentIntentId, amount: (c.amountCents / 100).toFixed(2), created: new Date(c.created * 1000).toISOString() }));
-    out.push(this.mkCheck('live_stripe_unrecorded_charges', 'Stripe charges with no local payment',
-      'Succeeded Stripe charges in the window that have NO matching local payment row — money collected the DB never recorded (likely a missed webhook).', 'critical', orphans));
+      .filter((c) => c.status === 'succeeded' && !isRecorded(c))
+      .map((c) => ({ chargeId: c.id, paymentIntentId: c.paymentIntentId, subscriptionId: c.subscriptionId, amount: (c.amountCents / 100).toFixed(2), created: new Date(c.created * 1000).toISOString() }));
+    out.push(this.mkCheck('live_stripe_unrecorded_charges', 'Stripe charges with no local record',
+      'Succeeded Stripe charges in the window with NO matching local record — not in the payments ledger, shop orders, or a subscription-backed membership. Money collected the DB never recorded (likely a missed webhook).', 'critical', orphans));
 
     // 2. DB→Gateway: local paid payment whose charge is not succeeded.
     const drift = localPayments
