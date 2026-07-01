@@ -36,8 +36,14 @@ interface Props {
  * Used by Results, Leaderboard, Standings, and Top 10 so the rule is
  * identical everywhere.
  */
-export function MecaIdLink({ mecaId, displayText, className, hideIfNoLink }: Props) {
+export function MecaIdLink({ mecaId: rawMecaId, displayText, className, hideIfNoLink }: Props) {
   const { user, profile } = useAuth();
+
+  // Normalize: results data can carry a stray leading/trailing space in meca_id
+  // (from imports/re-assignments). Trim so the link URL, display, and the
+  // active-membership gate all use the clean id — a spaced id builds
+  // "/results/member/%20260014" and fails the active-membership match.
+  const mecaId = typeof rawMecaId === 'string' ? rawMecaId.trim() : rawMecaId;
 
   const isRealMecaId = !!mecaId && mecaId !== '999999' && mecaId !== '0';
   const text = displayText ?? (isRealMecaId ? mecaId! : 'Non Member');

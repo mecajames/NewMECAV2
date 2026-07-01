@@ -67,7 +67,10 @@ export class ResultsImportService {
 
       // Parse each row
       const results: ParsedResult[] = data.map((row, index) => {
-        const memberID = row['Member ID']?.toString() || '';
+        // Trim: spreadsheet cells often carry a stray leading/trailing space
+        // (e.g. " 260014"), which otherwise persists into competition_results
+        // and breaks exact-match lookups + member-profile links.
+        const memberID = row['Member ID']?.toString().trim() || '';
         const name = row['Name (Optional)'] || row['Name'] || '';
         const classAbbr = row['Class'] || '';
         const score = parseFloat(row['Score']) || 0;

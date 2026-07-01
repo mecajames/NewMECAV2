@@ -703,7 +703,17 @@ export class CompetitionResultsService {
 
   async findByMecaId(mecaId: string): Promise<any[]> {
     const em = this.em.fork();
-    const results = await em.find(CompetitionResult, { mecaId }, {
+    const clean = (mecaId ?? '').trim();
+    // Match on TRIM(meca_id) so results whose stored meca_id carries a stray
+    // leading/trailing space (from imports/re-assignments) still resolve —
+    // otherwise a clean "260014" query misses rows stored as " 260014". The
+    // proper cleanup is `UPDATE competition_results SET meca_id = TRIM(meca_id)`.
+    const idRows: Array<{ id: string }> = await em.getConnection().execute(
+      'SELECT id FROM public.competition_results WHERE trim(meca_id) = ?',
+      [clean],
+    );
+    if (idRows.length === 0) return [];
+    const results = await em.find(CompetitionResult, { id: { $in: idRows.map(r => r.id) } }, {
       orderBy: { createdAt: 'DESC' },
       populate: ['event'],
     });
@@ -772,7 +782,13 @@ export class CompetitionResultsService {
       delete transformedData.competitor_name;
     }
     if ((data as any).meca_id !== undefined) {
-      transformedData.mecaId = (data as any).meca_id;
+      // Normalize a stray leading/trailing space in an imported/entered meca_id
+      // (e.g. " 260014" from a spreadsheet). This is the write chokepoint for
+      // create AND update, so trimming here keeps competition_results.meca_id
+      // clean regardless of source — a spaced id breaks exact-match lookups and
+      // builds "%20"-prefixed member-profile links.
+      const rawMecaId = (data as any).meca_id;
+      transformedData.mecaId = typeof rawMecaId === 'string' ? rawMecaId.trim() : rawMecaId;
       delete transformedData.meca_id;
     }
     if ((data as any).competition_class !== undefined) {
@@ -1006,7 +1022,13 @@ export class CompetitionResultsService {
       delete transformedData.competitor_name;
     }
     if ((data as any).meca_id !== undefined) {
-      transformedData.mecaId = (data as any).meca_id;
+      // Normalize a stray leading/trailing space in an imported/entered meca_id
+      // (e.g. " 260014" from a spreadsheet). This is the write chokepoint for
+      // create AND update, so trimming here keeps competition_results.meca_id
+      // clean regardless of source — a spaced id breaks exact-match lookups and
+      // builds "%20"-prefixed member-profile links.
+      const rawMecaId = (data as any).meca_id;
+      transformedData.mecaId = typeof rawMecaId === 'string' ? rawMecaId.trim() : rawMecaId;
       delete transformedData.meca_id;
     }
     if ((data as any).competition_class !== undefined) {
