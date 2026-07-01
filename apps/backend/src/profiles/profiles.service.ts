@@ -2,6 +2,8 @@ import { Injectable, Inject, NotFoundException, BadRequestException, Logger, Htt
 import { EntityManager, raw } from '@mikro-orm/core';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Profile } from './profiles.entity';
+import { Membership } from '../memberships/memberships.entity';
+import { MecaIdHistory } from '../memberships/meca-id-history.entity';
 import { Role } from '../permissions/permission.entity';
 import { resolveSlugToId } from '../common/slug.util';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
@@ -921,6 +923,14 @@ export class ProfilesService {
     // First get the profile to check if it exists
     const profile = await em.findOne(Profile, { id: userId });
 
+    // Remove profile-owned meca_id_history rows first: their profile_id FK is
+    // ON DELETE SET NULL, but CHECK "chk_meca_id_owner" forbids a row with both
+    // owners null — so letting the profile delete (or its auth-cascade) null that
+    // column throws an opaque 23514 CHECK violation. See deleteUserCompletelyById.
+    if (profile) {
+      await em.nativeDelete(MecaIdHistory, { profile: userId });
+    }
+
     // Delete from Supabase Auth (do this first since it's harder to recover)
     const authDeleteResult = await this.supabaseAdmin.deleteUser(userId);
     if (!authDeleteResult.success) {
@@ -934,13 +944,7 @@ export class ProfilesService {
         await em.removeAndFlush(profile);
         this.logger.log(`Deleted user ${userId} from profiles table`);
       } catch (err: any) {
-        if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
-          throw new BadRequestException(
-            `Cannot delete this user — their profile is referenced by other records (e.g. results, applications, audit entries). ` +
-            `Reassign or remove those references first, or contact the development team.`,
-          );
-        }
-        throw err;
+        this.throwUserDeleteBlocked(err);
       }
     }
 
@@ -976,6 +980,13 @@ export class ProfilesService {
       };
     }
 
+    // Remove profile-owned meca_id_history rows first (see deleteUserCompletelyById):
+    // their ON DELETE SET NULL FK combined with the chk_meca_id_owner CHECK would
+    // otherwise make the profile delete throw an opaque 23514 validation error.
+    if (profile) {
+      await em.nativeDelete(MecaIdHistory, { profile: profile.id });
+    }
+
     // Delete from Supabase Auth first
     if (authUser.userId) {
       const authDeleteResult = await this.supabaseAdmin.deleteUser(authUser.userId);
@@ -992,13 +1003,7 @@ export class ProfilesService {
         await em.removeAndFlush(profile);
         this.logger.log(`Deleted user ${email} from profiles table`);
       } catch (err: any) {
-        if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
-          throw new BadRequestException(
-            `Cannot delete ${email} — their profile is referenced by other records. ` +
-            `Reassign or remove those references first.`,
-          );
-        }
-        throw err;
+        this.throwUserDeleteBlocked(err);
       }
     }
 
@@ -1068,47 +1073,58 @@ export class ProfilesService {
       throw new NotFoundException(`User ${userId} not found in profiles`);
     }
 
-    // Delete all memberships for this user
-    const membershipsResult = await em.getConnection().execute(
-      'DELETE FROM memberships WHERE user_id = ? RETURNING id',
-      [userId]
-    );
-    const deletedMemberships = membershipsResult.length;
+    let deletedMemberships = 0;
+
+    // Run EVERY Postgres delete in ONE transaction so a mid-way failure (e.g. an
+    // FK-restrict block from competition results) rolls the whole thing back
+    // instead of leaving a half-deleted account — memberships/history gone but
+    // the profile still present and unable to log in. Supabase Auth lives in a
+    // separate system and is deleted AFTER this commits (it can't join the PG
+    // transaction).
+    try {
+      await em.transactional(async (tem) => {
+        // meca_id_history FKs to BOTH memberships and profiles are ON DELETE SET
+        // NULL, but CHECK "chk_meca_id_owner" requires EXACTLY ONE of
+        // (membership_id, profile_id) to be non-null. Deleting this user's
+        // membership or profile would null the only populated side and violate
+        // that CHECK → Postgres 23514, which reached admins as the opaque
+        // "A value didn't pass a validation rule." 400. Since we're hard-deleting
+        // the user, remove their MECA-ID history rows FIRST (both profile-owned
+        // and membership-owned) so the SET NULL cascade never fires.
+        const membershipIds = (
+          await tem.find(Membership, { user: userId }, { fields: ['id'] })
+        ).map((m) => m.id);
+        await tem.nativeDelete(MecaIdHistory, { profile: userId });
+        if (membershipIds.length > 0) {
+          await tem.nativeDelete(MecaIdHistory, { membership: { $in: membershipIds } });
+        }
+
+        // Delete all memberships for this user.
+        deletedMemberships = await tem.nativeDelete(Membership, { user: userId });
+
+        // Finally delete the profile row itself. Any remaining RESTRICT / NO
+        // ACTION foreign key (competition results, finals votes, judge/ED
+        // applications, audit tables, …) throws here and rolls the txn back.
+        await tem.nativeDelete(Profile, { id: userId });
+      });
+    } catch (err: any) {
+      this.throwUserDeleteBlocked(err);
+    }
 
     if (deletedMemberships > 0) {
       this.logger.log(`Deleted ${deletedMemberships} memberships for user ${userId}`);
     }
+    this.logger.log(`Deleted user ${userId} from profiles table`);
 
-    // Delete from Supabase Auth
+    // DB rows are gone and committed — now remove the Supabase Auth user. It's a
+    // separate system so it can't be part of the PG transaction; if it fails the
+    // database is already clean, so we log and continue. An orphaned auth user is
+    // harmless and rare, and can be cleaned via delete-user-completely-by-email.
     const authDeleteResult = await this.supabaseAdmin.deleteUser(userId);
     if (!authDeleteResult.success) {
-      this.logger.warn(`Failed to delete user from auth: ${authDeleteResult.error}`);
+      this.logger.warn(`Profile ${userId} deleted, but Supabase Auth delete failed: ${authDeleteResult.error}`);
     } else {
       this.logger.log(`Deleted user ${userId} from Supabase Auth`);
-    }
-
-    // Delete from profiles table — surface FK violations as a clean 400
-    // instead of letting them surface as a 500 the frontend can't make sense of.
-    // 17 tables in the schema have ON DELETE NO ACTION/RESTRICT against profiles
-    // (results, voting, training, finals registrations, etc.). If any of those
-    // tables reference this user, the delete will be blocked here and the admin
-    // needs to clean those up first.
-    try {
-      await em.removeAndFlush(profile);
-      this.logger.log(`Deleted user ${userId} from profiles table`);
-    } catch (err: any) {
-      if (err?.code === '23503' || /foreign key/i.test(err?.message ?? '')) {
-        // Surface the table that's blocking the delete if Postgres tells us
-        const detail = err?.detail || err?.message || '';
-        const tableMatch = /from table "([^"]+)"/.exec(detail);
-        const blockingTable = tableMatch?.[1];
-        throw new BadRequestException(
-          `Cannot delete this user — their profile is still referenced by other records${blockingTable ? ` (table: ${blockingTable})` : ''}. ` +
-          `This commonly happens with members who have competition results, voted in finals, applied as a judge/ED, or appear in audit-only tables. ` +
-          `Reassign or remove those references first, or contact the development team to handle the cleanup.`,
-        );
-      }
-      throw err;
     }
 
     // CRITICAL: invalidate the admin members list cache. The list endpoint
@@ -1123,6 +1139,41 @@ export class ProfilesService {
       message: `User deleted successfully`,
       deletedMemberships,
     };
+  }
+
+  /**
+   * Turn a Postgres constraint error raised while deleting a user into a clear,
+   * actionable admin message with the right status — instead of the opaque
+   * global "A value didn't pass a validation rule." or a bare 500. Always throws.
+   */
+  private throwUserDeleteBlocked(err: any): never {
+    const code: string | undefined = err?.code || err?.cause?.code;
+    const detail: string = err?.detail || err?.cause?.detail || err?.message || '';
+    const constraint: string | undefined = err?.constraint || err?.cause?.constraint;
+
+    // Still referenced by a RESTRICT / NO ACTION foreign key somewhere else.
+    if (code === '23503' || /foreign key/i.test(detail)) {
+      const tableMatch =
+        /still referenced from table "([^"]+)"/.exec(detail) || /from table "([^"]+)"/.exec(detail);
+      const blockingTable = tableMatch?.[1];
+      throw new BadRequestException(
+        `Cannot delete this user — their profile is still referenced by other records${blockingTable ? ` (table: ${blockingTable})` : ''}. ` +
+          `This commonly happens with members who have competition results, voted in finals, applied as a judge/ED, or appear in audit-only tables. ` +
+          `Reassign or remove those references first, or contact the development team to handle the cleanup.`,
+      );
+    }
+
+    // A CHECK constraint blocked the delete (e.g. a SET NULL cascade left a row
+    // failing a "must reference exactly one owner" rule). Name the constraint so
+    // it's actionable instead of the opaque "didn't pass a validation rule".
+    if (code === '23514') {
+      throw new BadRequestException(
+        `Cannot delete this user — a database validation rule${constraint ? ` (${constraint})` : ''} blocked the delete. ` +
+          `This usually means related history or records must be cleaned up first. Please contact the development team.`,
+      );
+    }
+
+    throw err;
   }
 
   /**

@@ -873,9 +873,14 @@ export default function MembershipCheckoutPage() {
                         You already have an active membership
                       </p>
                       <p className="text-orange-200/90 text-sm">
-                        There's already an active MECA membership for{' '}
-                        <span className="font-semibold">{formData.email}</span>. Please log in to
-                        renew or manage it from your dashboard.
+                        There's already an active MECA membership assigned to{' '}
+                        <span className="font-semibold">{formData.email}</span>. You can't purchase
+                        a second membership for this email from here.
+                      </p>
+                      <p className="text-orange-200/90 text-sm mt-2">
+                        Want to add another driver or vehicle? Log in to your account and add a{' '}
+                        <span className="font-semibold">secondary membership</span> from{' '}
+                        <span className="font-semibold">My MECA → Membership &amp; Billing → My Memberships → Add Secondary Membership</span>.
                       </p>
                       <Link
                         to="/login"
