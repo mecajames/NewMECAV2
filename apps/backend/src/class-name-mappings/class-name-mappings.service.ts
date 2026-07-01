@@ -222,7 +222,17 @@ export class ClassNameMappingsService {
   }
 
   /**
-   * Remap competition results from one class name to a target competition class
+   * Remap competition results from one class name to a target competition class.
+   *
+   * Matches by the row's `competition_class` TEXT (the mapping's domain) and
+   * moves every matching row onto the target — whether the row currently has
+   * NO class_id OR already points at a WRONG one (a duplicate/dead/inactive
+   * class). Previously this only touched `class_id IS NULL` rows, so a
+   * class-name mapping silently did nothing for results that had been imported
+   * under a duplicate class_id — the mapping "existed" but never applied. The
+   * `class_id <> target` guard skips rows already on the target so re-running
+   * is a no-op. Rows on any OTHER class_id ARE moved, because asserting
+   * "class text X → class Y" means exactly that for every X row.
    */
   async remapResults(
     className: string,
@@ -241,10 +251,10 @@ export class ClassNameMappingsService {
     let query = `
       UPDATE public.competition_results
       SET class_id = ?, competition_class = ?
-      WHERE class_id IS NULL
-        AND competition_class = ?
+      WHERE competition_class = ?
+        AND (class_id IS NULL OR class_id <> ?)
     `;
-    const params: any[] = [targetClassId, targetClass.name, className];
+    const params: any[] = [targetClassId, targetClass.name, className, targetClassId];
 
     if (format) {
       query += ` AND format = ?`;

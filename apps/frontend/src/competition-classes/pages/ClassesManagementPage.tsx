@@ -122,6 +122,11 @@ export default function ClassesManagementPage() {
   // ---- Duplicate-class merge tool ----
   type DupGroup = {
     format: string;
+    // Why this group was flagged: 'name' = same class spelled differently
+    // (high confidence); 'abbreviation' = classes sharing an abbreviation that
+    // collide in the results resolver but may be genuinely distinct (verify
+    // before merging). Older backends omit it — treat missing as 'name'.
+    reason?: 'name' | 'abbreviation';
     canonical: { id: string; name: string; abbreviation: string; resultCount: number };
     duplicates: Array<{ id: string; name: string; abbreviation: string; resultCount: number }>;
   };
@@ -1345,7 +1350,24 @@ export default function ClassesManagementPage() {
                     return (
                       <div key={g.canonical.id} className="bg-slate-900 rounded-lg p-4 border border-slate-700">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="px-2 py-0.5 bg-cyan-500/15 text-cyan-300 text-xs font-semibold rounded-full">{g.format}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-cyan-500/15 text-cyan-300 text-xs font-semibold rounded-full">{g.format}</span>
+                            {g.reason === 'abbreviation' ? (
+                              <span
+                                title="Flagged because these classes share an abbreviation. They may be genuinely different classes — verify before merging."
+                                className="px-2 py-0.5 bg-amber-500/15 text-amber-300 text-xs font-semibold rounded-full"
+                              >
+                                ⚠ Same abbreviation — verify
+                              </span>
+                            ) : (
+                              <span
+                                title="Flagged because the names match apart from spacing/case — almost certainly the same class."
+                                className="px-2 py-0.5 bg-green-500/15 text-green-300 text-xs font-semibold rounded-full"
+                              >
+                                Name variant
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleSkipGroup(g)}

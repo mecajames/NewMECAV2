@@ -991,6 +991,8 @@ export class StripeService implements OnApplicationBootstrap {
     charges: Array<{
       id: string;
       paymentIntentId: string | null;
+      invoiceId: string | null;
+      subscriptionId: string | null;
       amountCents: number;
       amountRefundedCents: number;
       currency: string;
@@ -1010,12 +1012,19 @@ export class StripeService implements OnApplicationBootstrap {
         const resp = await stripe.charges.list({
           limit: 100,
           created: { gte: sinceUnixSec, lte: untilUnixSec },
+          // Expand the invoice so subscription charges can be reconciled against a
+          // local membership (their money lands in memberships, not payments).
+          expand: ['data.invoice'],
           ...(cursor ? { starting_after: cursor } : {}),
         });
         for (const c of resp.data) {
+          const inv: any = c.invoice && typeof c.invoice === 'object' ? c.invoice : null;
+          const subRef = inv ? (inv.subscription ?? inv.parent?.subscription_details?.subscription ?? null) : null;
           out.push({
             id: c.id,
             paymentIntentId: typeof c.payment_intent === 'string' ? c.payment_intent : (c.payment_intent as any)?.id ?? null,
+            invoiceId: typeof c.invoice === 'string' ? c.invoice : inv?.id ?? null,
+            subscriptionId: typeof subRef === 'string' ? subRef : subRef?.id ?? null,
             amountCents: c.amount ?? 0,
             amountRefundedCents: c.amount_refunded ?? 0,
             currency: (c.currency || 'usd').toUpperCase(),
