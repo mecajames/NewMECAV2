@@ -22,6 +22,7 @@ import { EntityManager } from '@mikro-orm/postgresql';
 import { UserRole } from '@newmeca/shared';
 import { TicketsService } from './tickets.service';
 import { TicketConfigSyncService } from './ticket-config-sync.service';
+import { TicketStaffSetupService } from './ticket-staff-setup.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketPurchasesService } from './ticket-purchases.service';
 import { Ticket } from './ticket.entity';
@@ -45,6 +46,7 @@ export class TicketsController {
   constructor(
     private readonly ticketsService: TicketsService,
     private readonly configSyncService: TicketConfigSyncService,
+    private readonly staffSetupService: TicketStaffSetupService,
     private readonly customFieldsService: TicketCustomFieldsService,
     private readonly purchasesService: TicketPurchasesService,
     private readonly supabaseAdmin: SupabaseAdminService,
@@ -287,6 +289,29 @@ export class TicketsController {
     // Safe default: preview unless explicitly told to apply.
     const isDryRun = dryRun !== 'false';
     return this.configSyncService.syncTicketConfig(profile!.id, { dryRun: isDryRun });
+  }
+
+  /**
+   * OWNER-ONLY (James, MECA 202401): apply the canonical staff configuration —
+   * the 5 staff + roles, their department assignments (with head flags), the
+   * per-department default assignee, and the event-picker custom field — from
+   * ticket-staff-seed.ts. Matches people to prod profiles by email. Pass
+   * ?dryRun=true (default) for a no-write PREVIEW; ?dryRun=false to APPLY.
+   * Idempotent. Requires config-sync to have run first (departments/categories)
+   * and the ticket_departments.default_assignee_id migration to be applied.
+   */
+  @Post('admin/staff-setup')
+  @HttpCode(HttpStatus.OK)
+  async applyStaffSetup(
+    @Headers('authorization') authHeader: string,
+    @Query('dryRun') dryRun?: string,
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    if (String((profile as any)?.meca_id) !== '202401') {
+      throw new ForbiddenException('This action is restricted to the system owner (MECA 202401).');
+    }
+    const isDryRun = dryRun !== 'false';
+    return this.staffSetupService.applyStaffSetup(profile!.id, { dryRun: isDryRun });
   }
 
   @Put(':id')

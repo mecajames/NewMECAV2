@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { billingApi, BillingDashboardStats } from '../../../api-client/billing.api-client';
 import { useAuth } from '@/auth/contexts/AuthContext';
+import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 import axios from '@/lib/axios';
 
 interface SubscriptionStats {
@@ -176,14 +177,23 @@ export default function BillingDashboardPage() {
     });
   }, [stats?.recent.invoices, invoiceSearch, invoiceStatusFilter]);
 
+  // Season filter for the revenue/orders/invoices block. Money has no season
+  // tag, so it's scoped by the season's date range. Subscriptions stay live.
+  // Default = current season. A ref keeps the latest range available to
+  // fetchStats (also called by the Refresh button + auto-refresh interval).
+  const { seasonId, setSeasonId, dateRange, loading: seasonsLoading } = useSeasonFilter();
+  const seasonRangeRef = useRef<{ seasonId: string | null; startDate?: string; endDate?: string }>({ seasonId: null });
+  seasonRangeRef.current = { seasonId, startDate: dateRange.startDate, endDate: dateRange.endDate };
+
   const fetchStats = async (showRefresh = false) => {
     try {
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
 
+      const { seasonId: sid, startDate, endDate } = seasonRangeRef.current;
       const [data, subData] = await Promise.all([
-        billingApi.getDashboardStats(),
-        billingApi.getSubscriptionStats().catch(() => null),
+        billingApi.getDashboardStats(sid ? { startDate, endDate } : undefined),
+        billingApi.getSubscriptionStats().catch(() => null), // live — not season-scoped
       ]);
       setStats(data);
       setSubStats(subData);
@@ -197,9 +207,13 @@ export default function BillingDashboardPage() {
     }
   };
 
+  // (Re)fetch when the season changes. Wait for seasons to load so we default
+  // to the current season instead of flashing all-time numbers.
   useEffect(() => {
+    if (seasonsLoading) return;
     fetchStats();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seasonsLoading, seasonId, dateRange.startDate, dateRange.endDate]);
 
   const handleSync = async () => {
     try {
@@ -460,7 +474,9 @@ export default function BillingDashboardPage() {
         {subStats && (
           <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">Subscriptions</h2>
+              <h2 className="text-lg font-semibold text-white">
+                Subscriptions <span className="text-xs font-normal text-gray-500 uppercase">· live</span>
+              </h2>
               <button
                 onClick={() => navigate('/admin/billing/subscriptions')}
                 className="text-sm text-orange-500 hover:text-orange-400"
@@ -503,6 +519,10 @@ export default function BillingDashboardPage() {
         )}
 
         {/* Stats Grid */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-white">Revenue &amp; Orders</h2>
+          <SeasonSelect value={seasonId} onChange={setSeasonId} />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
             <div className="flex items-center gap-4">

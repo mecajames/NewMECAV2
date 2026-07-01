@@ -244,37 +244,37 @@ export class SeoService {
       { loc: '/terms-and-conditions', changefreq: 'yearly', priority: 0.2 },
     );
 
-    // Dynamic pages
+    // Dynamic pages — prefer the SEO slug, fall back to the id.
     for (const row of eventIds) {
-      urls.push({ loc: `/events/${row.id}`, changefreq: 'weekly', priority: 0.7 });
+      urls.push({ loc: `/events/${row.slug || row.id}`, changefreq: 'weekly', priority: 0.7 });
     }
 
     for (const row of productIds) {
-      urls.push({ loc: `/shop/products/${row.id}`, changefreq: 'weekly', priority: 0.6 });
+      urls.push({ loc: `/shop/products/${row.slug || row.id}`, changefreq: 'weekly', priority: 0.6 });
     }
 
     for (const row of profileIds) {
-      urls.push({ loc: `/members/${row.id}`, changefreq: 'monthly', priority: 0.4 });
+      urls.push({ loc: `/members/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.4 });
     }
 
     for (const row of retailerIds) {
-      urls.push({ loc: `/retailers/${row.id}`, changefreq: 'monthly', priority: 0.5 });
+      urls.push({ loc: `/retailers/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.5 });
     }
 
     for (const row of manufacturerIds) {
-      urls.push({ loc: `/manufacturers/${row.id}`, changefreq: 'monthly', priority: 0.5 });
+      urls.push({ loc: `/manufacturers/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.5 });
     }
 
     for (const row of teamIds) {
-      urls.push({ loc: `/teams/${row.id}`, changefreq: 'monthly', priority: 0.4 });
+      urls.push({ loc: `/teams/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.4 });
     }
 
     for (const row of judgeIds) {
-      urls.push({ loc: `/judges/${row.id}`, changefreq: 'monthly', priority: 0.4 });
+      urls.push({ loc: `/judges/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.4 });
     }
 
     for (const row of eventDirectorIds) {
-      urls.push({ loc: `/event-directors/${row.id}`, changefreq: 'monthly', priority: 0.4 });
+      urls.push({ loc: `/event-directors/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.4 });
     }
 
     for (const row of archiveYears) {
@@ -282,7 +282,7 @@ export class SeoService {
     }
 
     for (const row of rulebookIds) {
-      urls.push({ loc: `/rulebooks/${row.id}`, changefreq: 'monthly', priority: 0.5 });
+      urls.push({ loc: `/rulebooks/${row.slug || row.id}`, changefreq: 'monthly', priority: 0.5 });
     }
 
     this.logger.log(`Generated sitemap with ${urls.length} URLs`);
@@ -335,59 +335,59 @@ export class SeoService {
   // Database queries for sitemap URLs
   // ===========================================================================
 
-  private async getEventIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getEventIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM events WHERE status IN ('upcoming', 'completed') ORDER BY event_date DESC LIMIT 5000`,
+      `SELECT id, slug FROM events WHERE status IN ('upcoming', 'completed') ORDER BY event_date DESC LIMIT 5000`,
     );
   }
 
-  private async getProductIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getProductIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM shop_products WHERE is_active = true ORDER BY display_order, created_at DESC LIMIT 1000`,
+      `SELECT id, slug FROM shop_products WHERE is_active = true ORDER BY display_order, created_at DESC LIMIT 1000`,
     );
   }
 
-  private async getPublicProfileIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getPublicProfileIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM profiles WHERE is_public = true ORDER BY created_at DESC LIMIT 10000`,
+      `SELECT id, slug FROM profiles WHERE is_public = true ORDER BY created_at DESC LIMIT 10000`,
     );
   }
 
-  private async getRetailerIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getRetailerIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM retailer_listings WHERE is_active = true AND is_approved = true AND (end_date IS NULL OR end_date >= CURRENT_DATE) ORDER BY created_at DESC LIMIT 5000`,
+      `SELECT id, slug FROM retailer_listings WHERE is_active = true AND is_approved = true AND (end_date IS NULL OR end_date >= CURRENT_DATE) ORDER BY created_at DESC LIMIT 5000`,
     );
   }
 
-  private async getManufacturerIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getManufacturerIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM manufacturer_listings WHERE is_active = true AND is_approved = true AND (end_date IS NULL OR end_date >= CURRENT_DATE) ORDER BY created_at DESC LIMIT 5000`,
+      `SELECT id, slug FROM manufacturer_listings WHERE is_active = true AND is_approved = true AND (end_date IS NULL OR end_date >= CURRENT_DATE) ORDER BY created_at DESC LIMIT 5000`,
     );
   }
 
-  private async getTeamIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getTeamIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM teams WHERE is_public = true AND is_active = true ORDER BY created_at DESC LIMIT 5000`,
+      `SELECT id, slug FROM teams WHERE is_public = true AND is_active = true ORDER BY created_at DESC LIMIT 5000`,
     );
   }
 
-  private async getJudgeIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getJudgeIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM judges WHERE is_active = true ORDER BY created_at DESC LIMIT 5000`,
+      `SELECT id, slug FROM judges WHERE is_active = true ORDER BY created_at DESC LIMIT 5000`,
     );
   }
 
-  private async getEventDirectorIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getEventDirectorIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM event_directors WHERE is_active = true ORDER BY created_at DESC LIMIT 5000`,
+      `SELECT id, slug FROM event_directors WHERE is_active = true ORDER BY created_at DESC LIMIT 5000`,
     );
   }
 
@@ -398,10 +398,10 @@ export class SeoService {
     );
   }
 
-  private async getRulebookIds(em: EntityManager): Promise<{ id: string }[]> {
+  private async getRulebookIds(em: EntityManager): Promise<{ id: string; slug: string | null }[]> {
     const conn = em.getConnection();
     return conn.execute(
-      `SELECT id FROM rulebooks WHERE is_active = true ORDER BY created_at DESC LIMIT 500`,
+      `SELECT id, slug FROM rulebooks WHERE is_active = true ORDER BY created_at DESC LIMIT 500`,
     );
   }
 

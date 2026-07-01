@@ -701,7 +701,7 @@ export default function EventsPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/events/${event.id}`);
+                          navigate(`/events/${event.slug || event.id}`);
                         }}
                         className="flex-1 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 sm:gap-2"
                       >

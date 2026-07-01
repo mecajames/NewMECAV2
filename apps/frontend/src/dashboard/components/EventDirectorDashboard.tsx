@@ -4,6 +4,7 @@ import { Calendar, Users, Trophy, Plus, QrCode } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { eventsApi, Event } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
+import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 
 interface EventDirectorDashboardProps {
   onNavigate: (page: string, data?: any) => void;
@@ -19,34 +20,37 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
     totalRegistrations: 0,
   });
   const [loading, setLoading] = useState(true);
+  // Season filter for the stat cards + My Events list. Default = current season.
+  const { seasonId, setSeasonId, loading: seasonsLoading } = useSeasonFilter();
 
   useEffect(() => {
-    if (profile) {
-      fetchEventDirectorData();
+    if (profile && !seasonsLoading) {
+      fetchEventDirectorData(seasonId);
     }
-  }, [profile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, seasonsLoading, seasonId]);
 
-  const fetchEventDirectorData = async () => {
+  const fetchEventDirectorData = async (seasonId: string | null) => {
     try {
       const events = await eventsApi.getByDirector(profile!.id);
 
-      if (events) {
-        setMyEvents(events);
+      // Scope to the selected season (events carry season_id); null = all time.
+      const scoped = (events || []).filter((e) => !seasonId || e.season_id === seasonId);
+      setMyEvents(scoped);
 
-        const upcoming = events.filter((e) => e.status === 'upcoming').length;
+      const upcoming = scoped.filter((e) => e.status === 'upcoming').length;
 
-        // Fetch registration counts for all events in parallel
-        const countResults = await Promise.all(
-          events.map((event) => eventRegistrationsApi.getCountByEvent(event.id))
-        );
-        const totalRegs = countResults.reduce((sum, r) => sum + r.count, 0);
+      // Fetch registration counts for the scoped events in parallel
+      const countResults = await Promise.all(
+        scoped.map((event) => eventRegistrationsApi.getCountByEvent(event.id))
+      );
+      const totalRegs = countResults.reduce((sum, r) => sum + r.count, 0);
 
-        setStats({
-          totalEvents: events.length,
-          upcomingEvents: upcoming,
-          totalRegistrations: totalRegs,
-        });
-      }
+      setStats({
+        totalEvents: scoped.length,
+        upcomingEvents: upcoming,
+        totalRegistrations: totalRegs,
+      });
     } catch (error) {
       console.error('Error fetching event director data:', error);
     }
@@ -83,6 +87,10 @@ export default function EventDirectorDashboard({ onNavigate }: EventDirectorDash
           </div>
         ) : (
           <>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-semibold text-white">Overview</h2>
+              <SeasonSelect value={seasonId} onChange={setSeasonId} />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
                 <div className="flex items-center gap-4">

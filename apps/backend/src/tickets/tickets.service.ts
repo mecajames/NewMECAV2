@@ -813,6 +813,18 @@ export class TicketsService {
         ticketData.assignedTo = Reference.createFromPK(Profile, staff.profile.id);
         ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
       }
+    } else if (chosenDepartmentId) {
+      // No routing-rule assignee — fall back to the department's configured
+      // default assignee, so every ticket lands on the right person.
+      const dept = await em.findOne(
+        TicketDepartmentEntity,
+        { id: chosenDepartmentId },
+        { populate: ['defaultAssignee'] },
+      );
+      if (dept?.defaultAssignee?.id) {
+        ticketData.assignedTo = Reference.createFromPK(Profile, dept.defaultAssignee.id);
+        ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+      }
     }
 
     // Prefer an explicitly-sent event_id; otherwise use an event_reference

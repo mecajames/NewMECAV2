@@ -216,12 +216,16 @@ export class PrerenderService {
     const em = this.em.fork();
     const conn = em.getConnection();
 
-    // Event detail: /events/:id
-    let match = path.match(/^\/events\/([a-f0-9-]+)$/);
+    // Each detail route accepts a slug OR a raw UUID (id::text = ? OR slug = ?),
+    // and sets canonical to the SLUG url so old /x/<uuid> links consolidate onto
+    // the friendly URL in Google's index.
+
+    // Event detail: /events/:idOrSlug
+    let match = path.match(/^\/events\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT title, event_date, venue_name, venue_city, venue_state FROM events WHERE id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT title, slug, event_date, venue_name, venue_city, venue_state FROM events WHERE id::text = ? OR slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         const e = rows[0];
@@ -230,17 +234,17 @@ export class PrerenderService {
         return {
           title: `${e.title} | MECA Event`,
           description: `Join us${location ? ` at ${location}` : ''}${dateStr ? ` on ${dateStr}` : ''} for this exciting car audio competition event.`,
-          canonical: path,
+          canonical: `/events/${e.slug || match[1]}`,
         };
       }
     }
 
-    // Product detail: /shop/products/:id
-    match = path.match(/^\/shop\/products\/([a-f0-9-]+)$/);
+    // Product detail: /shop/products/:idOrSlug
+    match = path.match(/^\/shop\/products\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT name, description FROM shop_products WHERE id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT name, slug, description FROM shop_products WHERE id::text = ? OR slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         const p = rows[0];
@@ -250,108 +254,108 @@ export class PrerenderService {
         return {
           title: `${p.name} | MECA Shop`,
           description: desc,
-          canonical: path,
+          canonical: `/shop/products/${p.slug || match[1]}`,
         };
       }
     }
 
-    // Member profile: /members/:id
-    match = path.match(/^\/members\/([a-f0-9-]+)$/);
+    // Member profile: /members/:idOrSlug
+    match = path.match(/^\/members\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT full_name FROM profiles WHERE id = ? AND is_public = true LIMIT 1`,
-        [match[1]],
+        `SELECT full_name, slug FROM profiles WHERE (id::text = ? OR slug = ?) AND is_public = true LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].full_name} | MECA Member`,
           description: `View ${rows[0].full_name}'s MECA member profile. See competition history and achievements.`,
-          canonical: path,
+          canonical: `/members/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Retailer profile: /retailers/:id
-    match = path.match(/^\/retailers\/([a-f0-9-]+)$/);
+    // Retailer profile: /retailers/:idOrSlug
+    match = path.match(/^\/retailers\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT business_name FROM retailer_listings WHERE id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT business_name, slug FROM retailer_listings WHERE id::text = ? OR slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].business_name} | MECA Retailer`,
           description: `${rows[0].business_name} - MECA authorized retailer. Professional car audio installation and equipment.`,
-          canonical: path,
+          canonical: `/retailers/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Manufacturer profile: /manufacturers/:id
-    match = path.match(/^\/manufacturers\/([a-f0-9-]+)$/);
+    // Manufacturer profile: /manufacturers/:idOrSlug
+    match = path.match(/^\/manufacturers\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT business_name FROM manufacturer_listings WHERE id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT business_name, slug FROM manufacturer_listings WHERE id::text = ? OR slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].business_name} | MECA Manufacturer`,
           description: `${rows[0].business_name} - MECA partner manufacturer. Quality car audio equipment and products.`,
-          canonical: path,
+          canonical: `/manufacturers/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Team profile: /teams/:id
-    match = path.match(/^\/teams\/([a-f0-9-]+)$/);
+    // Team profile: /teams/:idOrSlug
+    match = path.match(/^\/teams\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT name FROM teams WHERE id = ? AND is_public = true LIMIT 1`,
-        [match[1]],
+        `SELECT name, slug FROM teams WHERE (id::text = ? OR slug = ?) AND is_public = true LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].name} | MECA Team`,
           description: `View ${rows[0].name} team profile. See team members, competition history, and achievements.`,
-          canonical: path,
+          canonical: `/teams/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Judge profile: /judges/:id
-    match = path.match(/^\/judges\/([a-f0-9-]+)$/);
+    // Judge profile: /judges/:idOrSlug  (slug lives on judges; name via profile)
+    match = path.match(/^\/judges\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT j.id, p.full_name FROM judges j JOIN profiles p ON p.id = j.user_id WHERE j.id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT j.slug, p.full_name FROM judges j JOIN profiles p ON p.id = j.user_id WHERE j.id::text = ? OR j.slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].full_name} | MECA Judge`,
           description: `${rows[0].full_name} - Official MECA certified judge. View judging history and credentials.`,
-          canonical: path,
+          canonical: `/judges/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Event Director profile: /event-directors/:id
-    match = path.match(/^\/event-directors\/([a-f0-9-]+)$/);
+    // Event Director profile: /event-directors/:idOrSlug
+    match = path.match(/^\/event-directors\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT ed.id, p.full_name FROM event_directors ed JOIN profiles p ON p.id = ed.user_id WHERE ed.id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT ed.slug, p.full_name FROM event_directors ed JOIN profiles p ON p.id = ed.user_id WHERE ed.id::text = ? OR ed.slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].full_name} | MECA Event Director`,
           description: `${rows[0].full_name} - MECA event director. View events organized and director profile.`,
-          canonical: path,
+          canonical: `/event-directors/${rows[0].slug || match[1]}`,
         };
       }
     }
 
-    // Championship archive: /championship-archives/:year
+    // Championship archive: /championship-archives/:year (already friendly)
     match = path.match(/^\/championship-archives\/(\d{4})$/);
     if (match) {
       return {
@@ -361,18 +365,18 @@ export class PrerenderService {
       };
     }
 
-    // Rulebook detail: /rulebooks/:id
-    match = path.match(/^\/rulebooks\/([a-f0-9-]+)$/);
+    // Rulebook detail: /rulebooks/:idOrSlug
+    match = path.match(/^\/rulebooks\/([^/]+)$/);
     if (match) {
       const rows = await conn.execute(
-        `SELECT title FROM rulebooks WHERE id = ? LIMIT 1`,
-        [match[1]],
+        `SELECT title, slug FROM rulebooks WHERE id::text = ? OR slug = ? LIMIT 1`,
+        [match[1], match[1]],
       );
       if (rows.length > 0) {
         return {
           title: `${rows[0].title} | MECA Rulebook`,
           description: `Read the ${rows[0].title}. Official MECA competition rules and regulations.`,
-          canonical: path,
+          canonical: `/rulebooks/${rows[0].slug || match[1]}`,
         };
       }
     }

@@ -18,7 +18,7 @@ import { Public } from '../auth/public.decorator';
 import { EntityManager } from '@mikro-orm/core';
 import { PayPalService } from './paypal.service';
 import { PaymentFulfillmentService, PaymentFulfillmentParams } from '../payments/payment-fulfillment.service';
-import { MembershipsService } from '../memberships/memberships.service';
+import { MembershipsService, ACTIVE_MEMBERSHIP_EMAIL_BLOCK_MESSAGE } from '../memberships/memberships.service';
 import { EventRegistrationsService } from '../event-registrations/event-registrations.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { ShopService } from '../shop/shop.service';
@@ -154,6 +154,15 @@ export class PayPalController {
       data.userId = verifiedUserId;
     } else {
       delete data.userId;
+    }
+
+    // Stopgap: a guest (not logged in) cannot buy a second membership via PayPal
+    // for an email that already has an active membership — they must log in and
+    // add a secondary from Membership & Billing. Logged-in buyers are governed
+    // by canPurchaseMembership below. Mirrors the one-time/subscription Stripe
+    // guards so all three public pay paths behave the same.
+    if (!data.userId && (await this.membershipsService.emailHasActiveMembership(data.email))) {
+      throw new BadRequestException(ACTIVE_MEMBERSHIP_EMAIL_BLOCK_MESSAGE);
     }
 
     const em = this.em.fork();

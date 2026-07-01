@@ -15,6 +15,8 @@ export interface SEOProps {
 
 export interface EventSEOData {
   id: string;
+  /** SEO slug; preferred over id for canonical/links when present. */
+  slug?: string;
   title: string;
   description?: string;
   date: string;

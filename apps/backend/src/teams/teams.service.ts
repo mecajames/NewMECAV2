@@ -4,6 +4,7 @@ import { MembershipCategory, PaymentStatus, RegistrationStatus } from '@newmeca/
 import { Team } from './team.entity';
 import { TeamMember, TeamMemberRole, TeamMemberStatus } from './team-member.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { resolveSlugToId } from '../common/slug.util';
 import { isAdminUser } from '../auth/is-admin.helper';
 import { Membership } from '../memberships/memberships.entity';
 import { CompetitionResult } from '../competition-results/competition-results.entity';
@@ -346,6 +347,11 @@ export class TeamsService {
 
   async findById(id: string, requesterId?: string): Promise<TeamWithMembers> {
     const em = this.em.fork();
+    const resolved = await resolveSlugToId(em.getConnection(), 'teams', id);
+    if (!resolved) {
+      throw new NotFoundException(`Team with ID ${id} not found`);
+    }
+    id = resolved;
     const team = await em.findOne(Team, { id });
     if (!team) {
       throw new NotFoundException(`Team with ID ${id} not found`);

@@ -72,6 +72,7 @@ export default function EventDetailPage() {
     event
       ? {
           id: event.id,
+          slug: event.slug,
           title: event.title,
           description: event.description || undefined,
           date: event.event_date,
@@ -88,6 +89,14 @@ export default function EventDetailPage() {
       : null
   );
 
+  // Clean URL: if the event was opened by UUID (old link) or a stale slug, swap
+  // the address bar to the canonical slug without adding a history entry.
+  useEffect(() => {
+    if (event?.slug && eventId && eventId !== event.slug) {
+      navigate(`/events/${event.slug}`, { replace: true });
+    }
+  }, [event?.slug, eventId, navigate]);
+
   useEffect(() => {
     if (!eventId) {
       navigate('/events');
@@ -96,33 +105,34 @@ export default function EventDetailPage() {
     fetchEvent();
   }, [eventId]);
 
-  // Check if user competed at this event (has results under their MECA ID)
+  // Check if user competed at this event (has results under their MECA ID).
+  // Use the loaded event's real UUID — the URL param may be an SEO slug.
   useEffect(() => {
     const checkCompetition = async () => {
-      if (!user || !eventId) return;
+      if (!user || !event?.id) return;
       try {
-        const competed = await ratingsApi.hasUserCompetedAtEvent(eventId);
+        const competed = await ratingsApi.hasUserCompetedAtEvent(event.id);
         setUserParticipated(competed);
       } catch (err) {
         console.error('Error checking competition participation:', err);
       }
     };
     checkCompetition();
-  }, [user, eventId]);
+  }, [user, event?.id]);
 
   // Check if user is interested in this event
   useEffect(() => {
     const checkInterest = async () => {
-      if (!user || !eventId) return;
+      if (!user || !event?.id) return;
       try {
-        const result = await eventRegistrationsApi.checkInterest(eventId, user.id);
+        const result = await eventRegistrationsApi.checkInterest(event.id, user.id);
         setIsInterested(result.interested);
       } catch (err) {
         console.error('Error checking interest:', err);
       }
     };
     checkInterest();
-  }, [user, eventId]);
+  }, [user, event?.id]);
 
   // Handle verification query params
   useEffect(() => {
@@ -259,7 +269,7 @@ export default function EventDetailPage() {
   };
 
   const handleToggleInterest = async () => {
-    if (!eventId) return;
+    if (!event?.id) return;
 
     // If not logged in, show the guest email form
     if (!user) {
@@ -269,7 +279,7 @@ export default function EventDetailPage() {
 
     setInterestLoading(true);
     try {
-      const result = await eventRegistrationsApi.toggleInterest(eventId);
+      const result = await eventRegistrationsApi.toggleInterest(event.id);
       setIsInterested(result.interested);
     } catch (err) {
       console.error('Error toggling interest:', err);
@@ -280,10 +290,10 @@ export default function EventDetailPage() {
 
   const handleGuestInterestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!eventId || !guestEmail) return;
+    if (!event?.id || !guestEmail) return;
     setGuestSubmitting(true);
     try {
-      const result = await eventRegistrationsApi.guestInterest(eventId, guestEmail, guestFirstName || undefined);
+      const result = await eventRegistrationsApi.guestInterest(event.id, guestEmail, guestFirstName || undefined);
       if (result.requiresVerification) {
         // Email verification required
         setGuestVerificationPending(true);
@@ -320,7 +330,7 @@ export default function EventDetailPage() {
     setSubmitting(true);
 
     const registrationPayload: any = {
-      event_id: eventId,
+      event_id: event?.id || eventId,
       first_name: registrationData.firstName,
       last_name: registrationData.lastName,
       email: registrationData.email,
@@ -520,7 +530,7 @@ export default function EventDetailPage() {
                 {multiDayEvents.map((dayEvent) => (
                   <button
                     key={dayEvent.id}
-                    onClick={() => dayEvent.id !== event.id && navigate(`/events/${dayEvent.id}`)}
+                    onClick={() => dayEvent.id !== event.id && navigate(`/events/${dayEvent.slug || dayEvent.id}`)}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                       dayEvent.id === event.id
                         ? 'bg-orange-600 text-white cursor-default'
@@ -662,9 +672,9 @@ export default function EventDetailPage() {
           </div>
 
           {/* Admin: Event Staff Assignments */}
-          {isAdmin && eventId && (
+          {isAdmin && event?.id && (
             <div className="mb-8">
-              <EventAssignmentManager eventId={eventId} eventTitle={event.title} />
+              <EventAssignmentManager eventId={event.id} eventTitle={event.title} />
             </div>
           )}
 
@@ -674,7 +684,7 @@ export default function EventDetailPage() {
                 Otherwise only the "I'm Interested" button shows below. */}
             {event.status === 'upcoming' && (event as any).allow_pre_registration && (
               <button
-                onClick={() => navigate(`/events/${eventId}/register`)}
+                onClick={() => navigate(`/events/${event?.id || eventId}/register`)}
                 className="w-full py-4 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
               >
                 Pre-Register for This Event
@@ -752,7 +762,7 @@ export default function EventDetailPage() {
             {/* Check-In Button for Event Directors/Admins Only */}
             {(isAdminUser(profile) || profile?.role === 'event_director') && (event.status === 'upcoming' || event.status === 'ongoing') && (
               <button
-                onClick={() => navigate(`/events/${eventId}/check-in`)}
+                onClick={() => navigate(`/events/${event?.id || eventId}/check-in`)}
                 className="w-full py-4 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-lg transition-colors flex items-center justify-center gap-2"
               >
                 <QrCode className="h-6 w-6" />
@@ -775,7 +785,7 @@ export default function EventDetailPage() {
           <div className="mt-6 pt-6 border-t border-slate-700">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">Share This Event</h3>
             <SocialShareButtons
-              url={`${window.location.origin}/events/${event.id}`}
+              url={`${window.location.origin}/events/${event.slug || event.id}`}
               title={`I'm interested in ${event.title} — ${new Date(event.event_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}${event.venue_city ? ` in ${event.venue_city}` : ''}${event.venue_state ? `, ${event.venue_state}` : ''}! Are you going? #MECA #CarAudio`}
             />
           </div>

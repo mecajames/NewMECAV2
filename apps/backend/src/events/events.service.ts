@@ -7,6 +7,7 @@ import { EventRegistration } from '../event-registrations/event-registrations.en
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
 import { EventDirectorAssignment } from '../event-directors/event-director-assignment.entity';
+import { isUuid, makeUniqueSlug } from '../common/slug.util';
 import {
   EventStatus,
   RegistrationStatus,
@@ -42,11 +43,24 @@ export class EventsService {
     return this.attachResultCounts(em, events);
   }
 
-  async findById(id: string): Promise<Event> {
+  /** Build a unique SEO slug for an event: slugify(title)-year, deduped. */
+  private async generateEventSlug(em: EntityManager, title: string, eventDate?: Date | string | null): Promise<string> {
+    const year = eventDate ? new Date(eventDate).getFullYear() : undefined;
+    const base = year ? `${title}-${year}` : title || 'event';
+    return makeUniqueSlug(
+      base,
+      async (candidate) => !!(await em.findOne(Event, { slug: candidate })),
+      'event',
+    );
+  }
+
+  // Accepts either a UUID or an SEO slug (e.g. /events/the-ohio-car-audio-show-3-2026).
+  async findById(idOrSlug: string): Promise<Event> {
     const em = this.em.fork();
-    const event = await em.findOne(Event, { id });
+    const where = isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug };
+    const event = await em.findOne(Event, where);
     if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
+      throw new NotFoundException(`Event with ID ${idOrSlug} not found`);
     }
     return event;
   }
@@ -330,6 +344,11 @@ export class EventsService {
 
       console.log('📝 CREATE EVENT - Transformed data:', JSON.stringify(transformedData, null, 2));
 
+      // Assign an SEO-friendly slug at creation so new events get clean URLs.
+      if (!transformedData.slug && transformedData.title) {
+        transformedData.slug = await this.generateEventSlug(em, transformedData.title, transformedData.eventDate);
+      }
+
       const event = em.create(Event, transformedData);
       await em.persistAndFlush(event);
 
@@ -487,6 +506,10 @@ export class EventsService {
         }
 
         console.log(`📝 CREATE MULTI-DAY EVENT - Day ${dayNum} transformed data:`, JSON.stringify(transformedData, null, 2));
+
+        if (!transformedData.slug && transformedData.title) {
+          transformedData.slug = await this.generateEventSlug(em, transformedData.title, transformedData.eventDate);
+        }
 
         const event = em.create(Event, transformedData);
         createdEvents.push(event);
@@ -755,9 +778,11 @@ export class EventsService {
     };
   }
 
-  async getStats(): Promise<{ totalEvents: number }> {
+  async getStats(seasonId?: string): Promise<{ totalEvents: number }> {
     const em = this.em.fork();
-    const totalEvents = await em.count(Event, {});
+    const where: any = {};
+    if (seasonId) where.season = seasonId;
+    const totalEvents = await em.count(Event, where);
     return { totalEvents };
   }
 

@@ -30,6 +30,7 @@ export interface Event {
   has_gate_fee?: boolean;
   gate_fee?: number;
   season_id?: string;
+  slug?: string;
   points_multiplier?: number;
   format?: string;
   formats?: string[];
@@ -156,8 +157,10 @@ export const eventsApi = {
     await axios.delete(`/api/events/${id}`);
   },
 
-  getStats: async (): Promise<{ totalEvents: number }> => {
-    const response = await axios.get(`/api/events/stats`);
+  getStats: async (seasonId?: string): Promise<{ totalEvents: number }> => {
+    const response = await axios.get(`/api/events/stats`, {
+      params: seasonId ? { seasonId } : {},
+    });
     return response.data;
   },
 

@@ -188,8 +188,8 @@ export class EventRegistrationsController {
   // ========================
 
   @Get('stats')
-  async getStats(): Promise<{ totalRegistrations: number }> {
-    return this.eventRegistrationsService.getStats();
+  async getStats(@Query('seasonId') seasonId?: string): Promise<{ totalRegistrations: number }> {
+    return this.eventRegistrationsService.getStats(seasonId);
   }
 
   @Get('count/:eventId')

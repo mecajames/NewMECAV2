@@ -173,8 +173,10 @@ export const eventRegistrationsApi = {
     await axios.delete(`/api/event-registrations/${id}`);
   },
 
-  getStats: async (): Promise<{ totalRegistrations: number }> => {
-    const response = await axios.get('/api/event-registrations/stats');
+  getStats: async (seasonId?: string): Promise<{ totalRegistrations: number }> => {
+    const response = await axios.get('/api/event-registrations/stats', {
+      params: seasonId ? { seasonId } : {},
+    });
     return response.data;
   },
 
