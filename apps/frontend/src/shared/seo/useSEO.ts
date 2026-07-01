@@ -74,16 +74,17 @@ export function useEventDetailSEO(event: EventSEOData | null): SEOProps | null {
       ? truncate(event.description, 160)
       : `Join us at ${event.location.name}${event.location.city ? ` in ${event.location.city}` : ''}${event.location.state ? `, ${event.location.state}` : ''} on ${formatDate(event.date)} for this exciting car audio competition event.`;
 
+    const eventPath = `/events/${event.slug || event.id}`;
     return {
       title: PAGE_TITLES.eventDetail(event.title),
       description,
-      canonical: `/events/${event.id}`,
+      canonical: eventPath,
       image: event.image || SITE_CONFIG.defaultImage,
       type: 'event' as const,
       jsonLd: generateEventSchema(event),
       breadcrumbs: [
         { name: 'Events', path: '/events' },
-        { name: event.title, path: `/events/${event.id}` },
+        { name: event.title, path: eventPath },
       ],
     };
   }, [event]);

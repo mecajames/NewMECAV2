@@ -68,8 +68,8 @@ export class EventsController {
 
   @Public()
   @Get('stats')
-  async getStats(): Promise<{ totalEvents: number }> {
-    return this.eventsService.getStats();
+  async getStats(@Query('seasonId') seasonId?: string): Promise<{ totalEvents: number }> {
+    return this.eventsService.getStats(seasonId);
   }
 
   @Public()

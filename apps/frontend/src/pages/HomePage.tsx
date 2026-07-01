@@ -313,7 +313,7 @@ export default function HomePage() {
                         <div
                           key={event.id}
                           className="bg-slate-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1 cursor-pointer"
-                          onClick={() => navigate(`/events/${event.id}`)}
+                          onClick={() => navigate(`/events/${event.slug || event.id}`)}
                         >
                           {event.flyer_url ? (
                             <div className="relative">

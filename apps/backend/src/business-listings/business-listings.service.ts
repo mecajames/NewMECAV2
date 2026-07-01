@@ -3,6 +3,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { RetailerListing, GalleryImage } from './retailer-listing.entity';
 import { ManufacturerListing } from './manufacturer-listing.entity';
 import { Profile } from '../profiles/profiles.entity';
+import { resolveSlugToId } from '../common/slug.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { adminRecipientWhere } from '../auth/is-admin.helper';
 
@@ -149,7 +150,9 @@ export class BusinessListingsService {
 
   async findRetailerById(id: string): Promise<RetailerListing | null> {
     const em = this.em.fork();
-    return em.findOne(RetailerListing, { id }, { populate: ['user'] });
+    const resolved = await resolveSlugToId(em.getConnection(), 'retailer_listings', id);
+    if (!resolved) return null;
+    return em.findOne(RetailerListing, { id: resolved }, { populate: ['user'] });
   }
 
   async findRetailerByUserId(userId: string): Promise<RetailerListing | null> {
@@ -311,7 +314,9 @@ export class BusinessListingsService {
 
   async findManufacturerById(id: string): Promise<ManufacturerListing | null> {
     const em = this.em.fork();
-    return em.findOne(ManufacturerListing, { id }, { populate: ['user'] });
+    const resolved = await resolveSlugToId(em.getConnection(), 'manufacturer_listings', id);
+    if (!resolved) return null;
+    return em.findOne(ManufacturerListing, { id: resolved }, { populate: ['user'] });
   }
 
   async findManufacturerByUserId(userId: string): Promise<ManufacturerListing | null> {

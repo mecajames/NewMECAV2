@@ -838,11 +838,14 @@ export class EventRegistrationsService {
     });
   }
 
-  async getStats(): Promise<{ totalRegistrations: number }> {
+  async getStats(seasonId?: string): Promise<{ totalRegistrations: number }> {
     const em = this.em.fork();
-    const totalRegistrations = await em.count(EventRegistration, {
+    const where: any = {
       registrationStatus: { $nin: [ST_INTERESTED, ST_AWAITING] },
-    });
+    };
+    // Scope to a season via the registration's event → season link.
+    if (seasonId) where.event = { season: seasonId };
+    const totalRegistrations = await em.count(EventRegistration, where);
     return { totalRegistrations };
   }
 

@@ -12,6 +12,11 @@ export class Event {
   @Property({ type: 'text' })
   title!: string;
 
+  // SEO-friendly URL slug (e.g. the-ohio-car-audio-show-3-2026). Nullable until
+  // backfilled; resolved alongside id in findById.
+  @Property({ type: 'text', nullable: true })
+  slug?: string;
+
   @Property({ type: 'text', nullable: true })
   description?: string;
 

@@ -2005,16 +2005,26 @@ export class CompetitionResultsService {
   }
 
   /**
-   * Suggest groups of duplicate classes within a season. Classes are grouped
-   * by format + normalized name (case/space/punctuation-insensitive), and any
-   * group with 2+ members is a suggested merge. The canonical guess is the
-   * member that looks admin-created — a real abbreviation (abbreviation !=
-   * name), then most results, then a set display order; the import-created
-   * ones (abbreviation == name, the create-unknown-class fingerprint) become
-   * the duplicates. Read-only; the admin confirms before merging.
+   * Suggest groups of duplicate classes within a season. Two passes, each
+   * emitting groups of 2+ members as a suggested merge:
+   *   - reason='name': format + normalized name (case- AND space-insensitive,
+   *     punctuation kept). Catches spelling variants like "Radical X" vs
+   *     "RadicalX". HIGH confidence — same class spelled differently.
+   *   - reason='abbreviation': format + shared real abbreviation (abbr != name,
+   *     non-empty). Catches classes that collide in the frontend resolver
+   *     (which matches result text against name OR abbreviation). LOWER
+   *     confidence — a shared abbreviation does NOT prove the classes are
+   *     duplicates, so the admin must verify before merging.
+   * The canonical guess is the member that looks admin-created — a real
+   * abbreviation (abbreviation != name), then most results, then a set
+   * display order; the import-created ones (abbreviation == name, the
+   * create-unknown-class fingerprint) become the duplicates. Read-only; the
+   * admin confirms before merging. Groups already covered by the name pass are
+   * not re-emitted by the abbreviation pass.
    */
   async getDuplicateClassSuggestions(seasonId: string): Promise<Array<{
     format: string;
+    reason: 'name' | 'abbreviation';
     canonical: { id: string; name: string; abbreviation: string; resultCount: number };
     duplicates: Array<{ id: string; name: string; abbreviation: string; resultCount: number }>;
   }>> {
@@ -2035,50 +2045,86 @@ export class CompetitionResultsService {
     // Groups the admin has explicitly marked "not duplicates" — skip these.
     const ignores = await this.getMergeIgnores(em);
 
-    // Normalize for grouping: lowercase + collapse whitespace ONLY. We must
-    // NOT strip punctuation — that wrongly merged genuinely different classes
-    // like "SQ2" and "SQ2+" (the "+" is meaningful). This now only groups
-    // names that differ by case or spacing.
-    const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const groups = new Map<string, CompetitionClass[]>();
-    for (const cls of classes) {
-      const key = `${(cls.format || '').toLowerCase()}::${norm(cls.name)}`;
-      const list = groups.get(key) || [];
-      list.push(cls);
-      groups.set(key, list);
-    }
-
     const looksAdminCreated = (c: CompetitionClass) =>
       (c.abbreviation || '').trim() !== '' && c.abbreviation !== c.name;
+    const shape = (c: CompetitionClass) => ({
+      id: c.id, name: c.name, abbreviation: c.abbreviation, resultCount: countById.get(c.id) ?? 0,
+    });
+    // Rank best-canonical-first: looks admin-created (real abbreviation),
+    // then most results, then a set display order.
+    const rank = (list: CompetitionClass[]) => [...list].sort((a, b) => {
+      const aw = (looksAdminCreated(a) ? 1 : 0);
+      const bw = (looksAdminCreated(b) ? 1 : 0);
+      if (aw !== bw) return bw - aw;
+      const ac = countById.get(a.id) ?? 0;
+      const bc = countById.get(b.id) ?? 0;
+      if (ac !== bc) return bc - ac;
+      return (b.displayOrder ?? 0) - (a.displayOrder ?? 0);
+    });
 
     const suggestions: any[] = [];
-    for (const list of groups.values()) {
-      if (list.length < 2) continue;
-      // Skip groups the admin marked "not duplicates" (matched by the exact
-      // set of class ids, sorted).
+    // Track id-sets we've already emitted so the second (abbreviation) pass
+    // doesn't re-suggest a group the name pass already covered.
+    const emitted = new Set<string>();
+    const emit = (list: CompetitionClass[], reason: 'name' | 'abbreviation') => {
+      if (list.length < 2) return;
       const groupKey = [...list].map((c) => c.id).sort().join(',');
-      if (ignores.has(groupKey)) continue;
-      // Rank best-canonical-first: real abbreviation, then most results,
-      // then a set display order.
-      const ranked = [...list].sort((a, b) => {
-        const aw = (looksAdminCreated(a) ? 1 : 0);
-        const bw = (looksAdminCreated(b) ? 1 : 0);
-        if (aw !== bw) return bw - aw;
-        const ac = countById.get(a.id) ?? 0;
-        const bc = countById.get(b.id) ?? 0;
-        if (ac !== bc) return bc - ac;
-        return (b.displayOrder ?? 0) - (a.displayOrder ?? 0);
+      // Skip groups the admin marked "not duplicates", and anything already emitted.
+      if (ignores.has(groupKey) || emitted.has(groupKey)) return;
+      emitted.add(groupKey);
+      const [canonical, ...dups] = rank(list);
+      suggestions.push({
+        format: canonical.format,
+        reason,
+        canonical: shape(canonical),
+        duplicates: dups.map(shape),
       });
-      const [canonical, ...dups] = ranked;
-      const shape = (c: CompetitionClass) => ({
-        id: c.id, name: c.name, abbreviation: c.abbreviation, resultCount: countById.get(c.id) ?? 0,
-      });
-      suggestions.push({ format: canonical.format, canonical: shape(canonical), duplicates: dups.map(shape) });
+    };
+
+    // Pass 1 — group by format + normalized NAME. Normalization now also
+    // removes ALL whitespace (not just collapses runs) so spacing-only
+    // variants like "Radical X" vs "RadicalX" and a stray leading space in
+    // " Radical X Mod Street 2" group together. Punctuation is still kept —
+    // stripping it wrongly merged genuinely different classes like "SQ2" and
+    // "SQ2+" (the "+" is meaningful). High confidence: these are the same
+    // class spelled differently.
+    const normName = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '').trim();
+    const nameGroups = new Map<string, CompetitionClass[]>();
+    for (const cls of classes) {
+      const key = `${(cls.format || '').toLowerCase()}::${normName(cls.name)}`;
+      const list = nameGroups.get(key) || [];
+      list.push(cls);
+      nameGroups.set(key, list);
     }
-    // Most-impactful groups first.
-    suggestions.sort((a, b) =>
-      b.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0) -
-      a.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0));
+    for (const list of nameGroups.values()) emit(list, 'name');
+
+    // Pass 2 — group by format + ABBREVIATION (for "real" abbreviations only,
+    // i.e. abbreviation != name and non-empty). Classes that share an
+    // abbreviation within a format collide in the frontend's class resolver
+    // (it matches a result's class text against name OR abbreviation), so two
+    // differently-named classes with the same abbreviation render and resolve
+    // ambiguously. These are flagged reason='abbreviation' and are LOWER
+    // confidence than name matches — same abbreviation does not prove the
+    // classes are duplicates (e.g. "RadicalX", "Extreme" and "Radical X
+    // Extreme" all use abbr "X" but may be distinct). The admin must verify
+    // before merging.
+    const abbrGroups = new Map<string, CompetitionClass[]>();
+    for (const cls of classes) {
+      if (!looksAdminCreated(cls)) continue; // skip blank / abbr==name (import fingerprint)
+      const key = `${(cls.format || '').toLowerCase()}::${(cls.abbreviation || '').toLowerCase().trim()}`;
+      const list = abbrGroups.get(key) || [];
+      list.push(cls);
+      abbrGroups.set(key, list);
+    }
+    for (const list of abbrGroups.values()) emit(list, 'abbreviation');
+
+    // Most-impactful groups first, but keep high-confidence name matches ahead
+    // of the advisory abbreviation matches.
+    const impact = (g: any) => g.duplicates.reduce((s: number, d: any) => s + d.resultCount, 0);
+    suggestions.sort((a, b) => {
+      if (a.reason !== b.reason) return a.reason === 'name' ? -1 : 1;
+      return impact(b) - impact(a);
+    });
     return suggestions;
   }
 

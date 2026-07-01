@@ -157,6 +157,15 @@ export interface CreateMembershipDto {
   skipVehicleValidation?: boolean;
 }
 
+/**
+ * Shown when a guest (not logged in) tries to buy a second membership on the
+ * public site for an email that already has an active membership. Keep the
+ * wording aligned with the checkout page's 'active' banner
+ * (MembershipCheckoutPage) so the block reads the same everywhere.
+ */
+export const ACTIVE_MEMBERSHIP_EMAIL_BLOCK_MESSAGE =
+  'An active MECA membership already exists for this email address. To add another membership, please log in to your account and add a secondary membership from Membership & Billing → My Memberships.';
+
 @Injectable()
 export class MembershipsService {
   private readonly logger = new Logger(MembershipsService.name);
@@ -415,6 +424,50 @@ export class MembershipsService {
       },
       { populate: ['membershipTypeConfig'] }
     );
+  }
+
+  /**
+   * True when the given email belongs to an account that currently has an
+   * ACTIVE membership — a paid membership not lapsed by date AND a profile not
+   * flagged 'expired'. This is the SAME definition the public account-exists
+   * lookup uses to classify an email as 'active'
+   * (auth.controller.accountExists); keep the two in sync.
+   *
+   * Server-side stopgap so a guest (not logged in) cannot buy a SECOND
+   * membership on the public site for an email that already has an active one —
+   * they must log in and add a secondary from Membership & Billing instead.
+   * Logged-in purchases go through canPurchaseMembership (which allows
+   * renewals/stacking), so callers scope this to guests (no verified userId).
+   *
+   * Fails OPEN (returns false) on a malformed email or lookup error so a
+   * transient DB hiccup never blocks a legitimate brand-new-member purchase;
+   * the checkout page's own 'active' guard remains the first line of defense.
+   */
+  async emailHasActiveMembership(email: string): Promise<boolean> {
+    const normalized = (email || '').trim().toLowerCase();
+    if (!normalized || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) return false;
+    try {
+      const rows = await this.em.getConnection().execute(
+        `SELECT (
+            EXISTS (
+              SELECT 1 FROM public.memberships m
+               WHERE m.user_id = u.id
+                 AND m.payment_status = 'paid'
+                 AND (m.end_date IS NULL OR m.end_date > now())
+            )
+            AND p.membership_status IS DISTINCT FROM 'expired'
+          ) AS has_active_membership
+           FROM auth.users u
+           LEFT JOIN public.profiles p ON p.id = u.id
+          WHERE lower(u.email) = ?
+          LIMIT 1`,
+        [normalized],
+      );
+      return rows?.[0]?.has_active_membership === true;
+    } catch (err) {
+      this.logger.error(`emailHasActiveMembership lookup failed for ${normalized}: ${err}`);
+      return false;
+    }
   }
 
   /**

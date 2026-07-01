@@ -10,6 +10,7 @@ import {
   Clock,
   Tag,
   Mail,
+  Users,
 } from 'lucide-react';
 import * as ticketAdminApi from '../../ticket-admin.api-client';
 import { reportError } from './error-helper';
@@ -46,6 +47,29 @@ export function TicketSystemSettings() {
       setSyncError(err?.response?.data?.message || err?.message || 'Sync failed.');
     } finally {
       setSyncRunning(false);
+    }
+  };
+
+  // Owner-only staff/routing/custom-field setup tool (applies ticket-staff-seed).
+  const [staffSetupRunning, setStaffSetupRunning] = useState(false);
+  const [staffSetupReport, setStaffSetupReport] = useState<any | null>(null);
+  const [staffSetupMode, setStaffSetupMode] = useState<'preview' | 'applied' | null>(null);
+  const [staffSetupError, setStaffSetupError] = useState<string | null>(null);
+
+  const runStaffSetup = async (apply: boolean) => {
+    if (apply && !window.confirm(
+      'Apply the staff configuration to THIS environment now?\n\nIt creates/updates the 5 staff + roles, their department assignments, each department\'s default (auto) assignee, and the event-picker field. People are matched by email. Run a Preview first if you haven\'t.',
+    )) return;
+    setStaffSetupRunning(true);
+    setStaffSetupError(null);
+    try {
+      const res = await axios.post(`/api/tickets/admin/staff-setup?dryRun=${apply ? 'false' : 'true'}`);
+      setStaffSetupReport(res.data);
+      setStaffSetupMode(apply ? 'applied' : 'preview');
+    } catch (err: any) {
+      setStaffSetupError(err?.response?.data?.message || err?.message || 'Staff setup failed.');
+    } finally {
+      setStaffSetupRunning(false);
     }
   };
 
@@ -446,6 +470,138 @@ export function TicketSystemSettings() {
               {syncReport.warnings?.length > 0 && (
                 <div className="px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
                   {syncReport.warnings.map((w: string, i: number) => <p key={i}>⚠ {w}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Production Staff Setup — OWNER ONLY (James, MECA 202401). Applies the
+          canonical staff roster, department assignments, per-department default
+          assignee, and the event-picker field from ticket-staff-seed.ts. */}
+      {isOwner && (
+        <div className="bg-slate-800 rounded-xl border border-purple-500/40 p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
+              <Users className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-white font-medium">Production Staff Setup</h3>
+                <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300">Owner only</span>
+              </div>
+              <p className="text-sm text-gray-400 mt-1">
+                Create/update the <strong>5 staff &amp; roles</strong>, their <strong>department assignments</strong>,
+                each department's <strong>default (auto) assignee</strong>, and the <strong>event-picker field</strong> —
+                matched to accounts by email. Run <strong>config-sync first</strong> (departments must exist). Always
+                <strong> Preview</strong> first; it writes nothing.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => runStaffSetup(false)}
+              disabled={staffSetupRunning}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${staffSetupRunning ? 'animate-spin' : ''}`} />
+              Preview changes
+            </button>
+            <button
+              onClick={() => runStaffSetup(true)}
+              disabled={staffSetupRunning}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              Apply setup
+            </button>
+            {staffSetupRunning && <span className="text-sm text-gray-400">Running…</span>}
+          </div>
+
+          {staffSetupError && (
+            <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+              {staffSetupError}
+            </div>
+          )}
+
+          {staffSetupReport && (
+            <div className="space-y-4">
+              <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                staffSetupMode === 'applied'
+                  ? 'bg-green-500/10 border border-green-500/30 text-green-300'
+                  : 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
+              }`}>
+                {staffSetupMode === 'applied'
+                  ? '✓ Applied — staff configuration saved to this environment.'
+                  : 'Preview only — nothing was saved. Click "Apply setup" to commit these changes.'}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Staff</p>
+                  <p className="text-white">
+                    {staffSetupReport.staff.created.length} created · {staffSetupReport.staff.updated.length} updated · {staffSetupReport.staff.unchanged} unchanged
+                  </p>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Dept. assignments</p>
+                  <p className="text-white">
+                    {staffSetupReport.department_assignments.created.length} created · {staffSetupReport.department_assignments.updated.length} updated · {staffSetupReport.department_assignments.unchanged} unchanged
+                  </p>
+                </div>
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <p className="text-gray-400 mb-1">Event-picker field</p>
+                  <p className="text-white capitalize">
+                    {staffSetupReport.event_field.action} · {staffSetupReport.event_field.categories.length} categories
+                  </p>
+                </div>
+              </div>
+
+              {staffSetupReport.staff.unresolved?.length > 0 && (
+                <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-xs space-y-1">
+                  <p className="font-medium text-red-300">No prod account matched (skipped):</p>
+                  {staffSetupReport.staff.unresolved.map((u: any, i: number) => (
+                    <p key={i}>• {u.name} &lt;{u.email}&gt;</p>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <p className="text-white text-sm font-medium mb-2">Default (auto) assignee per department</p>
+                <div className="overflow-x-auto rounded-lg border border-slate-700">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900/60 text-gray-400">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">Department</th>
+                        <th className="text-left px-3 py-2 font-medium">Auto-assigns to</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {staffSetupReport.department_default_assignees.map((d: any, i: number) => (
+                        <tr key={i}>
+                          <td className="px-3 py-2 text-white whitespace-nowrap">{d.department}</td>
+                          <td className="px-3 py-2 text-gray-200">{d.assignee || <span className="text-gray-500">—</span>}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className={
+                              d.status === 'skipped' ? 'text-amber-400' :
+                              d.status === 'unchanged' ? 'text-gray-400' : 'text-green-400'
+                            }>
+                              {d.status}{d.note ? ` (${d.note})` : ''}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {staffSetupReport.warnings?.length > 0 && (
+                <div className="px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
+                  {staffSetupReport.warnings.map((w: string, i: number) => <p key={i}>⚠ {w}</p>)}
                 </div>
               )}
             </div>

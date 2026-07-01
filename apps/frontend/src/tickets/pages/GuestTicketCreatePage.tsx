@@ -28,11 +28,13 @@ import {
 
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 
+// Guests/public may only self-select Low/Medium/High. "Critical" is a
+// support-team-only priority (staff can still set it from the ticket detail
+// pill and via routing rules), so it is intentionally omitted here.
 const priorityOptions: { value: TicketPriority; label: string; className: string }[] = [
   { value: 'low', label: 'Low', className: 'border-blue-500 bg-blue-500/10' },
   { value: 'medium', label: 'Medium', className: 'border-yellow-500 bg-yellow-500/10' },
   { value: 'high', label: 'High', className: 'border-orange-500 bg-orange-500/10' },
-  { value: 'critical', label: 'Critical', className: 'border-red-500 bg-red-500/10' },
 ];
 
 export function GuestTicketCreatePage() {
@@ -437,7 +439,7 @@ export function GuestTicketCreatePage() {
               <AlertTriangle className="w-4 h-4 inline mr-1" />
               Priority
             </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {priorityOptions.map((opt) => (
                 <button
                   key={opt.value}

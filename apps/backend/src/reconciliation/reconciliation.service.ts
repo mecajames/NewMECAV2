@@ -35,9 +35,6 @@ const REPORT_KEY = 'reconciliation_last_report';
 const LIVE_REPORT_KEY = 'reconciliation_live_last_report';
 const ALERT_MARKER_KEY = 'reconciliation_last_alert_date';
 const LIVE_ALERT_MARKER_KEY = 'reconciliation_live_last_alert_date';
-// Stable advisory-lock id so concurrent instances/cluster workers can't both
-// fire the nightly alert (the duplicate-email lesson from the analytics report).
-const RECON_LOCK_ID = 815623002;
 const SAMPLE_LIMIT = 25;
 // Cap per-record live verify calls so a busy window can't fan out unbounded
 // gateway API calls. If exceeded, the report says so (no silent truncation).
@@ -361,6 +358,47 @@ export class ReconciliationService {
     return Math.round(parseFloat(String(v ?? '0')) * 100);
   }
 
+  /**
+   * Stripe charges whose money is recorded outside the `payments` table:
+   *   • `shop_orders` — store their own Stripe PI + charge id;
+   *   • `memberships` — subscription (invoice) charges are recorded here keyed by
+   *     the Stripe subscription id, with no payments row of their own.
+   * Pulled un-windowed (a renewal charge's subscription/order can predate the
+   * window) so the orphan check never false-flags them as "money never recorded".
+   */
+  private async loadNonPaymentStripeIndexes(): Promise<{
+    shopOrderStripeIds: Set<string>;
+    membershipSubscriptionIds: Set<string>;
+  }> {
+    const shopOrderStripeIds = new Set<string>();
+    const membershipSubscriptionIds = new Set<string>();
+    const conn = this.em.fork().getConnection();
+    try {
+      const shopRows = await conn.execute<Array<{ pi: string | null; ch: string | null }>>(
+        `SELECT stripe_payment_intent_id AS pi, stripe_charge_id AS ch
+           FROM shop_orders
+          WHERE stripe_payment_intent_id IS NOT NULL OR stripe_charge_id IS NOT NULL`,
+      );
+      for (const r of shopRows) {
+        if (r.pi) shopOrderStripeIds.add(r.pi);
+        if (r.ch) shopOrderStripeIds.add(r.ch);
+      }
+    } catch (err) {
+      this.logger.error(`loadNonPaymentStripeIndexes: shop_orders lookup failed: ${err}`);
+    }
+    try {
+      const subRows = await conn.execute<Array<{ sub: string }>>(
+        `SELECT DISTINCT stripe_subscription_id AS sub
+           FROM memberships
+          WHERE stripe_subscription_id IS NOT NULL`,
+      );
+      for (const r of subRows) if (r.sub) membershipSubscriptionIds.add(r.sub);
+    } catch (err) {
+      this.logger.error(`loadNonPaymentStripeIndexes: memberships lookup failed: ${err}`);
+    }
+    return { shopOrderStripeIds, membershipSubscriptionIds };
+  }
+
   private async stripeLiveChecks(
     localPayments: Payment[],
     localRefunds: Refund[],
@@ -394,14 +432,29 @@ export class ReconciliationService {
     }
     const chargeByPi = new Map(chargesRes.charges.filter((c) => c.paymentIntentId).map((c) => [c.paymentIntentId as string, c]));
 
+    // Some Stripe money is recorded outside the `payments` ledger and must not be
+    // mistaken for an orphan:
+    //   • shop orders store their own PI/charge id in `shop_orders`;
+    //   • subscription (invoice) charges land in `memberships` keyed by the Stripe
+    //     subscription id, with no payments row of their own.
+    // Pull both indexes so the orphan check below recognises them as recorded.
+    const { shopOrderStripeIds, membershipSubscriptionIds } = await this.loadNonPaymentStripeIndexes();
+
+    const isRecorded = (c: { paymentIntentId: string | null; id: string; subscriptionId: string | null }): boolean =>
+      (!!c.paymentIntentId && localStripeIds.has(c.paymentIntentId)) ||
+      (!!c.paymentIntentId && shopOrderStripeIds.has(c.paymentIntentId)) ||
+      shopOrderStripeIds.has(c.id) ||
+      (!!c.subscriptionId && membershipSubscriptionIds.has(c.subscriptionId));
+
     const out: ReconCheck[] = [];
 
-    // 1. Gateway→DB: succeeded charge with no local payment.
+    // 1. Gateway→DB: succeeded charge with no local record (payment, shop order, or
+    //    subscription-backed membership).
     const orphans = chargesRes.charges
-      .filter((c) => c.status === 'succeeded' && (!c.paymentIntentId || !localStripeIds.has(c.paymentIntentId)))
-      .map((c) => ({ chargeId: c.id, paymentIntentId: c.paymentIntentId, amount: (c.amountCents / 100).toFixed(2), created: new Date(c.created * 1000).toISOString() }));
-    out.push(this.mkCheck('live_stripe_unrecorded_charges', 'Stripe charges with no local payment',
-      'Succeeded Stripe charges in the window that have NO matching local payment row — money collected the DB never recorded (likely a missed webhook).', 'critical', orphans));
+      .filter((c) => c.status === 'succeeded' && !isRecorded(c))
+      .map((c) => ({ chargeId: c.id, paymentIntentId: c.paymentIntentId, subscriptionId: c.subscriptionId, amount: (c.amountCents / 100).toFixed(2), created: new Date(c.created * 1000).toISOString() }));
+    out.push(this.mkCheck('live_stripe_unrecorded_charges', 'Stripe charges with no local record',
+      'Succeeded Stripe charges in the window with NO matching local record — not in the payments ledger, shop orders, or a subscription-backed membership. Money collected the DB never recorded (likely a missed webhook).', 'critical', orphans));
 
     // 2. DB→Gateway: local paid payment whose charge is not succeeded.
     const drift = localPayments
@@ -573,32 +626,24 @@ export class ReconciliationService {
     },
   ): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
-    let claimed = false;
-    const em = this.em.fork();
+    // Idempotent across instances: a single INSERT into cron_send_log (PK on
+    // job_key + range_id) means only ONE instance can claim today's alert, even
+    // when every instance fires the cron at the same instant. The previous
+    // advisory-lock scheme ran via getConnection().execute() on a pooled,
+    // autocommit connection (not the transaction's), so the lock released
+    // immediately and didn't actually serialise concurrent firings.
     try {
-      claimed = await em.transactional(async (tem) => {
-        await tem.getConnection().execute('SELECT pg_advisory_xact_lock(?)', [RECON_LOCK_ID]);
-        const marker = await tem.findOne(SiteSettings, { setting_key: opts.markerKey });
-        if (marker && marker.setting_value === today) return false;
-        if (marker) {
-          marker.setting_value = today;
-          marker.updated_at = new Date();
-        } else {
-          tem.create(SiteSettings, {
-            setting_key: opts.markerKey,
-            setting_value: today,
-            setting_type: 'string',
-            description: 'Last date a reconciliation critical-alert email was sent (duplicate-send guard).',
-          } as any);
-        }
-        return true;
-      });
-    } catch (err) {
-      this.logger.error(`Reconciliation alert claim failed (skipping alert): ${err}`);
-      return;
-    }
-    if (!claimed) {
-      this.logger.log('Reconciliation alert already sent today by another instance — skipping.');
+      await this.em.getConnection().execute(
+        'INSERT INTO cron_send_log (job_key, range_id) VALUES (?, ?)',
+        [opts.markerKey, today],
+      );
+    } catch (err: any) {
+      const code = err?.code ?? err?.cause?.code;
+      if (code === '23505' || /duplicate key|unique/i.test(String(err?.message ?? ''))) {
+        this.logger.log('Reconciliation alert already sent today by another instance — skipping.');
+      } else {
+        this.logger.error(`Reconciliation alert claim failed (skipping alert): ${err}`);
+      }
       return;
     }
 

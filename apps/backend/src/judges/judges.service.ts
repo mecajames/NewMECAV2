@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
+import { resolveSlugToId } from '../common/slug.util';
 import { JudgeApplication } from './judge-application.entity';
 import { JudgeApplicationReference } from './judge-application-reference.entity';
 import { Judge } from './judge.entity';
@@ -509,6 +510,11 @@ export class JudgesService {
 
   async getJudge(judgeId: string): Promise<Judge> {
     const em = this.em.fork();
+    const resolved = await resolveSlugToId(em.getConnection(), 'judges', judgeId);
+    if (!resolved) {
+      throw new NotFoundException('Judge not found');
+    }
+    judgeId = resolved;
     const judge = await em.findOne(Judge, judgeId, {
       populate: ['user', 'application', 'seasonQualifications'],
     });

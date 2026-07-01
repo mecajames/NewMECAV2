@@ -15,6 +15,7 @@ import { ShopOrder } from './entities/shop-order.entity';
 import { ShopOrderItem } from './entities/shop-order-item.entity';
 import { ShippingService } from './shipping.service';
 import { TaxService } from '../tax/tax.service';
+import { resolveSlugToId } from '../common/slug.util';
 import {
   EmailService,
   ShopOrderItemDto,
@@ -102,6 +103,11 @@ export class ShopService {
 
   async findProductById(id: string): Promise<ShopProduct> {
     const em = this.em.fork();
+    const resolved = await resolveSlugToId(em.getConnection(), 'shop_products', id);
+    if (!resolved) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
+    id = resolved;
     const product = await em.findOne(ShopProduct, { id });
 
     if (!product) {

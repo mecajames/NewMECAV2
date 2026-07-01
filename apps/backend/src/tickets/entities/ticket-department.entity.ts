@@ -1,5 +1,6 @@
-import { Entity, PrimaryKey, Property, Collection, OneToMany } from '@mikro-orm/core';
+import { Entity, PrimaryKey, Property, Collection, OneToMany, ManyToOne } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { Profile } from '../../profiles/profiles.entity';
 
 @Entity({ tableName: 'ticket_departments', schema: 'public' })
 export class TicketDepartment {
@@ -36,6 +37,16 @@ export class TicketDepartment {
   // (implies members-only). Used for Event Director / Judge departments.
   @Property({ type: 'json', fieldName: 'required_roles', serializedName: 'required_roles', nullable: true })
   requiredRoles?: string[];
+
+  // Per-department default assignee. New tickets landing in this department
+  // auto-assign to this profile when no routing rule already assigned a staff
+  // member. The persist:false scalar emits the id as a string for the admin UI;
+  // the hidden ManyToOne owns the column (mirrors the routing-rule FK pattern).
+  @Property({ type: 'uuid', fieldName: 'default_assignee_id', serializedName: 'default_assignee_id', persist: false, nullable: true })
+  defaultAssigneeId?: string;
+
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'default_assignee_id', hidden: true })
+  defaultAssignee?: Profile;
 
   @Property({ onCreate: () => new Date(), fieldName: 'created_at', serializedName: 'created_at' })
   createdAt: Date = new Date();
