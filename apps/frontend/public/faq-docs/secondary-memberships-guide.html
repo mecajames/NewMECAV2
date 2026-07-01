@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secondary Memberships Guide - MECA Help Center</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 10px; color: #f97316; font-size: 2rem; }
+    .subtitle { text-align: center; color: #94a3b8; margin-bottom: 40px; }
+    .back-link { display: inline-block; margin-bottom: 20px; color: #f97316; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .section { background: #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    h2 { color: #f97316; font-size: 1.4rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #475569; }
+    h3 { color: #60a5fa; font-size: 1.1rem; margin: 16px 0 12px 0; }
+    h4 { color: #a78bfa; font-size: 1rem; margin: 12px 0 8px 0; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin-left: 24px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    .highlight { background: #475569; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #f97316; }
+    .tip-box { background: #1e3a5f; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #3b82f6; }
+    .warning-box { background: #7c2d12; padding: 16px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #ef4444; }
+    .flow-diagram { background: #1e293b; padding: 20px; border-radius: 8px; margin: 16px 0; }
+    .flow-step { display: flex; align-items: flex-start; margin-bottom: 12px; }
+    .flow-number {
+      background: #f97316; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-weight: 600;
+      margin-right: 12px; flex-shrink: 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 12px; text-align: left; border: 1px solid #475569; }
+    th { background: #475569; color: #f97316; }
+    tr:nth-child(even) { background: #3d4f63; }
+    .toc { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
+    .toc h3 { color: #f97316; margin-top: 0; }
+    .toc ul { list-style: none; margin-left: 0; }
+    .toc a { color: #60a5fa; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .footer-help { text-align: center; margin-top: 40px; padding: 24px; background: #334155; border-radius: 12px; }
+    .footer-help a { color: #f97316; text-decoration: none; }
+    .footer-help a:hover { text-decoration: underline; }
+    .screenshot-wrap { margin: 16px 0; text-align: center; }
+    .screenshot-wrap img { max-width: 100%; border-radius: 8px; border: 1px solid #475569; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .screenshot-wrap .caption { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; font-style: italic; }
+    .screenshot-wrap .missing { display: block; padding: 48px 24px; background: #1e293b; border-radius: 8px; border: 1px dashed #475569; color: #64748b; font-style: italic; }
+    @media (max-width: 600px) {
+      body { padding: 20px 12px; }
+      h1 { font-size: 1.5rem; }
+      table { font-size: 0.85rem; }
+      th, td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back-link">&larr; Back to Help Center</a>
+
+    <h1>&#128101; Secondary Memberships</h1>
+    <p class="subtitle">Add and manage additional competitors or vehicles under your own account</p>
+
+    <div class="toc">
+      <h3>Table of Contents</h3>
+      <ul>
+        <li><a href="#what">1. What Is a Secondary Membership?</a></li>
+        <li><a href="#vs-team">2. Secondary Membership vs. Team</a></li>
+        <li><a href="#before">3. Before You Start</a></li>
+        <li><a href="#add">4. How to Add a Secondary Membership</a></li>
+        <li><a href="#pay">5. Paying for a Secondary Membership</a></li>
+        <li><a href="#manage">6. Managing &amp; Editing a Secondary</a></li>
+        <li><a href="#faq">7. Frequently Asked Questions</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="what">
+      <h2>1. What Is a Secondary Membership?</h2>
+      <p>A <strong>secondary membership</strong> lets you (the primary, or &ldquo;master,&rdquo; member) add additional competitor memberships under your own account. It&rsquo;s the right choice when you want to cover:</p>
+      <ul>
+        <li><strong>Another person</strong> &mdash; a spouse, child, or friend who competes but whose membership you want to manage and pay for.</li>
+        <li><strong>Another vehicle of your own</strong> &mdash; each vehicle that competes needs its own MECA ID.</li>
+      </ul>
+      <p>Each secondary gets its <strong>own unique MECA ID</strong>, and you manage and pay for all of them from your single account.</p>
+
+      <div class="highlight">
+        <strong>&#127950; Every unique vehicle gets its own MECA ID.</strong> If you want to run more than one vehicle &mdash; or add another driver &mdash; you add a secondary membership for each one.
+      </div>
+    </div>
+
+    <div class="section" id="vs-team">
+      <h2>2. Secondary Membership vs. Team</h2>
+      <p>These are two different features &mdash; it&rsquo;s easy to mix them up:</p>
+      <table>
+        <tr>
+          <th>Secondary Membership</th>
+          <th>Team</th>
+        </tr>
+        <tr>
+          <td>Additional individual memberships you own and pay for, each with its own MECA ID.</td>
+          <td>A team of members with a shared name, roster, and team standings.</td>
+        </tr>
+        <tr>
+          <td>Managed from <strong>Membership &amp; Billing</strong>.</td>
+          <td>Managed from the <strong>Teams</strong> tab.</td>
+        </tr>
+      </table>
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> If you&rsquo;re looking to create or join a competition team, use the <strong>Teams</strong> tab instead &mdash; see the Team Management guide in the Help Center.
+      </div>
+    </div>
+
+    <div class="section" id="before">
+      <h2>3. Before You Start</h2>
+      <ul>
+        <li>You need your <strong>own active membership</strong> first &mdash; secondaries are added underneath it.</li>
+        <li>Secondary memberships are <strong>Competitor</strong> memberships.</li>
+        <li>Have the competitor&rsquo;s <strong>name</strong> and the <strong>vehicle details</strong> ready (make, model, color, and license plate).</li>
+      </ul>
+
+      <div class="warning-box">
+        <strong>&#9888; Adding a second membership from the public site won&rsquo;t work.</strong> If an email already has an active membership, the checkout will tell you so and ask you to log in. That&rsquo;s by design &mdash; additional memberships are added <em>here</em>, as secondaries, from inside your account.
+      </div>
+    </div>
+
+    <div class="section" id="add">
+      <h2>4. How to Add a Secondary Membership</h2>
+      <p>Go to <strong>My MECA</strong> &rarr; the <strong>Membership &amp; Billing</strong> tab, then find the <strong>Secondary Memberships</strong> section and click <strong>&ldquo;Add Secondary Member.&rdquo;</strong> A short wizard walks you through four steps:</p>
+
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-number">1</div>
+          <div>
+            <strong>Details.</strong> Choose <em>&ldquo;Who is this membership for?&rdquo;</em> (yourself, a family member, a friend, etc.). If it&rsquo;s for you, we use your own name automatically; otherwise enter the competitor&rsquo;s name. Then enter the <strong>vehicle information</strong> &mdash; make, model, color, and license plate (all required, since each unique vehicle earns its own MECA ID).
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">2</div>
+          <div>
+            <strong>Account login option.</strong> Pick one:
+            <ul>
+              <li><strong>No separate login</strong> &mdash; you manage this membership entirely from your account; the secondary can&rsquo;t log in on their own.</li>
+              <li><strong>Give their own login</strong> &mdash; they can log in, compete, and edit their profile. You still handle all billing. You&rsquo;ll enter their email, and login details are sent there.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">3</div>
+          <div>
+            <strong>Membership type.</strong> Choose a Competitor membership type. The price is shown next to each option.
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-number">4</div>
+          <div>
+            <strong>Review &amp; confirm.</strong> Check the relationship, competitor, vehicle, login choice, and membership, then click <strong>&ldquo;Add Secondary.&rdquo;</strong> The secondary is created with a <strong>Pending</strong> payment status.
+          </div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Adding a secondary creates the membership but doesn&rsquo;t charge you yet &mdash; it stays <strong>Pending</strong> until you complete payment (next section).
+      </div>
+    </div>
+
+    <div class="section" id="pay">
+      <h2>5. Paying for a Secondary Membership</h2>
+      <p>A new secondary starts in a <strong>Pending</strong> state. To activate it, complete payment for that secondary from the <strong>Secondary Memberships</strong> section under <strong>Membership &amp; Billing</strong>.</p>
+      <p>Once payment is confirmed, the secondary&rsquo;s MECA ID becomes active and can be used to register and compete at events.</p>
+    </div>
+
+    <div class="section" id="manage">
+      <h2>6. Managing &amp; Editing a Secondary</h2>
+      <p>All of your secondaries are listed in the <strong>Secondary Memberships</strong> section of the <strong>Membership &amp; Billing</strong> tab, showing the count and each member&rsquo;s details.</p>
+
+      <h3>Editing details</h3>
+      <p>Click the <strong>Edit</strong> (pencil) icon next to a secondary to update:</p>
+      <ul>
+        <li>Competitor name</li>
+        <li>Relationship to you</li>
+        <li>Vehicle make, model, color, and license plate</li>
+      </ul>
+
+      <h3>Who can log in?</h3>
+      <p>If you gave a secondary <strong>their own login</strong>, they sign in with their own email to manage their profile and compete &mdash; but <strong>billing always stays with you</strong>, the master account. If you chose <strong>no separate login</strong>, you manage everything for them from your account.</p>
+
+      <div class="tip-box">
+        <strong>&#128161; Tip:</strong> Keep the vehicle details accurate &mdash; they&rsquo;re tied to the MECA ID and used at event check-in.
+      </div>
+    </div>
+
+    <div class="section" id="faq">
+      <h2>7. Frequently Asked Questions</h2>
+
+      <h3>How many secondaries can I add?</h3>
+      <p>As many as you need. Each one is its own membership with its own MECA ID.</p>
+
+      <h3>What membership types can a secondary be?</h3>
+      <p>Secondaries are Competitor memberships. Retailer/Manufacturer types and team add-ons aren&rsquo;t available as secondaries.</p>
+
+      <h3>Who pays for a secondary?</h3>
+      <p>You do &mdash; the master account always handles billing, even when the secondary has their own login.</p>
+
+      <h3>Is a secondary membership the same as a team?</h3>
+      <p>No. A secondary is an additional individual membership under your account; a team is a separate feature with its own roster and standings. See section 2 above.</p>
+
+      <h3>Why can&rsquo;t I just buy another membership on the website?</h3>
+      <p>If an email already has an active membership, the public checkout will stop you and ask you to log in. Additional memberships are added as secondaries here, inside your account, so everything stays under one login and one bill.</p>
+    </div>
+
+    <div class="footer-help">
+      <p style="color: #94a3b8;">Need more help? <a href="/member-support">Contact Member Support</a></p>
+    </div>
+  </div>
+</body>
+</html>
