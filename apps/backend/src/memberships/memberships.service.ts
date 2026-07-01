@@ -2564,7 +2564,7 @@ export class MembershipsService {
     const em = this.em.fork();
 
     const source = await em.findOne(Membership, { id: sourceMembershipId }, {
-      populate: ['user', 'membershipTypeConfig', 'masterBillingProfile'],
+      populate: ['user', 'membershipTypeConfig', 'masterBillingProfile', 'masterMembership'],
     });
     if (!source) {
       throw new NotFoundException(`Source membership ${sourceMembershipId} not found`);
@@ -2640,6 +2640,15 @@ export class MembershipsService {
     renewal.accountType = source.accountType;
     if (source.masterBillingProfile) {
       renewal.masterBillingProfile = em.getReference(Profile, source.masterBillingProfile.id);
+    }
+    // Preserve the master link when renewing a SECONDARY so the renewed row isn't
+    // orphaned (accountType=SECONDARY with a null master_membership_id, which drops
+    // it out of the master's secondary list). Also carry the login flag + linked-at
+    // so it stays a proper secondary of the same master.
+    if (source.accountType === MembershipAccountType.SECONDARY && source.masterMembership) {
+      renewal.masterMembership = em.getReference(Membership, source.masterMembership.id);
+      renewal.hasOwnLogin = source.hasOwnLogin;
+      renewal.linkedAt = source.linkedAt ?? new Date();
     }
     // Carry the MECA ID forward so the renewal lands on the same number
     if (source.mecaId) {

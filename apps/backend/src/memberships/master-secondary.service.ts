@@ -466,7 +466,7 @@ export class MasterSecondaryService {
    * Remove a secondary membership from master
    * This doesn't delete the membership, it unlinks it and makes it independent
    */
-  async removeSecondary(secondaryMembershipId: string, requestingUserId: string): Promise<Membership> {
+  async removeSecondary(secondaryMembershipId: string, requestingUserId: string, opts: { isAdmin?: boolean } = {}): Promise<Membership> {
     const em = this.em.fork();
 
     const secondary = await em.findOne(Membership, { id: secondaryMembershipId }, {
@@ -481,8 +481,8 @@ export class MasterSecondaryService {
       throw new BadRequestException('Membership is not a secondary');
     }
 
-    // Check permission - only master user can remove secondaries
-    if (secondary.masterMembership?.user.id !== requestingUserId) {
+    // Check permission - only the master account owner (or an admin) can remove secondaries
+    if (!opts.isAdmin && secondary.masterMembership?.user.id !== requestingUserId) {
       throw new ForbiddenException('Only the master account owner can remove secondaries');
     }
 
@@ -543,6 +543,117 @@ export class MasterSecondaryService {
     await em.flush();
 
     this.logger.log(`Upgraded secondary membership ${secondaryMembershipId} to independent`);
+    return secondary;
+  }
+
+  /**
+   * Split a SECONDARY membership off into its own full, standalone (INDEPENDENT)
+   * account — the admin escape hatch for "the master isn't renewing but this
+   * secondary wants to keep/manage their own membership."
+   *
+   * The secondary already has its OWN profile, MECA ID, term, and points, so this
+   * is mostly a promotion: clear the master links, detach the profile, and — for a
+   * no-login secondary — enable a real login so the person can sign in and renew
+   * it themselves. Nothing about their competition history/points changes (those
+   * follow the unchanged MECA ID on this membership row). Admin-only upstream.
+   */
+  async splitOffSecondary(
+    secondaryMembershipId: string,
+    opts: { email?: string; adminId?: string } = {},
+  ): Promise<Membership> {
+    const em = this.em.fork();
+
+    const secondary = await em.findOne(Membership, { id: secondaryMembershipId }, {
+      populate: ['user', 'masterMembership', 'masterMembership.user', 'membershipTypeConfig'],
+    });
+    if (!secondary) {
+      throw new NotFoundException('Secondary membership not found');
+    }
+    if (secondary.accountType !== MembershipAccountType.SECONDARY) {
+      throw new BadRequestException('This membership is not a secondary — nothing to split off.');
+    }
+    const profile = secondary.user;
+    if (!profile) {
+      throw new BadRequestException('Secondary has no profile to split off.');
+    }
+
+    // Does this secondary already have a usable login, or must we create one?
+    const hasPlaceholderEmail = !profile.email || profile.email.includes('@placeholder.meca.local');
+    const needsLogin = !secondary.hasOwnLogin || !profile.can_login || hasPlaceholderEmail;
+
+    if (needsLogin) {
+      const email = opts.email?.trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new BadRequestException(
+          'This secondary has no login. Provide a valid email address to create their login as part of the split-off.',
+        );
+      }
+      // Email must be free (not already attached to another profile/account).
+      const clash = await em.findOne(Profile, { email });
+      if (clash && clash.id !== profile.id) {
+        throw new BadRequestException('A profile with that email already exists. Use a different email.');
+      }
+      // Enable login on the secondary's EXISTING auth user (profiles.id ===
+      // auth.users.id). Do this BEFORE mutating the DB so a failure aborts cleanly.
+      const tempPassword = this.supabaseAdminService.generatePassword(16);
+      const result = await this.supabaseAdminService.enableLogin(profile.id, email, tempPassword, true);
+      if (!result.success) {
+        throw new BadRequestException(
+          `Could not enable login for this secondary (${result.error || 'auth update failed'}). ` +
+          `Their auth account may need to be repaired first — contact the development team.`,
+        );
+      }
+      profile.email = email;
+      profile.can_login = true;
+      profile.force_password_change = true;
+    }
+
+    // Promote the membership to a standalone INDEPENDENT account.
+    const formerMaster = secondary.masterMembership;
+    secondary.accountType = MembershipAccountType.INDEPENDENT;
+    secondary.masterMembership = undefined;
+    secondary.masterBillingProfile = undefined;
+    secondary.linkedAt = undefined;
+    secondary.hasOwnLogin = true;
+
+    // Detach the profile from the master.
+    profile.is_secondary_account = false;
+    profile.master_profile = undefined;
+
+    // Make sure the now-standalone membership can bill on its own: fill any empty
+    // billing contact fields from the former master's record.
+    if (formerMaster) {
+      secondary.billingFirstName = secondary.billingFirstName || formerMaster.billingFirstName;
+      secondary.billingLastName = secondary.billingLastName || formerMaster.billingLastName;
+      secondary.billingAddress = secondary.billingAddress || formerMaster.billingAddress;
+      secondary.billingCity = secondary.billingCity || formerMaster.billingCity;
+      secondary.billingState = secondary.billingState || formerMaster.billingState;
+      secondary.billingPostalCode = secondary.billingPostalCode || formerMaster.billingPostalCode;
+      secondary.billingCountry = secondary.billingCountry || formerMaster.billingCountry;
+      secondary.billingPhone = secondary.billingPhone || formerMaster.billingPhone;
+    }
+
+    await em.flush();
+
+    this.logger.log(
+      `Split off secondary ${secondaryMembershipId} into an independent account${opts.adminId ? ` (by admin ${opts.adminId})` : ''}`,
+    );
+
+    // Let the member know they now own the account and how to sign in.
+    try {
+      await this.notificationsService.createForUser({
+        userId: profile.id,
+        title: 'Your MECA membership is now your own account',
+        message:
+          `Your membership (MECA ID ${secondary.mecaId ?? 'pending'}) has been split into its own account. ` +
+          `You can log in and manage or renew it yourself. If you haven't set a password yet, use "Forgot Password" on the login page with ${profile.email}.`,
+        type: 'info',
+        link: '/dashboard',
+      });
+    } catch (notifyErr) {
+      this.logger.error(`Split-off succeeded but notification failed for ${secondaryMembershipId}: ${notifyErr}`);
+    }
+
     return secondary;
   }
 
@@ -753,6 +864,7 @@ export class MasterSecondaryService {
       vehicleColor?: string;
       vehicleLicensePlate?: string;
     },
+    opts: { isAdmin?: boolean } = {},
   ): Promise<Membership> {
     const em = this.em.fork();
 
@@ -769,7 +881,7 @@ export class MasterSecondaryService {
     const isSecondaryOwner = secondary.user?.id === requestingUserId;
     const isMasterOwner = secondary.masterMembership?.user?.id === requestingUserId;
 
-    if (!isSecondaryOwner && !isMasterOwner) {
+    if (!opts.isAdmin && !isSecondaryOwner && !isMasterOwner) {
       throw new ForbiddenException('You do not have permission to update this membership');
     }
 

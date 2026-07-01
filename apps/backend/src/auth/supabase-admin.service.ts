@@ -181,6 +181,42 @@ export class SupabaseAdminService {
   }
 
   /**
+   * Enable login on an EXISTING auth user by setting a real email + password and
+   * confirming the email. Used when splitting a no-login secondary into its own
+   * account: the secondary's profile already has a matching auth.users row
+   * (profiles.id → auth.users.id), so we just make that user sign-in-capable.
+   * `force_password_change` prompts them to set their own password on first login.
+   */
+  async enableLogin(
+    userId: string,
+    email: string,
+    password: string,
+    forcePasswordChange = true,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const validation = validatePassword(password, MIN_PASSWORD_STRENGTH);
+      if (!validation.valid) {
+        return { success: false, error: validation.errors.join(', ') };
+      }
+      const { error } = await this.supabaseAdmin.auth.admin.updateUserById(userId, {
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { force_password_change: forcePasswordChange },
+      } as any);
+      if (error) {
+        this.logger.error(`Failed to enable login for ${userId}: ${error.message}`);
+        return { success: false, error: error.message };
+      }
+      this.logger.log(`Enabled login for user ${userId} (${email})`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error enabling login for ${userId}: ${error}`);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
    * Sets or clears the force password change flag for a user
    */
   async setForcePasswordChange(userId: string, force: boolean): Promise<ResetPasswordResult> {
