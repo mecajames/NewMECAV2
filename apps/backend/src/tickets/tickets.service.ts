@@ -35,6 +35,7 @@ import { TicketStaffService } from './ticket-staff.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { StaffSignaturesService } from './staff-signatures.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 
@@ -815,15 +816,24 @@ export class TicketsService {
       }
     } else if (chosenDepartmentId) {
       // No routing-rule assignee — fall back to the department's configured
-      // default assignee, so every ticket lands on the right person.
-      const dept = await em.findOne(
-        TicketDepartmentEntity,
-        { id: chosenDepartmentId },
-        { populate: ['defaultAssignee'] },
-      );
-      if (dept?.defaultAssignee?.id) {
-        ticketData.assignedTo = Reference.createFromPK(Profile, dept.defaultAssignee.id);
-        ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+      // default assignee, so every ticket lands on the right person. Guarded:
+      // this convenience lookup must NEVER block ticket creation (e.g. if the
+      // ticket_departments.default_assignee_id migration hasn't been applied yet,
+      // loading the department would throw and take the whole submission down).
+      try {
+        const dept = await em.findOne(
+          TicketDepartmentEntity,
+          { id: chosenDepartmentId },
+          { populate: ['defaultAssignee'] },
+        );
+        if (dept?.defaultAssignee?.id) {
+          ticketData.assignedTo = Reference.createFromPK(Profile, dept.defaultAssignee.id);
+          ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+        }
+      } catch (err: any) {
+        this.logger.error(
+          `Department default-assignee lookup failed for ${chosenDepartmentId} (continuing without auto-assign): ${err?.message || err}`,
+        );
       }
     }
 
@@ -844,8 +854,12 @@ export class TicketsService {
     // Fetch the full ticket with relations for email notifications
     const createdTicket = await this.findById(ticket.id);
 
-    // Send email notifications (don't await to avoid blocking response)
-    this.sendTicketCreatedEmails(createdTicket, routingResult.departmentId).catch(err => {
+    // Send email notifications (don't await to avoid blocking response).
+    // Pass the ticket's ACTUAL department (submitter-chosen OR routing-resolved),
+    // NOT just routingResult.departmentId — otherwise a submitter-chosen
+    // department that no routing rule matched dispatches with an undefined
+    // department and the staff alert gets skipped entirely (nobody notified).
+    this.sendTicketCreatedEmails(createdTicket, chosenDepartmentId).catch(err => {
       this.logger.error(`Failed to send ticket creation emails: ${err.message}`);
     });
 
@@ -1893,52 +1907,89 @@ export class TicketsService {
       });
     }
 
-    // Send alert email to department staff
-    if (departmentId) {
-      await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl);
-    }
+    // Always alert staff/admins of a new ticket. sendStaffAlertEmails falls back
+    // to all admins when there's no department or no staff assigned, so a new
+    // ticket never silently notifies nobody.
+    await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl);
   }
 
   /**
    * Send alert emails to all staff members assigned to a department
    */
-  private async sendStaffAlertEmails(ticket: Ticket, departmentId: string, viewTicketUrl: string): Promise<void> {
+  private async sendStaffAlertEmails(ticket: Ticket, departmentId: string | undefined, _viewTicketUrl: string): Promise<void> {
     const em = this.em.fork();
-
-    // Get department info
-    const department = await em.findOne(TicketDepartmentEntity, { id: departmentId });
-    if (!department) return;
-
-    // Get all staff assignments for this department
-    const staffAssignments = await em.find(TicketStaffDepartment, {
-      department: departmentId,
-    }, {
-      populate: ['staff.profile'],
-    });
 
     const reporterName = ticket.reporter
       ? `${ticket.reporter.first_name || ''} ${ticket.reporter.last_name || ''}`.trim() || 'Unknown'
       : 'Guest User';
     const reporterEmail = ticket.reporter?.email || 'No email provided';
 
-    // Send email to each staff member
-    for (const assignment of staffAssignments) {
-      const staffEmail = assignment.staff?.profile?.email;
-      if (staffEmail) {
-        const staffProfile = assignment.staff!.profile!;
+    // Resolve the alert recipients. Primary = staff assigned to the ticket's
+    // department. Wrapped in try/catch so a lookup hiccup (e.g. a schema/migration
+    // lag) never silently drops the alert — the whole caller is fire-and-forget.
+    let departmentName = ticket.category || 'Support';
+    const recipients: { email: string; name?: string }[] = [];
+    try {
+      if (departmentId) {
+        const department = await em.findOne(TicketDepartmentEntity, { id: departmentId });
+        if (department) departmentName = department.name;
+        const staffAssignments = await em.find(
+          TicketStaffDepartment,
+          { department: departmentId },
+          { populate: ['staff.profile'] },
+        );
+        for (const assignment of staffAssignments) {
+          const p = assignment.staff?.profile;
+          if (p?.email) recipients.push({ email: p.email, name: p.first_name || undefined });
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(
+        `Ticket ${ticket.ticketNumber}: department/staff lookup failed (${err?.message || err}); falling back to admins`,
+      );
+    }
+
+    // Safety net: if NO department staff resolved (none assigned, or the lookup
+    // failed), alert all admins instead — a support ticket must never silently
+    // notify nobody. adminRecipientWhere() = role=admin OR is_staff OR a protected
+    // MECA ID, so the owner/staff accounts always stay in the loop.
+    if (recipients.length === 0) {
+      try {
+        const admins = await em.find(Profile, adminRecipientWhere() as any);
+        for (const p of admins) {
+          if (p.email) recipients.push({ email: p.email, name: p.first_name || undefined });
+        }
+        this.logger.warn(
+          `Ticket ${ticket.ticketNumber}: no staff assigned to department ${departmentId}; alerting ${recipients.length} admin(s) instead`,
+        );
+      } catch (err: any) {
+        this.logger.error(`Ticket ${ticket.ticketNumber}: admin fallback lookup failed: ${err?.message || err}`);
+      }
+    }
+
+    // Send (deduped by email; per-recipient try/catch so one bad address doesn't
+    // block the rest).
+    const seen = new Set<string>();
+    for (const r of recipients) {
+      const key = r.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
         await this.emailService.sendTicketStaffAlertEmail({
-          to: staffEmail,
-          staffName: staffProfile.first_name || undefined,
+          to: r.email,
+          staffName: r.name,
           ticketNumber: ticket.ticketNumber,
           ticketTitle: ticket.title,
           ticketDescription: ticket.description,
           category: ticket.category,
           priority: ticket.priority,
-          departmentName: department.name,
+          departmentName,
           reporterName,
           reporterEmail,
           viewTicketUrl: `${this.frontendUrl}/admin/tickets/${ticket.id}`,
         });
+      } catch (err: any) {
+        this.logger.error(`Ticket ${ticket.ticketNumber}: failed to send staff alert to ${r.email}: ${err?.message || err}`);
       }
     }
   }

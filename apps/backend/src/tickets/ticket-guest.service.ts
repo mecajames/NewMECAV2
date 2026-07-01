@@ -9,6 +9,7 @@ import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
 import { TicketCategory, TicketPriority, TicketStatus, TicketCustomFieldAnswerInput } from '@newmeca/shared';
 import { TicketRoutingService } from './ticket-routing.service';
+import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
@@ -374,12 +375,18 @@ export class TicketGuestService {
     } as any);
 
     // Department: prefer the submitter's choice, else what routing resolved.
+    // Guarded: a department lookup failure (e.g. a schema/migration lag) must not
+    // take down guest ticket submission.
     const chosenDeptId = data.department_id || routingResult.departmentId;
     if (chosenDeptId) {
-      const { TicketDepartment } = await import('./entities/ticket-department.entity');
-      const dept = await em.findOne(TicketDepartment, { id: chosenDeptId });
-      if (dept) {
-        (ticket as any).departmentEntity = dept;
+      try {
+        const { TicketDepartment } = await import('./entities/ticket-department.entity');
+        const dept = await em.findOne(TicketDepartment, { id: chosenDeptId });
+        if (dept) {
+          (ticket as any).departmentEntity = dept;
+        }
+      } catch (err: any) {
+        this.logger.error(`Guest ticket: department lookup failed for ${chosenDeptId} (continuing): ${err?.message || err}`);
       }
     }
 
@@ -407,7 +414,83 @@ export class TicketGuestService {
       this.logger.error(`Failed to send guest ticket confirmation email: ${err.message}`);
     });
 
+    // Alert staff/admins of the new guest ticket. The guest path previously sent
+    // NO staff alert at all (only the guest's own confirmation), so admins never
+    // got emailed about guest support tickets. Falls back to admins when no
+    // department staff resolve, so guest tickets never go unnoticed.
+    this.notifyStaffOfGuestTicket(ticket, chosenDeptId).catch(err => {
+      this.logger.error(`Failed to send guest ticket staff alert: ${err?.message || err}`);
+    });
+
     return this.formatGuestTicketResponse(ticket, []);
+  }
+
+  /**
+   * Notify support staff / admins that a new GUEST ticket came in. Mirrors the
+   * member-path alert: department-assigned staff first, falling back to all
+   * admins (adminRecipientWhere) when none resolve, so a guest ticket never
+   * silently notifies nobody. Fire-and-forget from the caller.
+   */
+  private async notifyStaffOfGuestTicket(ticket: Ticket, departmentId?: string): Promise<void> {
+    const em = this.em.fork();
+    const recipients: { email: string; name?: string }[] = [];
+    let departmentName = ticket.category || 'Support';
+
+    try {
+      if (departmentId) {
+        const { TicketDepartment } = await import('./entities/ticket-department.entity');
+        const dept = await em.findOne(TicketDepartment, { id: departmentId });
+        if (dept) departmentName = dept.name;
+        const { TicketStaffDepartment } = await import('./entities/ticket-staff-department.entity');
+        const assignments = await em.find(
+          TicketStaffDepartment,
+          { department: departmentId },
+          { populate: ['staff.profile'] },
+        );
+        for (const a of assignments) {
+          const p = a.staff?.profile;
+          if (p?.email) recipients.push({ email: p.email, name: p.first_name || undefined });
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Guest ticket ${ticket.ticketNumber}: staff lookup failed (${err?.message || err}); falling back to admins`);
+    }
+
+    if (recipients.length === 0) {
+      try {
+        const admins = await em.find(Profile, adminRecipientWhere() as any);
+        for (const p of admins) {
+          if (p.email) recipients.push({ email: p.email, name: p.first_name || undefined });
+        }
+        this.logger.warn(`Guest ticket ${ticket.ticketNumber}: no staff for department ${departmentId ?? '(none)'}; alerting ${recipients.length} admin(s) instead`);
+      } catch (err: any) {
+        this.logger.error(`Guest ticket ${ticket.ticketNumber}: admin fallback failed: ${err?.message || err}`);
+      }
+    }
+
+    const seen = new Set<string>();
+    for (const r of recipients) {
+      const key = r.email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        await this.emailService.sendTicketStaffAlertEmail({
+          to: r.email,
+          staffName: r.name,
+          ticketNumber: ticket.ticketNumber,
+          ticketTitle: ticket.title,
+          ticketDescription: ticket.description,
+          category: ticket.category,
+          priority: ticket.priority,
+          departmentName,
+          reporterName: ticket.guestName || 'Guest User',
+          reporterEmail: ticket.guestEmail || 'No email provided',
+          viewTicketUrl: `${this.frontendUrl}/admin/tickets/${ticket.id}`,
+        });
+      } catch (err: any) {
+        this.logger.error(`Guest ticket ${ticket.ticketNumber}: failed to send staff alert to ${r.email}: ${err?.message || err}`);
+      }
+    }
   }
 
   /**
