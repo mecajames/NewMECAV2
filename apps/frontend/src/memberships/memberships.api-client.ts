@@ -752,6 +752,19 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: split a secondary off into its own full (independent) account so the
+   * member can manage/renew it themselves. For a no-login secondary, pass an
+   * email to create their login as part of the split.
+   */
+  splitOffSecondary: async (secondaryMembershipId: string, email?: string): Promise<Membership> => {
+    const response = await axios.post(
+      `/api/memberships/${secondaryMembershipId}/split-off`,
+      email ? { email } : {},
+    );
+    return response.data;
+  },
+
+  /**
    * Mark a secondary membership as paid and assign MECA ID
    */
   markSecondaryPaid: async (

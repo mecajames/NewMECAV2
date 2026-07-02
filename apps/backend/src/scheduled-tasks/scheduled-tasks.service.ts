@@ -18,7 +18,7 @@ import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { Event } from '../events/events.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
-import { PaymentStatus, RegistrationStatus, EventStatus, InvoiceStatus, InvoiceItemType } from '@newmeca/shared';
+import { PaymentStatus, RegistrationStatus, EventStatus, InvoiceStatus, InvoiceItemType, MembershipAccountType } from '@newmeca/shared';
 
 @Injectable()
 export class ScheduledTasksService {
@@ -441,6 +441,14 @@ export class ScheduledTasksService {
         continue;
       }
 
+      // Skip no-login secondaries whose "email" is an internal placeholder — a
+      // renewal link would go nowhere. Their renewal is handled through the master
+      // account, not a self-service link. (secondary-...@placeholder.meca.local)
+      if (membership.user.email.includes('@placeholder.meca.local')) {
+        this.logger.log(`Skipping expiration email for ${membership.id} — no-login secondary (placeholder email)`);
+        continue;
+      }
+
       // Skip rows the member has already renewed past — a newer paid term exists.
       if (await this.isSupersededByNewerMembership(em, membership)) {
         this.logger.log(`Skipping ${daysRemaining}-day expiration email for ${membership.id} — superseded by a newer paid membership (already renewed)`);
@@ -519,6 +527,14 @@ export class ScheduledTasksService {
         continue;
       }
 
+      // Skip no-login secondaries whose "email" is an internal placeholder — a
+      // renewal link would go nowhere. Their renewal is handled through the master
+      // account, not a self-service link. (secondary-...@placeholder.meca.local)
+      if (membership.user.email.includes('@placeholder.meca.local')) {
+        this.logger.log(`Skipping +${daysPast}d expired email for ${membership.id} — no-login secondary (placeholder email)`);
+        continue;
+      }
+
       // Skip rows the member has already renewed past — a newer paid term exists.
       if (await this.isSupersededByNewerMembership(em, membership)) {
         this.logger.log(`Skipping +${daysPast}d expired email for ${membership.id} — superseded by a newer paid membership (already renewed)`);
@@ -558,6 +574,52 @@ export class ScheduledTasksService {
       } catch (error) {
         this.logger.error(`Failed to send expired email to ${membership.user.email}:`, error);
       }
+
+      // If this expired membership is a MASTER, proactively tell its own-login
+      // secondaries — their own membership may still be valid (they can keep
+      // competing), and they can contact support to split into their own account.
+      if (membership.accountType === MembershipAccountType.MASTER) {
+        try {
+          await this.notifyOwnLoginSecondariesOfMasterExpiry(em, membership);
+        } catch (secErr) {
+          this.logger.error(`Failed to notify secondaries of master ${membership.id} expiry:`, secErr);
+        }
+      }
+    }
+  }
+
+  /**
+   * When a MASTER membership expires, notify its own-login secondaries whose own
+   * membership is still active, so they know the primary account lapsed and can
+   * reach out to have their membership split into its own account if they want to
+   * manage/renew it themselves. No-login secondaries can't be reached this way —
+   * they depend on the master (by design) and the admin's split-off tool.
+   */
+  private async notifyOwnLoginSecondariesOfMasterExpiry(em: EntityManager, master: Membership) {
+    const now = new Date();
+    const secondaries = await em.find(
+      Membership,
+      {
+        masterMembership: master.id,
+        accountType: MembershipAccountType.SECONDARY,
+        hasOwnLogin: true,
+        paymentStatus: PaymentStatus.PAID,
+        $or: [{ endDate: null }, { endDate: { $gte: now } }],
+      },
+      { populate: ['user'] },
+    );
+    for (const sec of secondaries) {
+      if (!sec.user?.id) continue;
+      await this.notificationsService.createForUser({
+        userId: sec.user.id,
+        title: `The account managing your membership has expired`,
+        message:
+          `The primary account that manages your MECA membership has expired. Your own membership ` +
+          `(MECA ID ${sec.mecaId ?? 'pending'}) is still active, so you can keep competing. If you'd like ` +
+          `to manage or renew it yourself, contact support and we can split it into its own account.`,
+        type: 'info',
+        link: '/support',
+      });
     }
   }
 

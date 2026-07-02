@@ -4951,6 +4951,34 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
     }
   };
 
+  // Split a secondary off into its own full (independent) account. The secondary
+  // keeps its MECA ID, remaining term and points; a no-login secondary needs an
+  // email so we can create their login as part of the split.
+  const handleSplitOffSecondary = async (secondary: SecondaryMembershipInfo) => {
+    let email: string | undefined;
+    if (!secondary.hasOwnLogin) {
+      const entered = window.prompt(
+        `Split "${secondary.competitorName}" into their own account.\n\n` +
+        `This secondary has no login. Enter an email address to create their login so they can sign in and renew it themselves:`,
+      );
+      if (entered === null) return; // cancelled
+      email = entered.trim();
+      if (!email) { alert('An email address is required to split off a no-login secondary.'); return; }
+    } else if (!confirm(
+      `Split "${secondary.competitorName}" into their own full account?\n\n` +
+      `They keep their MECA ID${secondary.mecaId ? ` (#${secondary.mecaId})` : ''}, remaining term, and points, and can then manage/renew it themselves. This unlinks them from this master.`,
+    )) {
+      return;
+    }
+    try {
+      await membershipsApi.splitOffSecondary(secondary.id, email);
+      await fetchMemberships();
+      alert(`"${secondary.competitorName}" is now their own account. They can sign in and manage/renew it themselves.`);
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to split off secondary.');
+    }
+  };
+
   const handleCancelAndRefund = async (m: Membership) => {
     const amt = (m as any).amountPaid ? `$${(m as any).amountPaid}` : 'the payment';
     const reason = window.prompt(
@@ -6025,6 +6053,16 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                                 title="Edit secondary member"
                               >
                                 <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {/* Split off into its own full account (admin escape hatch) */}
+                            {canEdit && (
+                              <button
+                                onClick={() => handleSplitOffSecondary(secondary)}
+                                className="px-2 py-1 text-xs text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded transition-colors whitespace-nowrap"
+                                title="Split this secondary into its own full account"
+                              >
+                                Split off
                               </button>
                             )}
                           </div>

@@ -31,7 +31,13 @@ interface FormatGroup {
 const UNASSIGNED_SECTION = '__unassigned__';
 
 export default function MemberResultsPage() {
-  const { mecaId } = useParams<{ mecaId: string }>();
+  const { mecaId: rawMecaId } = useParams<{ mecaId: string }>();
+  // Results data can carry a stray leading/trailing space in meca_id (from
+  // imports/re-assignments), which produces URLs like /results/member/%20260014.
+  // Trim so every lookup AND the active-membership comparison use the clean id —
+  // otherwise `activeMecaIds.includes(" 260014")` is false and the page wrongly
+  // shows "Member profile not active" even though the membership is active.
+  const mecaId = rawMecaId?.trim();
   const navigate = useNavigate();
   const { user, profile: currentUserProfile, loading: authLoading } = useAuth();
 

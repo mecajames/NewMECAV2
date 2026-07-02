@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertTriangle, Eye } from 'lucide-react';
+import { ArrowLeft, CreditCard, Calendar, Bell, XCircle, Loader2, RefreshCw, Users, UserPlus, Pencil, Car, AlertTriangle, Eye, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { membershipsApi, Membership, MemberCancelMembershipModal, SecondaryMembershipInfo, AddSecondaryModal, EditSecondaryModal, RELATIONSHIP_TYPES } from '@/memberships';
 import { billingApi, MyTransaction } from '@/api-client/billing.api-client';
@@ -476,18 +476,30 @@ export default function MembershipDashboardPage() {
 
         {/* Secondary Memberships */}
         <div className="mt-6 bg-slate-800 rounded-xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Users className="h-5 w-5 text-blue-400" />
               Secondary Memberships ({secondaryMemberships.length})
             </h2>
-            <button
-              onClick={() => setShowAddSecondaryModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Secondary Member
-            </button>
+            <div className="flex items-center gap-3">
+              <a
+                href="/faq-docs/secondary-memberships-guide.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                title="Learn about secondary memberships"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                Learn about secondary memberships
+              </a>
+              <button
+                onClick={() => setShowAddSecondaryModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Secondary Member
+              </button>
+            </div>
           </div>
           {secondaryMemberships.length > 0 ? (
             <div className="space-y-3">

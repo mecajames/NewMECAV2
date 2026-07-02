@@ -16,6 +16,7 @@ import {
   Headers,
   UnauthorizedException,
   ForbiddenException,
+  NotFoundException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -71,6 +72,50 @@ export class MembershipsController {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
     return { user, profile };
+  }
+
+  /**
+   * Authorize a caller against a MASTER membership id: they must either OWN that
+   * membership (be its user) or be an admin. Used to gate the secondary-management
+   * endpoints so a member can't create/enumerate secondaries under someone else's
+   * account. Throws Unauthorized/NotFound/Forbidden as appropriate.
+   */
+  private async requireMasterOwnerOrAdmin(masterMembershipId: string, authHeader?: string): Promise<void> {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+    if (isAdminUser(profile)) return;
+    const em = this.em.fork();
+    const master = await em.findOne(Membership, { id: masterMembershipId }, { populate: ['user'] });
+    if (!master) throw new NotFoundException('Membership not found');
+    if (master.user?.id !== user.id) {
+      throw new ForbiddenException('You do not have permission to manage this membership');
+    }
+  }
+
+  /**
+   * Authorize a caller against a SECONDARY membership id. Non-admins must own the
+   * secondary's MASTER account, or — when allowSecondarySelf is set — be the
+   * secondary member themselves (own-login self-service). Returns the caller's id
+   * + admin flag so the service-layer ownership check can be satisfied/bypassed.
+   */
+  private async requireSecondaryAccess(
+    secondaryMembershipId: string,
+    authHeader: string | undefined,
+    opts: { allowSecondarySelf?: boolean } = {},
+  ): Promise<{ callerId: string; isAdmin: boolean }> {
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+    const isAdmin = isAdminUser(profile);
+    if (isAdmin) return { callerId: user.id, isAdmin: true };
+    const em = this.em.fork();
+    const secondary = await em.findOne(Membership, { id: secondaryMembershipId }, {
+      populate: ['masterMembership', 'masterMembership.user', 'user'],
+    });
+    if (!secondary) throw new NotFoundException('Secondary membership not found');
+    const isMasterOwner = secondary.masterMembership?.user?.id === user.id;
+    const isSecondarySelf = opts.allowSecondarySelf === true && secondary.user?.id === user.id;
+    if (!isMasterOwner && !isSecondarySelf) {
+      throw new ForbiddenException('You do not have permission to manage this membership');
+    }
+    return { callerId: user.id, isAdmin: false };
   }
 
   // Helper to require admin OR owner access
@@ -730,9 +775,11 @@ export class MembershipsController {
   @Post(':id/secondaries')
   @HttpCode(HttpStatus.CREATED)
   async createSecondaryMembership(
+    @Headers('authorization') authHeader: string,
     @Param('id') masterMembershipId: string,
     @Body() data: Omit<CreateSecondaryMembershipDto, 'masterMembershipId'>,
   ): Promise<Membership> {
+    await this.requireMasterOwnerOrAdmin(masterMembershipId, authHeader);
     return this.masterSecondaryService.createSecondaryMembership({
       ...data,
       masterMembershipId,
@@ -743,7 +790,11 @@ export class MembershipsController {
    * Get all secondary memberships for a master
    */
   @Get(':id/secondaries')
-  async getSecondaryMemberships(@Param('id') masterMembershipId: string): Promise<SecondaryMembershipInfo[]> {
+  async getSecondaryMemberships(
+    @Headers('authorization') authHeader: string,
+    @Param('id') masterMembershipId: string,
+  ): Promise<SecondaryMembershipInfo[]> {
+    await this.requireMasterOwnerOrAdmin(masterMembershipId, authHeader);
     return this.masterSecondaryService.getSecondaryMemberships(masterMembershipId);
   }
 
@@ -751,7 +802,11 @@ export class MembershipsController {
    * Get master membership info including all secondaries
    */
   @Get(':id/master-info')
-  async getMasterMembershipInfo(@Param('id') membershipId: string): Promise<MasterMembershipInfo> {
+  async getMasterMembershipInfo(
+    @Headers('authorization') authHeader: string,
+    @Param('id') membershipId: string,
+  ): Promise<MasterMembershipInfo> {
+    await this.requireMasterOwnerOrAdmin(membershipId, authHeader);
     return this.masterSecondaryService.getMasterMembershipInfo(membershipId);
   }
 
@@ -761,11 +816,13 @@ export class MembershipsController {
   @Delete(':id/secondaries/:secondaryId')
   @HttpCode(HttpStatus.OK)
   async removeSecondary(
-    @Param('id') masterMembershipId: string,
+    @Headers('authorization') authHeader: string,
+    @Param('id') _masterMembershipId: string,
     @Param('secondaryId') secondaryMembershipId: string,
-    @Body('requestingUserId') requestingUserId: string,
   ): Promise<Membership> {
-    return this.masterSecondaryService.removeSecondary(secondaryMembershipId, requestingUserId);
+    // Master-owner-or-admin only (removing a secondary is not a self-service action).
+    const { callerId, isAdmin } = await this.requireSecondaryAccess(secondaryMembershipId, authHeader);
+    return this.masterSecondaryService.removeSecondary(secondaryMembershipId, callerId, { isAdmin });
   }
 
   /**
@@ -773,7 +830,12 @@ export class MembershipsController {
    */
   @Post(':id/upgrade-to-independent')
   @HttpCode(HttpStatus.OK)
-  async upgradeToIndependent(@Param('id') secondaryMembershipId: string): Promise<Membership> {
+  async upgradeToIndependent(
+    @Headers('authorization') authHeader: string,
+    @Param('id') secondaryMembershipId: string,
+  ): Promise<Membership> {
+    // Master-owner-or-admin only.
+    await this.requireSecondaryAccess(secondaryMembershipId, authHeader);
     return this.masterSecondaryService.upgradeToIndependent(secondaryMembershipId);
   }
 
@@ -783,10 +845,34 @@ export class MembershipsController {
   @Post(':id/mark-secondary-paid')
   @HttpCode(HttpStatus.OK)
   async markSecondaryPaid(
+    @Headers('authorization') authHeader: string,
     @Param('id') secondaryMembershipId: string,
     @Body() data: { amountPaid: number; transactionId?: string },
   ): Promise<Membership> {
+    // Admin-only: this marks a secondary PAID and mints a MECA ID. Legitimate
+    // payment goes through the invoice → payment webhook (which calls the service
+    // method directly, not this endpoint), so no member ever needs this route.
+    await this.requireAdmin(authHeader);
     return this.masterSecondaryService.markSecondaryPaid(secondaryMembershipId, data.amountPaid, data.transactionId);
+  }
+
+  /**
+   * Admin: split a secondary membership off into its own full (independent)
+   * account so the member can manage/renew it themselves. For a no-login
+   * secondary, pass an email to create their login as part of the split.
+   */
+  @Post(':id/split-off')
+  @HttpCode(HttpStatus.OK)
+  async splitOffSecondary(
+    @Headers('authorization') authHeader: string,
+    @Param('id') secondaryMembershipId: string,
+    @Body() data: { email?: string },
+  ): Promise<Membership> {
+    const { user } = await this.requireAdmin(authHeader);
+    return this.masterSecondaryService.splitOffSecondary(secondaryMembershipId, {
+      email: data?.email,
+      adminId: user.id,
+    });
   }
 
   /**
@@ -795,9 +881,11 @@ export class MembershipsController {
    */
   @Put(':id/secondary-details')
   async updateSecondaryDetails(
+    @Headers('authorization') authHeader: string,
     @Param('id') secondaryMembershipId: string,
     @Body() data: {
-      requestingUserId: string;
+      /** @deprecated ignored — caller identity now comes from the auth token */
+      requestingUserId?: string;
       competitorName?: string;
       relationshipToMaster?: string;
       vehicleMake?: string;
@@ -806,16 +894,15 @@ export class MembershipsController {
       vehicleLicensePlate?: string;
     },
   ): Promise<Membership> {
-    const { requestingUserId, ...updateData } = data;
-    // Competitor name is locked (results/standings identity) — strip it unless the
-    // requester is an admin. Relationship/vehicle info stay editable.
-    if ('competitorName' in updateData) {
-      const requester = await this.em.fork().findOne(Profile, { id: requestingUserId });
-      if (!isAdminUser(requester)) {
-        delete (updateData as any).competitorName;
-      }
+    // Drop the legacy (spoofable) body field; identity comes from the JWT.
+    const { requestingUserId: _legacyRequestingUserId, ...updateData } = data;
+    // The secondary's own-login user, the master owner, or an admin may edit.
+    const { callerId, isAdmin } = await this.requireSecondaryAccess(secondaryMembershipId, authHeader, { allowSecondarySelf: true });
+    // Competitor name is locked (results/standings identity) — strip it unless admin.
+    if ('competitorName' in updateData && !isAdmin) {
+      delete (updateData as any).competitorName;
     }
-    return this.masterSecondaryService.updateSecondaryDetails(secondaryMembershipId, requestingUserId, updateData);
+    return this.masterSecondaryService.updateSecondaryDetails(secondaryMembershipId, callerId, updateData, { isAdmin });
   }
 
   /**

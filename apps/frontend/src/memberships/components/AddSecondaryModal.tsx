@@ -427,6 +427,22 @@ export function AddSecondaryModal({
                 </button>
               </div>
 
+              {!formData.giveLogin && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-200/90">
+                    <p className="font-medium text-amber-300 mb-1">Heads up: this membership will be managed by you</p>
+                    <p>
+                      Without their own email/login, this membership can only be managed through{' '}
+                      <span className="font-semibold">your</span> account, and it relies on your membership
+                      staying active and in good standing. If yours ever lapses, you'll need to renew it (or
+                      contact support) before you can manage theirs. You can give them their own login later,
+                      or an admin can split them into their own account if needed.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {formData.giveLogin && (
                 <div className="pt-4 border-t border-slate-700">
                   <label className="block text-sm font-medium text-gray-300 mb-1">
