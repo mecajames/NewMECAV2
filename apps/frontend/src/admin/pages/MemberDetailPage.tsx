@@ -42,7 +42,7 @@ import { usePermissions } from '@/auth';
 import { profilesApi, ActivityItem, UpcomingEvent } from '@/profiles';
 import { resolveMemberSince } from '@/profiles/profile-dates';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
-import { membershipsApi, Membership, AdminCreateMembershipResult, AddSecondaryModal, EditSecondaryModal, SecondaryMembershipInfo, RELATIONSHIP_TYPES } from '@/memberships';
+import { membershipsApi, Membership, MembershipDeleteImpact, AdminCreateMembershipResult, AddSecondaryModal, EditSecondaryModal, SecondaryMembershipInfo, RELATIONSHIP_TYPES } from '@/memberships';
 import { membershipTypeConfigsApi, MembershipTypeConfig } from '@/membership-type-configs';
 import AdminMembershipWizard from '../components/AdminMembershipWizard';
 import { UserPlus, Link2 } from 'lucide-react';
@@ -4715,6 +4715,16 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
   const [loading, setLoading] = useState(true);
   const [showMembershipWizard, setShowMembershipWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Delete-membership dialog: shows what's linked (payments/invoices/
+  // registrations/…) and the MECA ID's fate, and makes the admin explicitly
+  // choose what happens to financial records before anything is deleted.
+  const [deleteDialog, setDeleteDialog] = useState<{
+    membership: Membership;
+    impact: MembershipDeleteImpact | null;
+    financialAction: 'keep' | 'delete';
+    confirmText: string;
+    busy: boolean;
+  } | null>(null);
   const [repairingTeamId, setRepairingTeamId] = useState<string | null>(null);
   const [reconcilingTeams, setReconcilingTeams] = useState(false);
   const [reconcilingRenewals, setReconcilingRenewals] = useState(false);
@@ -5001,19 +5011,51 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
     }
   };
 
+  // Opens the delete dialog and loads the impact report (what's linked, the
+  // MECA ID's fate). The actual delete happens in confirmDeleteMembership
+  // after the admin makes explicit choices.
   const handleDeleteMembership = async (membershipId: string) => {
-    if (!confirm('Are you sure you want to delete this membership? This action cannot be undone.')) {
-      return;
-    }
-
-    setDeletingId(membershipId);
+    const membership = memberships.find((m) => m.id === membershipId);
+    if (!membership) return;
+    setDeleteDialog({ membership, impact: null, financialAction: 'keep', confirmText: '', busy: false });
     try {
-      await membershipsApi.delete(membershipId);
+      const impact = await membershipsApi.getDeleteImpact(membershipId);
+      setDeleteDialog((d) => (d && d.membership.id === membershipId ? { ...d, impact } : d));
+    } catch (error: any) {
+      console.error('Error loading delete impact:', error);
+      alert(error?.response?.data?.message || 'Failed to load what is linked to this membership');
+      setDeleteDialog(null);
+    }
+  };
+
+  const confirmDeleteMembership = async () => {
+    if (!deleteDialog?.impact) return;
+    const { membership, impact, financialAction } = deleteDialog;
+    setDeleteDialog((d) => (d ? { ...d, busy: true } : d));
+    setDeletingId(membership.id);
+    try {
+      const outcome = await membershipsApi.delete(membership.id, financialAction);
       fetchMemberships();
-      alert('Membership deleted successfully!');
-    } catch (error) {
+      const mecaMsg =
+        outcome.mecaIdOutcome === 'reclaimed'
+          ? `MECA ID ${impact.mecaId} was returned to the available pool.`
+          : outcome.mecaIdOutcome === 'retired_results'
+            ? `MECA ID ${impact.mecaId} was retired — ${impact.resultsCount} competition result${impact.resultsCount === 1 ? '' : 's'} reference it, so it stays reserved for this member only.`
+            : '';
+      alert(
+        `Membership deleted. ` +
+          (financialAction === 'delete'
+            ? 'Its payments and invoices were permanently deleted. '
+            : 'Its payments and invoices were kept for bookkeeping. ') +
+          mecaMsg,
+      );
+      setDeleteDialog(null);
+    } catch (error: any) {
       console.error('Error deleting membership:', error);
-      alert('Failed to delete membership');
+      // Surface the backend's reason (e.g. "linked secondary memberships")
+      // instead of a blind generic — admins can't act on "Failed".
+      alert(error?.response?.data?.message || error?.message || 'Failed to delete membership');
+      setDeleteDialog((d) => (d ? { ...d, busy: false } : d));
     } finally {
       setDeletingId(null);
     }
@@ -5203,18 +5245,41 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
         overrideReason.trim()
       );
 
-      // Same-user reassignment (e.g. reverting a renewal to the member's
-      // original MECA ID): the backend asks for explicit confirmation and
-      // reports how many competition results will move with the change.
+      // The backend asks for explicit confirmation in two cases and reports
+      // how many competition results will move with the change:
+      // - same_user: reverting a renewal to the member's original MECA ID.
+      // - other_user: TAKEOVER — the ID is held by a different account (e.g.
+      //   a stray launch signup was auto-assigned a legacy member's number).
+      //   Confirming strips it from that account and merges results here.
       if (result.requiresConfirmation && result.confirmation) {
         const c = result.confirmation;
-        const endStr = c.sourceEndDate ? new Date(c.sourceEndDate).toLocaleDateString() : 'unknown';
-        const confirmMsg =
-          `MECA ID ${newMecaId} is assigned to this same member, on ${c.sourceExpired ? `an EXPIRED membership (ended ${endStr})` : 'another of their memberships'}.\n\n` +
-          `Reassign ${newMecaId} to this membership?\n\n` +
-          (c.resultsToMove > 0
-            ? `This will also MOVE ${c.resultsToMove} competition result(s) from the freed ID ${c.freeingMecaId} onto ${newMecaId}, and free up ${c.freeingMecaId}.`
-            : `No competition results need to move. ID ${c.freeingMecaId} will be freed up.`);
+        let confirmMsg: string;
+        let isTakeover = false;
+        if (c.conflictType === 'other_user') {
+          isTakeover = true;
+          const holder = [c.holderName, c.holderEmail].filter(Boolean).join(' — ') || 'another user';
+          confirmMsg =
+            `⚠️ CROSS-ACCOUNT TAKEOVER\n\n` +
+            `MECA ID ${newMecaId} is currently held by ${holder}.\n\n` +
+            `Confirming will:\n` +
+            `• STRIP ${newMecaId} from that account — it will be left WITHOUT a MECA ID\n` +
+            ((c.resultsUnderNewId ?? 0) > 0
+              ? `• The ${c.resultsUnderNewId} existing result(s) under ${newMecaId} will now belong to THIS member\n`
+              : '') +
+            (c.resultsToMove > 0
+              ? `• MOVE ${c.resultsToMove} result(s) from this member's current ID ${c.freeingMecaId} onto ${newMecaId} (histories merge)\n`
+              : '') +
+            (c.freeingMecaId ? `• Free up ID ${c.freeingMecaId}\n` : '') +
+            `\nOnly do this if ${newMecaId} rightfully belongs to THIS member. Continue?`;
+        } else {
+          const endStr = c.sourceEndDate ? new Date(c.sourceEndDate).toLocaleDateString() : 'unknown';
+          confirmMsg =
+            `MECA ID ${newMecaId} is assigned to this same member, on ${c.sourceExpired ? `an EXPIRED membership (ended ${endStr})` : 'another of their memberships'}.\n\n` +
+            `Reassign ${newMecaId} to this membership?\n\n` +
+            (c.resultsToMove > 0
+              ? `This will also MOVE ${c.resultsToMove} competition result(s) from the freed ID ${c.freeingMecaId} onto ${newMecaId}, and free up ${c.freeingMecaId}.`
+              : `No competition results need to move. ID ${c.freeingMecaId} will be freed up.`);
+        }
         if (!window.confirm(confirmMsg)) {
           setOverrideLoading(false);
           return;
@@ -5224,7 +5289,8 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
           newMecaId,
           overridePassword.trim(),
           overrideReason.trim(),
-          true,
+          !isTakeover,
+          isTakeover,
         );
         alert(confirmed.message || 'MECA ID reassigned successfully!');
         setShowMecaIdOverrideModal(false);
@@ -6508,6 +6574,171 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
           requestingUserId={member.id}
           onSuccess={handleSecondaryEdited}
         />
+      )}
+
+      {/* Delete Membership dialog — impact report + explicit admin choices */}
+      {deleteDialog && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-lg border border-red-500/30 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="text-red-400" size={24} />
+              <h3 className="text-lg font-bold text-white">Delete Membership</h3>
+            </div>
+
+            {!deleteDialog.impact ? (
+              <p className="text-gray-400 py-6 text-center">Checking what's linked to this membership…</p>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-gray-300 text-sm">
+                  Deleting membership{' '}
+                  <span className="font-mono text-orange-400">
+                    #{deleteDialog.impact.mecaId ?? '—'}
+                  </span>
+                  {deleteDialog.membership.competitorName ? ` (${deleteDialog.membership.competitorName})` : ''}.
+                  This cannot be undone.
+                </p>
+
+                {/* Secondaries block the delete entirely */}
+                {deleteDialog.impact.secondaries > 0 && (
+                  <div className="bg-red-900/30 border border-red-600/50 rounded-lg p-3 text-sm text-red-300">
+                    {deleteDialog.impact.secondaries} secondary membership
+                    {deleteDialog.impact.secondaries === 1 ? ' is' : 's are'} linked to this one.
+                    Remove or split them off first — this membership can't be deleted until then.
+                  </div>
+                )}
+
+                {/* MECA ID fate */}
+                {deleteDialog.impact.mecaId && (
+                  deleteDialog.impact.mecaIdOutcome === 'retired_results' ? (
+                    <div className="bg-amber-900/30 border border-amber-600/50 rounded-lg p-3 text-sm text-amber-200">
+                      <span className="font-semibold">MECA ID {deleteDialog.impact.mecaId} will be retired.</span>{' '}
+                      {deleteDialog.impact.resultsCount} competition result
+                      {deleteDialog.impact.resultsCount === 1 ? '' : 's'} reference it, so it will never be
+                      issued to another member. It stays reserved for this member's account and re-attaches
+                      automatically if they renew with the same email.
+                    </div>
+                  ) : (
+                    <div className="bg-blue-900/30 border border-blue-600/50 rounded-lg p-3 text-sm text-blue-200">
+                      <span className="font-semibold">MECA ID {deleteDialog.impact.mecaId} will be reclaimed.</span>{' '}
+                      No competition results reference it, so it returns to the available pool and may be
+                      assigned to a future member.
+                    </div>
+                  )
+                )}
+
+                {/* Financial records */}
+                {deleteDialog.impact.payments.count > 0 || deleteDialog.impact.invoices.count > 0 ? (
+                  <div className="bg-slate-700/60 border border-slate-600 rounded-lg p-3 space-y-3">
+                    <p className="text-sm text-white font-semibold">
+                      Financial records linked to this membership
+                    </p>
+                    <p className="text-sm text-gray-300">
+                      {deleteDialog.impact.payments.count} payment
+                      {deleteDialog.impact.payments.count === 1 ? '' : 's'} (
+                      ${deleteDialog.impact.payments.paidTotal.toFixed(2)} paid
+                      {deleteDialog.impact.payments.refundedTotal > 0
+                        ? `, $${deleteDialog.impact.payments.refundedTotal.toFixed(2)} already refunded`
+                        : ''}
+                      ){deleteDialog.impact.invoices.count > 0
+                        ? ` and ${deleteDialog.impact.invoices.count} invoice${deleteDialog.impact.invoices.count === 1 ? '' : 's'}`
+                        : ''}.
+                    </p>
+                    {deleteDialog.impact.payments.paidTotal > deleteDialog.impact.payments.refundedTotal && (
+                      <div className="bg-amber-900/30 border border-amber-600/50 rounded p-2 text-xs text-amber-200">
+                        Deleting records does <span className="font-bold">NOT</span> refund any money. If a
+                        refund is owed, cancel this dialog and use <span className="font-semibold">Manage →
+                        Refund</span> on the membership first, then delete.
+                      </div>
+                    )}
+                    <label className="flex items-start gap-2 text-sm text-gray-200 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="financialAction"
+                        className="mt-0.5 accent-orange-500"
+                        checked={deleteDialog.financialAction === 'keep'}
+                        onChange={() => setDeleteDialog((d) => (d ? { ...d, financialAction: 'keep', confirmText: '' } : d))}
+                      />
+                      <span>
+                        <span className="font-semibold">Keep the records</span> (recommended) — payments and
+                        invoices stay on file for bookkeeping, just no longer linked to this membership.
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 text-sm text-gray-200 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="financialAction"
+                        className="mt-0.5 accent-red-500"
+                        checked={deleteDialog.financialAction === 'delete'}
+                        onChange={() => setDeleteDialog((d) => (d ? { ...d, financialAction: 'delete' } : d))}
+                      />
+                      <span>
+                        <span className="font-semibold text-red-300">Permanently delete them</span> — the
+                        payment and invoice records are erased forever. There is no going back.
+                      </span>
+                    </label>
+                    {deleteDialog.financialAction === 'delete' && (
+                      <div className="pt-1">
+                        <label className="block text-xs text-red-300 mb-1">
+                          Type <span className="font-mono font-bold">DELETE</span> to confirm erasing financial records:
+                        </label>
+                        <input
+                          type="text"
+                          value={deleteDialog.confirmText}
+                          onChange={(e) => setDeleteDialog((d) => (d ? { ...d, confirmText: e.target.value } : d))}
+                          className="w-full px-3 py-2 bg-slate-900 border border-red-500/50 rounded text-white font-mono"
+                          placeholder="DELETE"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No payments or invoices are linked to this membership.</p>
+                )}
+
+                {/* Everything handled automatically */}
+                {(deleteDialog.impact.registrations > 0 ||
+                  deleteDialog.impact.comps > 0 ||
+                  deleteDialog.impact.renewalTokens > 0 ||
+                  deleteDialog.impact.teams > 0 ||
+                  deleteDialog.impact.teamMembers > 0) && (
+                  <p className="text-xs text-gray-500">
+                    Also handled automatically:{' '}
+                    {[
+                      deleteDialog.impact.registrations > 0 ? `${deleteDialog.impact.registrations} event registration(s) kept (unlinked)` : null,
+                      deleteDialog.impact.comps > 0 ? `${deleteDialog.impact.comps} comp(s) deleted` : null,
+                      deleteDialog.impact.renewalTokens > 0 ? `${deleteDialog.impact.renewalTokens} renewal token(s) deleted` : null,
+                      deleteDialog.impact.teams + deleteDialog.impact.teamMembers > 0 ? 'team links removed' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                    .
+                  </p>
+                )}
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setDeleteDialog(null)}
+                    disabled={deleteDialog.busy}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDeleteMembership}
+                    disabled={
+                      deleteDialog.busy ||
+                      deleteDialog.impact.secondaries > 0 ||
+                      (deleteDialog.financialAction === 'delete' && deleteDialog.confirmText !== 'DELETE')
+                    }
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                  >
+                    {deleteDialog.busy ? 'Deleting…' : 'Delete Membership'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Super Admin MECA ID Override Modal */}

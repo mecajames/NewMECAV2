@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException, Logger, forwardRef } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import {
   PaymentStatus,
@@ -28,6 +28,13 @@ import { Order } from '../orders/orders.entity';
 import { OrderItem } from '../orders/order-items.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
+import { Payment } from '../payments/payments.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { MecaIdHistory } from './meca-id-history.entity';
+import { MembershipRenewalToken } from './membership-renewal-token.entity';
+import { MembershipComp } from '../membership-comps/membership-comp.entity';
+import { Team } from '../teams/team.entity';
+import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
@@ -280,14 +287,190 @@ export class MembershipsService {
     return membership;
   }
 
-  async delete(id: string): Promise<void> {
+  /**
+   * Pre-delete impact report for the admin confirm dialog: everything linked
+   * to this membership, what the MECA ID's fate will be, and the totals the
+   * admin needs to decide what happens to financial records (keep vs
+   * permanently delete) and whether a refund is owed first.
+   */
+  async getDeleteImpact(id: string) {
     const em = this.em.fork();
-    const membership = await em.findOne(Membership, { id });
+    const membership = await em.findOne(Membership, { id }, { populate: ['user'] });
     if (!membership) {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
-    await em.removeAndFlush(membership);
+
+    const mecaId = membership.mecaId ?? null;
+    const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
+
+    const [payments, invoicesCount, secondaryInvoiceItems, comps, renewalTokens, registrations, teams, teamMembers, secondaries] =
+      await Promise.all([
+        em.find(Payment, { membership: id }),
+        em.count(Invoice, { masterMembership: id }),
+        em.count(InvoiceItem, { secondaryMembership: id }),
+        em.count(MembershipComp, { membership: id }),
+        em.count(MembershipRenewalToken, { membership: id }),
+        em.count(EventRegistration, { membership: id }),
+        em.count(Team, { membership: id }),
+        em.count(TeamMember, { membership: id }),
+        em.count(Membership, { masterMembership: id }),
+      ]);
+
+    const paidTotal = payments
+      .filter((p) => p.paymentStatus === PaymentStatus.PAID)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const refundedTotal = payments
+      .filter((p) => p.paymentStatus === PaymentStatus.REFUNDED)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    return {
+      membershipId: id,
+      mecaId,
+      resultsCount,
+      // 'reclaimed'       → no results reference the number; it returns to the
+      //                     assignable pool.
+      // 'retired_results' → results exist; the number stays reserved on the
+      //                     profile and is only ever re-issued to this same
+      //                     account (single-id rule on renewal).
+      mecaIdOutcome: !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed',
+      payments: { count: payments.length, paidTotal, refundedTotal },
+      invoices: { count: invoicesCount },
+      secondaryInvoiceItems,
+      comps,
+      renewalTokens,
+      registrations,
+      teams,
+      teamMembers,
+      secondaries,
+    };
+  }
+
+  /** Results linked to a MECA ID (trim-matched — imported rows carry stray spaces). */
+  private async countResultsForMecaId(em: EntityManager, mecaId: number | string): Promise<number> {
+    const rows = await em.getConnection().execute(
+      'SELECT COUNT(*)::int AS count FROM public.competition_results WHERE trim(meca_id) = ?',
+      [String(mecaId).trim()],
+    );
+    return rows?.[0]?.count ?? 0;
+  }
+
+  /**
+   * Delete a membership. The admin chooses (via the impact dialog) what
+   * happens to financial records:
+   *   - financialAction 'keep' (default): payments/invoices survive,
+   *     detached from the membership — the money trail is preserved.
+   *   - financialAction 'delete': this membership's payments and invoices
+   *     (+ their line items) are PERMANENTLY deleted. The dialog makes the
+   *     admin acknowledge this is irreversible and that deleting records is
+   *     NOT a refund (refunds go through the admin refund flow FIRST).
+   *
+   * MECA ID fate (James, 2026-07-02): if competition results reference the
+   * number it is retired — it stays on the profile so the generator can
+   * never reissue it and the same account re-adopts it on renewal (single-id
+   * rule). With no results, the number is cleared from the profile and
+   * returns to the assignable pool via the gap-fill generator.
+   */
+  async delete(
+    id: string,
+    opts: { financialAction?: 'keep' | 'delete'; adminId?: string; adminEmail?: string } = {},
+  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results'; financialAction: 'keep' | 'delete' }> {
+    const financialAction: 'keep' | 'delete' = opts.financialAction === 'delete' ? 'delete' : 'keep';
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id }, { populate: ['user'] });
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+
+    // A master with linked secondaries must not be silently deleted — the
+    // secondaries would be orphaned. Make the admin deal with those first.
+    const secondariesCount = await em.count(Membership, { masterMembership: id });
+    if (secondariesCount > 0) {
+      throw new ConflictException(
+        `Can't delete this membership because ${secondariesCount} secondary membership${secondariesCount === 1 ? ' is' : 's are'} linked to it. ` +
+        `Remove or split off the secondar${secondariesCount === 1 ? 'y' : 'ies'} first, then delete it.`,
+      );
+    }
+
+    const mecaId = membership.mecaId ?? null;
+    const ownerId = (membership.user as any)?.id ?? (membership.user as any);
+    const ownerEmail = (membership.user as any)?.email;
+    const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
+    const mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' =
+      !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed';
+
+    await em.transactional(async (tem) => {
+      // ---- Financial records: the admin's explicit choice ----
+      if (financialAction === 'delete') {
+        const invoiceIds = (await tem.find(Invoice, { masterMembership: id })).map((i) => i.id);
+        if (invoiceIds.length > 0) {
+          await tem.nativeDelete(InvoiceItem, { invoice: { $in: invoiceIds } });
+          await tem.nativeDelete(Invoice, { id: { $in: invoiceIds } });
+        }
+        // Line items on OTHER members' invoices that reference this
+        // membership as a secondary: detach only — that invoice isn't ours
+        // to destroy.
+        await tem.nativeUpdate(InvoiceItem, { secondaryMembership: id }, { secondaryMembership: null });
+        await tem.nativeDelete(Payment, { membership: id });
+      } else {
+        await tem.nativeUpdate(Payment, { membership: id }, { membership: null });
+        await tem.nativeUpdate(Invoice, { masterMembership: id }, { masterMembership: null });
+        await tem.nativeUpdate(InvoiceItem, { secondaryMembership: id }, { secondaryMembership: null });
+      }
+
+      // ---- Non-financial dependents ----
+      // DETACH (records keep their own value): registrations, MECA ID
+      // history, teams + team members. DELETE (meaningless without the
+      // membership): comps, renewal tokens.
+      await tem.nativeUpdate(EventRegistration, { membership: id }, { membership: null });
+      await tem.nativeUpdate(MecaIdHistory, { membership: id }, { membership: null });
+      await tem.nativeUpdate(Team, { membership: id }, { membership: null });
+      await tem.nativeUpdate(TeamMember, { membership: id }, { membership: null });
+      await tem.nativeDelete(MembershipComp, { membership: id });
+      await tem.nativeDelete(MembershipRenewalToken, { membership: id });
+      await tem.nativeDelete(Membership, { id });
+
+      // ---- MECA ID fate ----
+      // No results → reclaim: clear the profile's copy (if it mirrors this
+      // number and no other membership row still holds it) so the gap-fill
+      // generator can reissue it. WITH results → leave the profile's copy in
+      // place: the number stays out of the pool (generator unions
+      // profiles.meca_id AND competition_results ids) and the same account
+      // automatically re-adopts it on a future renewal.
+      if (mecaId && resultsCount === 0 && ownerId) {
+        const heldByAnotherMembership = await tem.count(Membership, { mecaId });
+        if (heldByAnotherMembership === 0) {
+          await tem.nativeUpdate(Profile, { id: ownerId, meca_id: String(mecaId) }, { meca_id: null });
+        }
+      }
+    });
+
+    // Deleting someone's only active membership must not leave their profile
+    // claiming ACTIVE — recompute from what actually remains.
+    if (ownerId) {
+      await this.membershipSyncService.syncProfileMembershipStatus(ownerId);
+    }
+
+    if (opts.adminId) this.adminAuditService.logAction({
+      adminUserId: opts.adminId,
+      action: 'membership_delete',
+      resourceType: 'membership',
+      resourceId: id,
+      description:
+        `Deleted membership ${id} (MECA ID ${mecaId ?? 'none'}) for ${ownerEmail || ownerId || 'unknown user'} — ` +
+        `financial records ${financialAction === 'delete' ? 'PERMANENTLY DELETED' : 'kept (detached)'}; ` +
+        `MECA ID ${mecaIdOutcome === 'reclaimed' ? 'returned to pool' : mecaIdOutcome === 'retired_results' ? `retired (${resultsCount} results attached)` : 'n/a'}`,
+      oldValues: {
+        mecaId,
+        membershipTypeConfigId: (membership.membershipTypeConfig as any)?.id ?? membership.membershipTypeConfig,
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        paymentStatus: membership.paymentStatus,
+      },
+      newValues: { financialAction, mecaIdOutcome, resultsCount },
+    });
+
     this.clearAdminMembershipsListCache();
+    return { mecaIdOutcome, financialAction };
   }
 
   async findByUser(userId: string): Promise<Membership[]> {
@@ -2216,16 +2399,23 @@ export class MembershipsService {
     adminUserId: string,
     reason: string,
     confirmReassign: boolean = false,
+    // Cross-user takeover: strip the ID from another user's profile/
+    // membership(s) and give it to this membership. Requires its own
+    // explicit confirmation — the holder is left WITHOUT a MECA ID.
+    confirmTakeover: boolean = false,
   ): Promise<{
     success: boolean;
     requiresConfirmation?: boolean;
     confirmation?: {
-      conflictType: 'same_user';
-      sourceMembershipId: string;
-      sourceExpired: boolean;
-      sourceEndDate: string | null;
+      conflictType: 'same_user' | 'other_user';
+      sourceMembershipId?: string;
+      sourceExpired?: boolean;
+      sourceEndDate?: string | null;
       holderEmail: string | null;
+      holderName?: string | null;
+      holderMembershipCount?: number;
       resultsToMove: number;
+      resultsUnderNewId?: number;
       freeingMecaId: string | null;
     };
     membership?: Membership;
@@ -2252,27 +2442,18 @@ export class MembershipsService {
 
     // --- Conflict detection ---------------------------------------------------
     // A MECA ID can belong to (a) another PROFILE (profiles.meca_id is UNIQUE),
-    // or (b) one or more other MEMBERSHIPS. We treat "another USER holds it" as
-    // a hard block, but "the SAME user holds it on another (usually expired)
-    // membership" as a reassignment/revert that the admin can confirm — that's
-    // the common case of restoring a member's original ID after a renewal
-    // mistakenly minted a new one.
+    // or (b) one or more other MEMBERSHIPS. "The SAME user holds it on another
+    // (usually expired) membership" is a reassignment/revert the admin can
+    // confirm — restoring a member's original ID after a renewal mistakenly
+    // minted a new one. "Another USER holds it" is a TAKEOVER: allowed for
+    // super-admins with its own explicit confirmation (real case: at launch a
+    // stray signup got auto-assigned a legacy member's special ID — the ID and
+    // its results belong to the returning legacy member, not the holder).
 
-    // (a) PROFILE held by a DIFFERENT user → hard block.
-    if (userId) {
-      const conflictingProfile = await em.findOne(Profile, {
-        meca_id: String(newMecaId),
-        id: { $ne: userId },
-      });
-      if (conflictingProfile) {
-        const who = conflictingProfile.email
-          || [conflictingProfile.first_name, conflictingProfile.last_name].filter(Boolean).join(' ').trim()
-          || conflictingProfile.id;
-        throw new BadRequestException(
-          `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
-        );
-      }
-    }
+    // (a) PROFILE held by a DIFFERENT user.
+    const conflictingProfile = userId
+      ? await em.findOne(Profile, { meca_id: String(newMecaId), id: { $ne: userId } })
+      : null;
 
     // (b) MEMBERSHIP(s) holding the ID.
     const otherMemberships = await em.find(
@@ -2280,12 +2461,66 @@ export class MembershipsService {
       { mecaId: newMecaId, id: { $ne: membershipId } },
       { populate: ['user'] },
     );
-    const differentUserMembership = otherMemberships.find(m => m.user?.id && m.user.id !== userId);
-    if (differentUserMembership) {
-      const who = differentUserMembership.user?.email || differentUserMembership.user?.id || differentUserMembership.id;
-      throw new BadRequestException(
-        `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
+    const differentUserMemberships = otherMemberships.filter(m => m.user?.id && m.user.id !== userId);
+
+    if (conflictingProfile || differentUserMemberships.length > 0) {
+      const holderProfile = conflictingProfile || differentUserMemberships[0].user!;
+      const holderEmail = (holderProfile as any)?.email ?? null;
+      const holderName = [
+        (holderProfile as any)?.first_name,
+        (holderProfile as any)?.last_name,
+      ].filter(Boolean).join(' ').trim() || null;
+
+      if (!confirmTakeover) {
+        const [resultsToMove, resultsUnderNewId] = await Promise.all([
+          oldMecaId != null
+            ? this.competitionResultsService.countResultsForMecaId(String(oldMecaId))
+            : Promise.resolve(0),
+          this.competitionResultsService.countResultsForMecaId(String(newMecaId)),
+        ]);
+        return {
+          success: false,
+          requiresConfirmation: true,
+          confirmation: {
+            conflictType: 'other_user',
+            holderEmail,
+            holderName,
+            holderMembershipCount: differentUserMemberships.length,
+            resultsToMove,
+            resultsUnderNewId,
+            freeingMecaId: oldMecaId != null ? String(oldMecaId) : null,
+          },
+          message:
+            `MECA ID ${newMecaId} is currently held by ${holderName || holderEmail || 'another user'}. ` +
+            `Confirming will strip it from that account (leaving it WITHOUT a MECA ID) and assign it here.`,
+        };
+      }
+
+      // --- Confirmed takeover: release the ID from the other user ----------
+      for (const other of differentUserMemberships) {
+        (other as any).mecaId = null;
+        try {
+          const { MecaIdHistory } = await import('./meca-id-history.entity');
+          const release = new MecaIdHistory();
+          release.mecaId = newMecaId;
+          release.membership = other;
+          release.assignedAt = new Date();
+          release.expiredAt = new Date();
+          release.notes = `SUPER ADMIN TAKEOVER by ${adminUserId}: MECA ID ${newMecaId} released from this membership and reassigned to membership ${membershipId}. Reason: ${reason}`;
+          em.persist(release);
+        } catch { /* history is best-effort */ }
+      }
+      if (conflictingProfile) {
+        conflictingProfile.meca_id = null as any;
+      }
+      this.logger.warn(
+        `SUPER ADMIN TAKEOVER: releasing MECA ID ${newMecaId} from ${holderEmail || 'unknown holder'} ` +
+        `(${differentUserMemberships.length} membership(s)${conflictingProfile ? ' + profile' : ''}) → membership ${membershipId}`,
       );
+      // Flush the RELEASE before the apply below: profiles.meca_id is UNIQUE,
+      // and clearing the holder + assigning the new owner in one flush can
+      // execute in an order that trips the constraint.
+      await em.flush();
     }
     const sameUserSource = otherMemberships.find(m => m.user?.id && m.user.id === userId);
 
@@ -2351,6 +2586,7 @@ export class MembershipsService {
       historyRecord.assignedAt = new Date();
       historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
         (sameUserSource ? ` Reverted to member's own ID (source membership ${sameUserSource.id}).` : '') +
+        (confirmTakeover ? ` Taken over from another account (confirmed cross-user takeover).` : '') +
         ` Reason: ${reason}`;
       em.persist(historyRecord);
       await em.flush();
@@ -2358,11 +2594,15 @@ export class MembershipsService {
       this.logger.error('Failed to create MECA ID history record (non-fatal):', historyError);
     }
 
-    // On a same-user reassignment, move the competition results that were
-    // earned under the id we just freed (oldMecaId) onto the id the member is
-    // keeping (newMecaId), so their history/standings stay under one ID.
+    // Move the competition results that were earned under the id we just
+    // freed (oldMecaId) onto the id the member is keeping (newMecaId), so
+    // their history/standings stay under one ID. Applies to same-user
+    // reverts AND confirmed cross-user takeovers (the member's recent
+    // results merge with the history already sitting under the taken-over
+    // ID — e.g. a legacy member reclaiming their original number).
+    const tookOver = confirmTakeover && (conflictingProfile != null || differentUserMemberships.length > 0);
     let movedResults = 0;
-    if (sameUserSource && oldMecaId != null) {
+    if ((sameUserSource || tookOver) && oldMecaId != null) {
       try {
         movedResults = await this.competitionResultsService.reassignMecaId(String(oldMecaId), String(newMecaId));
       } catch (err) {
@@ -2380,6 +2620,7 @@ export class MembershipsService {
       membership,
       message:
         `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
+        (tookOver ? ` The ID was released from its previous holder (that account now has no MECA ID).` : '') +
         (movedResults ? ` Moved ${movedResults} competition result(s) from ${oldMecaId} to ${newMecaId}.` : ''),
     };
   }

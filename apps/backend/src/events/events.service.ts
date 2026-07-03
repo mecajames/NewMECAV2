@@ -7,6 +7,16 @@ import { EventRegistration } from '../event-registrations/event-registrations.en
 import { CompetitionResult } from '../competition-results/competition-results.entity';
 import { EventDirector } from '../event-directors/event-director.entity';
 import { EventDirectorAssignment } from '../event-directors/event-director-assignment.entity';
+import { Ticket } from '../tickets/ticket.entity';
+import { Rating } from '../ratings/rating.entity';
+import { SplWorldRecord, SplWorldRecordHistory } from '../spl-world-records/spl-world-records.entity';
+import { AchievementRecipient } from '../achievements/achievement-recipient.entity';
+import { EventHostingRequest } from '../event-hosting-requests/event-hosting-requests.entity';
+import { StateFinalsDate } from '../states/state-finals-date.entity';
+import { ChampionshipArchive } from '../championship-archives/championship-archives.entity';
+import { EventJudgeAssignment } from '../judges/event-judge-assignment.entity';
+import { ResultsEntrySession } from '../audit/results-entry-session.entity';
+import { ResultFileUpload } from '../competition-results/entities/result-file-upload.entity';
 import { isUuid, makeUniqueSlug } from '../common/slug.util';
 import {
   EventStatus,
@@ -668,17 +678,22 @@ export class EventsService {
     }
 
     // High-value dependents we must NOT silently destroy: competition results
-    // (they drive standings + World Finals invites) and registrations (members
-    // signed up / paid). Surface a specific, actionable reason rather than
-    // letting the DB throw an opaque foreign-key 500. Any OTHER blocking
+    // (they drive standings + World Finals invites), registrations (members
+    // signed up / paid), judge/director ratings (member-authored reviews),
+    // and SPL world records. Surface a specific, actionable reason rather
+    // than letting the DB throw an opaque foreign-key 500. Any OTHER blocking
     // reference is caught + explained by the global AllExceptionsFilter.
-    const [resultsCount, registrationsCount] = await Promise.all([
+    const [resultsCount, registrationsCount, ratingsCount, recordsCount] = await Promise.all([
       em.count(CompetitionResult, { event: id }),
       em.count(EventRegistration, { event: id }),
+      em.count(Rating, { event: id }),
+      em.count(SplWorldRecord, { event: id }),
     ]);
     const blockers: string[] = [];
     if (resultsCount > 0) blockers.push(`${resultsCount} competition result${resultsCount === 1 ? '' : 's'}`);
     if (registrationsCount > 0) blockers.push(`${registrationsCount} registration${registrationsCount === 1 ? '' : 's'}`);
+    if (ratingsCount > 0) blockers.push(`${ratingsCount} judge/director rating${ratingsCount === 1 ? '' : 's'}`);
+    if (recordsCount > 0) blockers.push(`${recordsCount} SPL world record${recordsCount === 1 ? '' : 's'}`);
     if (blockers.length > 0) {
       throw new ConflictException(
         `Can't delete "${event.title}" because it still has ${blockers.join(' and ')}. ` +
@@ -686,7 +701,28 @@ export class EventsService {
       );
     }
 
-    await em.removeAndFlush(event);
+    // Everything else that references the event is safe to clean up
+    // automatically, in one transaction with the delete:
+    // - DETACH (keep the row, clear its event link): support tickets (a
+    //   submitter picking an event on a ticket is informational and must
+    //   never block deleting the event), achievements earned at the event,
+    //   hosting-request "created event" back-links, state-finals date links,
+    //   championship-archive World Finals links, world-record history rows.
+    // - DELETE (rows are meaningless without their event): judge/director
+    //   assignments, results-entry audit sessions, import file records.
+    await em.transactional(async (tem) => {
+      await tem.nativeUpdate(Ticket, { event: id }, { event: null });
+      await tem.nativeUpdate(AchievementRecipient, { event: id }, { event: null });
+      await tem.nativeUpdate(EventHostingRequest, { createdEvent: id }, { createdEvent: null });
+      await tem.nativeUpdate(StateFinalsDate, { event: id }, { event: null });
+      await tem.nativeUpdate(ChampionshipArchive, { worldFinalsEvent: id }, { worldFinalsEvent: null });
+      await tem.nativeUpdate(SplWorldRecordHistory, { event: id }, { event: null });
+      await tem.nativeDelete(EventJudgeAssignment, { event: id });
+      await tem.nativeDelete(EventDirectorAssignment, { event: id });
+      await tem.nativeDelete(ResultsEntrySession, { event: id });
+      await tem.nativeDelete(ResultFileUpload, { event: id });
+      await tem.nativeDelete(Event, { id });
+    });
   }
 
   /**

@@ -358,6 +358,21 @@ export class CompetitionResultsController {
   }
 
   /**
+   * Admin data maintenance: trim stray whitespace off meca_id in
+   * competition_results (re-imports produced " 260014"-style values that
+   * broke member links). Idempotent; returns how many rows were fixed.
+   * Triggered from Admin → Site Settings → System → Data Maintenance.
+   */
+  @Post('admin/trim-meca-ids')
+  @HttpCode(HttpStatus.OK)
+  async trimMecaIds(
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ updated: number }> {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.trimMecaIds();
+  }
+
+  /**
    * Admin: suggested duplicate-class groups for a season (read-only). Used by
    * the Classes Management "Find Duplicates" tool.
    */

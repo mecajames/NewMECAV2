@@ -563,14 +563,36 @@ export class MembershipsController {
     return this.membershipsService.update(id, data);
   }
 
+  /**
+   * Pre-delete impact report for the admin delete dialog: linked financial
+   * records (payments/invoices with totals), registrations/comps/teams, and
+   * the MECA ID's fate (reclaimed to the pool vs retired because results
+   * reference it).
+   */
+  @Get(':id/delete-impact')
+  async getMembershipDeleteImpact(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getDeleteImpact(id);
+  }
+
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteMembership(
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
-  ): Promise<void> {
-    await this.requireAdmin(authHeader);
-    return this.membershipsService.delete(id);
+    // 'keep' (default) detaches financial records; 'delete' permanently
+    // removes this membership's payments + invoices (admin acknowledged the
+    // irreversible warning in the dialog).
+    @Query('financial') financial?: string,
+  ): Promise<{ mecaIdOutcome: string; financialAction: string }> {
+    const { user, profile } = await this.requireAdmin(authHeader);
+    return this.membershipsService.delete(id, {
+      financialAction: financial === 'delete' ? 'delete' : 'keep',
+      adminId: user.id,
+      adminEmail: (profile as any)?.email,
+    });
   }
 
   @Get('user/:userId/active')
@@ -1098,6 +1120,9 @@ export class MembershipsController {
       superAdminPassword: string;
       reason: string;
       confirmReassign?: boolean;
+      // Cross-user takeover confirmation: strip the ID from another user's
+      // account and assign it to this membership (merges results).
+      confirmTakeover?: boolean;
     },
   ): Promise<{
     success: boolean;
@@ -1131,6 +1156,7 @@ export class MembershipsController {
       profile?.id || 'unknown',
       data.reason,
       data.confirmReassign === true,
+      data.confirmTakeover === true,
     );
 
     return result;

@@ -109,6 +109,26 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Data maintenance: TRIM stray whitespace off competition_results.meca_id.
+   * Spreadsheet re-imports have produced values like " 260014", which broke
+   * member links / active-membership checks until code-level trims were
+   * added. This normalizes the data at the source. Idempotent — safe to run
+   * any time (Admin → Site Settings → System → Data Maintenance).
+   */
+  async trimMecaIds(): Promise<{ updated: number }> {
+    const em = this.em.fork();
+    const rows = await em.getConnection().execute(
+      `UPDATE public.competition_results
+          SET meca_id = TRIM(meca_id)
+        WHERE meca_id IS DISTINCT FROM TRIM(meca_id)
+        RETURNING id`,
+    );
+    const updated = Array.isArray(rows) ? rows.length : 0;
+    this.logger.warn(`Data maintenance: trimmed meca_id on ${updated} competition_results row(s)`);
+    return { updated };
+  }
+
+  /**
    * Reassign every competition result from one MECA ID to another. Used when a
    * member's membership MECA ID is corrected/reverted (e.g. a renewal was given
    * a fresh ID but should keep the member's original): the results earned under

@@ -1,13 +1,14 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin, ChevronDown, CheckCircle, X } from 'lucide-react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { competitionFormatsApi } from '@/competition-formats';
 import { SeasonSelector } from '@/seasons';
 import { SEOHead, useResultsSEO } from '@/shared/seo';
-import { useAuth } from '@/auth/contexts/AuthContext';
+import { MecaIdLink } from '@/competition-results/components/MecaIdLink';
+import { MecaIdActiveProvider } from '@/competition-results/components/MecaIdActiveContext';
 import { BannerDisplay, useBanners } from '@/banners';
 import { BannerPosition } from '@newmeca/shared';
 import { US_STATES, CANADIAN_PROVINCES, MEXICAN_STATES } from '@/utils/countries';
@@ -97,8 +98,6 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const seoProps = useResultsSEO();
-  const { profile } = useAuth();
-  const isAuthenticated = !!profile;
 
   // Get event ID from URL query params
   const eventIdFromUrl = searchParams.get('eventId');
@@ -662,6 +661,11 @@ export default function ResultsPage() {
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
   return (
+    // MecaIdActiveProvider gates target-side MECA ID links (same pattern as
+    // Standings / Top 10): rows whose MECA ID belongs to an expired/retired
+    // member render as plain text — no dead link to a "profile not active"
+    // page, even for admin viewers.
+    <MecaIdActiveProvider mecaIds={results.map((r: any) => r.mecaId || r.meca_id)}>
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 py-8 sm:py-12">
       <SEOHead {...seoProps} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1159,18 +1163,15 @@ export default function ResultsPage() {
                                       </div>
                                       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-400">
                                         <span>{state}</span>
-                                        {mecaId && mecaId !== '999999' && isAuthenticated ? (
-                                          <Link
-                                            to={`/results/member/${mecaId}`}
-                                            className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
-                                          >
-                                            ID: {mecaDisplay.text}
-                                          </Link>
-                                        ) : (
-                                          <span className={`font-semibold ${mecaDisplay.color}`}>
-                                            {mecaId && mecaId !== '999999' ? `ID: ${mecaDisplay.text}` : mecaDisplay.text}
-                                          </span>
-                                        )}
+                                        {/* MecaIdLink: only links when the viewer is an
+                                            active member/admin AND the target ID is active
+                                            (expired members get plain text — their profile
+                                            page would just say "not active"). */}
+                                        <MecaIdLink
+                                          mecaId={mecaId}
+                                          displayText={mecaId && mecaId !== '999999' ? `ID: ${mecaDisplay.text}` : undefined}
+                                          className={`font-semibold ${mecaDisplay.color}`}
+                                        />
                                         {format === 'SPL' && result.wattage && (
                                           <span>{result.wattage}W</span>
                                         )}
@@ -1288,18 +1289,13 @@ export default function ResultsPage() {
                                           </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                          {mecaId && mecaId !== '999999' && isAuthenticated ? (
-                                            <Link
-                                              to={`/results/member/${mecaId}`}
-                                              className={`font-semibold ${mecaDisplay.color} hover:underline hover:text-orange-400 transition-colors`}
-                                            >
-                                              {mecaDisplay.text}
-                                            </Link>
-                                          ) : (
-                                            <div className={`font-semibold ${mecaDisplay.color}`}>
-                                              {mecaDisplay.text}
-                                            </div>
-                                          )}
+                                          {/* Gated link — expired/retired targets render as
+                                              plain text (see MecaIdLink). */}
+                                          <MecaIdLink
+                                            mecaId={mecaId}
+                                            displayText={mecaDisplay.text}
+                                            className={`font-semibold ${mecaDisplay.color}`}
+                                          />
                                         </td>
                                         {format === 'SPL' && (
                                           <>
@@ -1360,5 +1356,6 @@ export default function ResultsPage() {
         )}
       </div>
     </div>
+    </MecaIdActiveProvider>
   );
 }

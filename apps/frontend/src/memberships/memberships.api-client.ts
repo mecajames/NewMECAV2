@@ -296,6 +296,23 @@ export interface MasterMembershipInfo {
   canAddMore: boolean;
 }
 
+/** What the admin delete dialog shows before a membership is deleted. */
+export interface MembershipDeleteImpact {
+  membershipId: string;
+  mecaId: number | null;
+  resultsCount: number;
+  mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results';
+  payments: { count: number; paidTotal: number; refundedTotal: number };
+  invoices: { count: number };
+  secondaryInvoiceItems: number;
+  comps: number;
+  renewalTokens: number;
+  registrations: number;
+  teams: number;
+  teamMembers: number;
+  secondaries: number;
+}
+
 export interface ControlledMecaId {
   mecaId: number | string;
   membershipId: string;
@@ -627,10 +644,27 @@ export const membershipsApi = {
   },
 
   /**
-   * Delete a membership
+   * Pre-delete impact report (admin): linked payments/invoices with totals,
+   * registrations/comps/teams counts, and the MECA ID's fate.
    */
-  delete: async (id: string): Promise<void> => {
-    await axios.delete(`/api/memberships/${id}`);
+  getDeleteImpact: async (id: string): Promise<MembershipDeleteImpact> => {
+    const response = await axios.get(`/api/memberships/${id}/delete-impact`);
+    return response.data;
+  },
+
+  /**
+   * Delete a membership. financialAction 'keep' (default) detaches
+   * payments/invoices so the money trail survives; 'delete' permanently
+   * removes them (irreversible — the dialog makes the admin confirm).
+   */
+  delete: async (
+    id: string,
+    financialAction: 'keep' | 'delete' = 'keep',
+  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results'; financialAction: 'keep' | 'delete' }> => {
+    const response = await axios.delete(`/api/memberships/${id}`, {
+      params: { financial: financialAction },
+    });
+    return response.data;
   },
 
   /**
@@ -833,16 +867,23 @@ export const membershipsApi = {
     superAdminPassword: string,
     reason: string,
     confirmReassign: boolean = false,
+    // Cross-user takeover confirmation: strips the ID from another user's
+    // account (leaving it without a MECA ID) and assigns it here, merging
+    // this member's results onto the taken-over ID.
+    confirmTakeover: boolean = false,
   ): Promise<{
     success: boolean;
     requiresConfirmation?: boolean;
     confirmation?: {
-      conflictType: 'same_user';
-      sourceMembershipId: string;
-      sourceExpired: boolean;
-      sourceEndDate: string | null;
+      conflictType: 'same_user' | 'other_user';
+      sourceMembershipId?: string;
+      sourceExpired?: boolean;
+      sourceEndDate?: string | null;
       holderEmail: string | null;
+      holderName?: string | null;
+      holderMembershipCount?: number;
       resultsToMove: number;
+      resultsUnderNewId?: number;
       freeingMecaId: string | null;
     };
     membership?: Membership;
@@ -853,6 +894,7 @@ export const membershipsApi = {
       superAdminPassword,
       reason,
       confirmReassign,
+      confirmTakeover,
     });
     return response.data;
   },
