@@ -167,13 +167,15 @@ export class MembershipsController {
    * Public because public results pages render these for non-authenticated
    * visitors as well. No personal data is exposed — only a yes/no per ID.
    */
-  // Tighter rate limit than the global default: 10 requests per minute per
-  // IP. Each request accepts up to 1000 MECA IDs, so a hostile scraper can
-  // probe at most 10k IDs/min — slow enough that the audit log will catch
-  // patterns before significant enumeration occurs. Legitimate page loads
-  // hit this once per page render.
+  // Tighter rate limit than the global default: 30 requests per minute per
+  // visitor IP (ThrottlerBehindProxyGuard resolves the real client IP behind
+  // Cloudflare/nginx). Legitimate page loads hit this once per page render,
+  // but competitors at an event share one venue-WiFi public IP — 30/min
+  // absorbs that burst where the old 10/min tripped and false-flagged active
+  // members as inactive. Enumeration tradeoff stays acceptable: 30 req/min ×
+  // 1000 IDs is still slow enough for the audit log to catch probing.
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Post('active-meca-ids')
   @HttpCode(HttpStatus.OK)
   async listActiveMecaIds(@Body() body: { mecaIds?: string[] }): Promise<{ activeMecaIds: string[] }> {

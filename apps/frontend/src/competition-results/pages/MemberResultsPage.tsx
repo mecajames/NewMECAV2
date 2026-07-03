@@ -129,14 +129,23 @@ export default function MemberResultsPage() {
       setTargetMecaActive(false);
       return;
     }
-    try {
-      const r = await axios.post('/api/memberships/active-meca-ids', { mecaIds: [mecaId] });
-      const active: string[] = r.data?.activeMecaIds ?? [];
-      setTargetMecaActive(active.includes(String(mecaId)));
-    } catch {
-      // Fail closed — assume inactive on error so we err toward privacy.
-      setTargetMecaActive(false);
+    // One retry, then fail OPEN to "unknown": the endpoint is rate-limited,
+    // and a transient 429 must not render the full-page "Member profile not
+    // active" for a genuinely active member (it did — the gate treated any
+    // error as inactive). On unknown the page renders normally; genuinely
+    // expired members are still gated whenever the check succeeds, plus by
+    // the memberProfile.membership_status === 'expired' fallback.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await axios.post('/api/memberships/active-meca-ids', { mecaIds: [mecaId] });
+        const active: string[] = r.data?.activeMecaIds ?? [];
+        setTargetMecaActive(active.includes(String(mecaId)));
+        return;
+      } catch {
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
+    setTargetMecaActive(null);
   };
 
   const fetchResults = async () => {

@@ -241,3 +241,4 @@ AGENTS.md
 apps/backend/.env.example
 apps/frontend/.env.example
 apps/frontend/.env.example
+.gstack/

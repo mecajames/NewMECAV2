@@ -48,11 +48,12 @@ async function fetchActive(ids: string[]) {
         cache.set(id, activeSet.has(id));
       }
     } catch {
-      // On error, default to "unknown" — mark each as not-active so we err
-      // toward un-linking (privacy-safe) rather than over-linking.
-      for (const id of need) {
-        if (!cache.has(id)) cache.set(id, false);
-      }
+      // Transient failure (e.g. a 429 from the rate limiter): leave the IDs
+      // UNcached so the lookup stays "unknown" and a later mount retries.
+      // We used to cache `false` here, which turned one throttled request
+      // into a session-long false "not active" for every ID on the page.
+      // Unknown falls through to viewer-side gating only; the member page
+      // itself still runs the authoritative active check.
     } finally {
       inflight.delete(key);
     }

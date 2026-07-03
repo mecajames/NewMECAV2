@@ -1131,7 +1131,9 @@ export default function ResultsPage() {
                             {/* Mobile Card Layout */}
                             <div className="sm:hidden space-y-2">
                               {sortResults(classResults).map((result) => {
-                                const mecaId = result.mecaId || result.meca_id;
+                                // Trim: imported rows can carry a stray leading space in meca_id, which
+                                // builds "/results/member/%20260014" links (same bug MecaIdLink guards).
+                                const mecaId = (result.mecaId || result.meca_id)?.trim();
                                 const membershipExpiry = result.competitor?.membership_expiry;
                                 const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);
                                 const state = result.stateCode || result.state_code || 'N/E';
@@ -1254,7 +1256,9 @@ export default function ResultsPage() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-700">
                                   {sortResults(classResults).map((result) => {
-                                    const mecaId = result.mecaId || result.meca_id;
+                                    // Trim: imported rows can carry a stray leading space in meca_id, which
+                                    // builds "/results/member/%20260014" links (same bug MecaIdLink guards).
+                                    const mecaId = (result.mecaId || result.meca_id)?.trim();
                                     const membershipExpiry = result.competitor?.membership_expiry;
                                     const mecaDisplay = getMecaIdDisplay(mecaId, membershipExpiry);
                                     const state = result.stateCode || result.state_code || 'N/E';

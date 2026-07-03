@@ -5,7 +5,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, ForcePasswordChangeGuard, ExpiredMembershipGuard, IdleTimeoutGuard, MaintenanceModeGuard, BillingRestrictedGuard, MemberOnlyGate, RecoveryRedirect } from '@/auth';
 import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
-import { Navbar, Footer, ScrollToTop, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
+import { Navbar, Footer, ScrollToTop, AppUpdateGuard, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
 import AnnouncementBanner from '@/announcements/AnnouncementBanner';
 import { usePageTracking } from '@/shared/hooks/usePageTracking';
 import { useMemberPageTracking } from '@/shared/hooks/useMemberPageTracking';
@@ -246,6 +246,7 @@ function App() {
               <PayPalProvider>
               <ReCaptchaProvider version="v2">
                   <ScrollToTop />
+                  <AppUpdateGuard />
                   <RecoveryRedirect />
                   <PageTracker />
           <ImpersonationBanner />
