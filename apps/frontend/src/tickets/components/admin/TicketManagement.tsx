@@ -976,7 +976,20 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
-                {tickets.map((ticket) => (
+                {tickets.map((ticket) => {
+                  // Tolerate unmapped status/priority values (older rows,
+                  // future enum additions) — render a neutral badge instead
+                  // of throwing on `.className` and whiting the page.
+                  const statusBadge = statusConfig[ticket.status] ?? {
+                    label: String(ticket.status || 'Unknown').replace(/_/g, ' '),
+                    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+                    icon: null,
+                  };
+                  const priorityBadge = priorityConfig[ticket.priority] ?? {
+                    label: String(ticket.priority || '—'),
+                    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+                  };
+                  return (
                   <tr
                     key={ticket.id}
                     className="hover:bg-slate-700/50 transition-colors cursor-pointer"
@@ -986,18 +999,18 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       <div>
                         <span className="text-xs font-mono text-orange-400">{ticket.ticket_number}</span>
                         <p className="text-white font-medium truncate max-w-xs">{ticket.title}</p>
-                        <p className="text-xs text-gray-500 capitalize">{ticket.category.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-gray-500 capitalize">{(ticket.category || '—').replace(/_/g, ' ')}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${statusConfig[ticket.status].className}`}>
-                        {statusConfig[ticket.status].icon}
-                        {statusConfig[ticket.status].label}
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${statusBadge.className}`}>
+                        {statusBadge.icon}
+                        {statusBadge.label}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
-                        {priorityConfig[ticket.priority].label}
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityBadge.className}`}>
+                        {priorityBadge.label}
                       </span>
                     </td>
                     <td className="px-4 py-4">
@@ -1073,7 +1086,8 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

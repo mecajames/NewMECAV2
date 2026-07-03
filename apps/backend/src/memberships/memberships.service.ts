@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException, Logger, forwardRef } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import {
   PaymentStatus,
@@ -28,6 +28,13 @@ import { Order } from '../orders/orders.entity';
 import { OrderItem } from '../orders/order-items.entity';
 import { Invoice } from '../invoices/invoices.entity';
 import { InvoiceItem } from '../invoices/invoice-items.entity';
+import { Payment } from '../payments/payments.entity';
+import { EventRegistration } from '../event-registrations/event-registrations.entity';
+import { MecaIdHistory } from './meca-id-history.entity';
+import { MembershipRenewalToken } from './membership-renewal-token.entity';
+import { MembershipComp } from '../membership-comps/membership-comp.entity';
+import { Team } from '../teams/team.entity';
+import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
@@ -280,14 +287,190 @@ export class MembershipsService {
     return membership;
   }
 
-  async delete(id: string): Promise<void> {
+  /**
+   * Pre-delete impact report for the admin confirm dialog: everything linked
+   * to this membership, what the MECA ID's fate will be, and the totals the
+   * admin needs to decide what happens to financial records (keep vs
+   * permanently delete) and whether a refund is owed first.
+   */
+  async getDeleteImpact(id: string) {
     const em = this.em.fork();
-    const membership = await em.findOne(Membership, { id });
+    const membership = await em.findOne(Membership, { id }, { populate: ['user'] });
     if (!membership) {
       throw new NotFoundException(`Membership with ID ${id} not found`);
     }
-    await em.removeAndFlush(membership);
+
+    const mecaId = membership.mecaId ?? null;
+    const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
+
+    const [payments, invoicesCount, secondaryInvoiceItems, comps, renewalTokens, registrations, teams, teamMembers, secondaries] =
+      await Promise.all([
+        em.find(Payment, { membership: id }),
+        em.count(Invoice, { masterMembership: id }),
+        em.count(InvoiceItem, { secondaryMembership: id }),
+        em.count(MembershipComp, { membership: id }),
+        em.count(MembershipRenewalToken, { membership: id }),
+        em.count(EventRegistration, { membership: id }),
+        em.count(Team, { membership: id }),
+        em.count(TeamMember, { membership: id }),
+        em.count(Membership, { masterMembership: id }),
+      ]);
+
+    const paidTotal = payments
+      .filter((p) => p.paymentStatus === PaymentStatus.PAID)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const refundedTotal = payments
+      .filter((p) => p.paymentStatus === PaymentStatus.REFUNDED)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    return {
+      membershipId: id,
+      mecaId,
+      resultsCount,
+      // 'reclaimed'       → no results reference the number; it returns to the
+      //                     assignable pool.
+      // 'retired_results' → results exist; the number stays reserved on the
+      //                     profile and is only ever re-issued to this same
+      //                     account (single-id rule on renewal).
+      mecaIdOutcome: !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed',
+      payments: { count: payments.length, paidTotal, refundedTotal },
+      invoices: { count: invoicesCount },
+      secondaryInvoiceItems,
+      comps,
+      renewalTokens,
+      registrations,
+      teams,
+      teamMembers,
+      secondaries,
+    };
+  }
+
+  /** Results linked to a MECA ID (trim-matched — imported rows carry stray spaces). */
+  private async countResultsForMecaId(em: EntityManager, mecaId: number | string): Promise<number> {
+    const rows = await em.getConnection().execute(
+      'SELECT COUNT(*)::int AS count FROM public.competition_results WHERE trim(meca_id) = ?',
+      [String(mecaId).trim()],
+    );
+    return rows?.[0]?.count ?? 0;
+  }
+
+  /**
+   * Delete a membership. The admin chooses (via the impact dialog) what
+   * happens to financial records:
+   *   - financialAction 'keep' (default): payments/invoices survive,
+   *     detached from the membership — the money trail is preserved.
+   *   - financialAction 'delete': this membership's payments and invoices
+   *     (+ their line items) are PERMANENTLY deleted. The dialog makes the
+   *     admin acknowledge this is irreversible and that deleting records is
+   *     NOT a refund (refunds go through the admin refund flow FIRST).
+   *
+   * MECA ID fate (James, 2026-07-02): if competition results reference the
+   * number it is retired — it stays on the profile so the generator can
+   * never reissue it and the same account re-adopts it on renewal (single-id
+   * rule). With no results, the number is cleared from the profile and
+   * returns to the assignable pool via the gap-fill generator.
+   */
+  async delete(
+    id: string,
+    opts: { financialAction?: 'keep' | 'delete'; adminId?: string; adminEmail?: string } = {},
+  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results'; financialAction: 'keep' | 'delete' }> {
+    const financialAction: 'keep' | 'delete' = opts.financialAction === 'delete' ? 'delete' : 'keep';
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id }, { populate: ['user'] });
+    if (!membership) {
+      throw new NotFoundException(`Membership with ID ${id} not found`);
+    }
+
+    // A master with linked secondaries must not be silently deleted — the
+    // secondaries would be orphaned. Make the admin deal with those first.
+    const secondariesCount = await em.count(Membership, { masterMembership: id });
+    if (secondariesCount > 0) {
+      throw new ConflictException(
+        `Can't delete this membership because ${secondariesCount} secondary membership${secondariesCount === 1 ? ' is' : 's are'} linked to it. ` +
+        `Remove or split off the secondar${secondariesCount === 1 ? 'y' : 'ies'} first, then delete it.`,
+      );
+    }
+
+    const mecaId = membership.mecaId ?? null;
+    const ownerId = (membership.user as any)?.id ?? (membership.user as any);
+    const ownerEmail = (membership.user as any)?.email;
+    const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
+    const mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' =
+      !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed';
+
+    await em.transactional(async (tem) => {
+      // ---- Financial records: the admin's explicit choice ----
+      if (financialAction === 'delete') {
+        const invoiceIds = (await tem.find(Invoice, { masterMembership: id })).map((i) => i.id);
+        if (invoiceIds.length > 0) {
+          await tem.nativeDelete(InvoiceItem, { invoice: { $in: invoiceIds } });
+          await tem.nativeDelete(Invoice, { id: { $in: invoiceIds } });
+        }
+        // Line items on OTHER members' invoices that reference this
+        // membership as a secondary: detach only — that invoice isn't ours
+        // to destroy.
+        await tem.nativeUpdate(InvoiceItem, { secondaryMembership: id }, { secondaryMembership: null });
+        await tem.nativeDelete(Payment, { membership: id });
+      } else {
+        await tem.nativeUpdate(Payment, { membership: id }, { membership: null });
+        await tem.nativeUpdate(Invoice, { masterMembership: id }, { masterMembership: null });
+        await tem.nativeUpdate(InvoiceItem, { secondaryMembership: id }, { secondaryMembership: null });
+      }
+
+      // ---- Non-financial dependents ----
+      // DETACH (records keep their own value): registrations, MECA ID
+      // history, teams + team members. DELETE (meaningless without the
+      // membership): comps, renewal tokens.
+      await tem.nativeUpdate(EventRegistration, { membership: id }, { membership: null });
+      await tem.nativeUpdate(MecaIdHistory, { membership: id }, { membership: null });
+      await tem.nativeUpdate(Team, { membership: id }, { membership: null });
+      await tem.nativeUpdate(TeamMember, { membership: id }, { membership: null });
+      await tem.nativeDelete(MembershipComp, { membership: id });
+      await tem.nativeDelete(MembershipRenewalToken, { membership: id });
+      await tem.nativeDelete(Membership, { id });
+
+      // ---- MECA ID fate ----
+      // No results → reclaim: clear the profile's copy (if it mirrors this
+      // number and no other membership row still holds it) so the gap-fill
+      // generator can reissue it. WITH results → leave the profile's copy in
+      // place: the number stays out of the pool (generator unions
+      // profiles.meca_id AND competition_results ids) and the same account
+      // automatically re-adopts it on a future renewal.
+      if (mecaId && resultsCount === 0 && ownerId) {
+        const heldByAnotherMembership = await tem.count(Membership, { mecaId });
+        if (heldByAnotherMembership === 0) {
+          await tem.nativeUpdate(Profile, { id: ownerId, meca_id: String(mecaId) }, { meca_id: null });
+        }
+      }
+    });
+
+    // Deleting someone's only active membership must not leave their profile
+    // claiming ACTIVE — recompute from what actually remains.
+    if (ownerId) {
+      await this.membershipSyncService.syncProfileMembershipStatus(ownerId);
+    }
+
+    if (opts.adminId) this.adminAuditService.logAction({
+      adminUserId: opts.adminId,
+      action: 'membership_delete',
+      resourceType: 'membership',
+      resourceId: id,
+      description:
+        `Deleted membership ${id} (MECA ID ${mecaId ?? 'none'}) for ${ownerEmail || ownerId || 'unknown user'} — ` +
+        `financial records ${financialAction === 'delete' ? 'PERMANENTLY DELETED' : 'kept (detached)'}; ` +
+        `MECA ID ${mecaIdOutcome === 'reclaimed' ? 'returned to pool' : mecaIdOutcome === 'retired_results' ? `retired (${resultsCount} results attached)` : 'n/a'}`,
+      oldValues: {
+        mecaId,
+        membershipTypeConfigId: (membership.membershipTypeConfig as any)?.id ?? membership.membershipTypeConfig,
+        startDate: membership.startDate,
+        endDate: membership.endDate,
+        paymentStatus: membership.paymentStatus,
+      },
+      newValues: { financialAction, mecaIdOutcome, resultsCount },
+    });
+
     this.clearAdminMembershipsListCache();
+    return { mecaIdOutcome, financialAction };
   }
 
   async findByUser(userId: string): Promise<Membership[]> {

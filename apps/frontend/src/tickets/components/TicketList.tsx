@@ -415,7 +415,28 @@ export function TicketList({
       {/* Ticket List */}
       {!loading && !error && tickets.length > 0 && (
         <div className="space-y-4">
-          {tickets.map((ticket) => (
+          {tickets.map((ticket) => {
+            // Data-tolerant lookups: department-scoped CUSTOM categories are
+            // valid beyond the legacy enum, `department` is optional on the
+            // entity, and old rows can carry values a newer/older build
+            // doesn't know. An unmapped value must render a neutral badge —
+            // NOT throw and white-screen the whole app (that's exactly what
+            // `statusConfig[ticket.status].className` did on tickets with a
+            // custom category / missing department).
+            const status = statusConfig[ticket.status] ?? {
+              label: String(ticket.status || 'Unknown').replace(/_/g, ' '),
+              className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+              icon: <AlertCircle className="w-3 h-3" />,
+            };
+            const priority = priorityConfig[ticket.priority] ?? {
+              label: String(ticket.priority || '—'),
+              className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+            };
+            const category = categoryConfig[ticket.category] ?? {
+              label: String(ticket.category || 'Other').replace(/_/g, ' '),
+              className: 'bg-gray-500/10 text-gray-400',
+            };
+            return (
             <div
               key={ticket.id}
               onClick={() => navigate(`/tickets/${ticket.id}`)}
@@ -426,12 +447,12 @@ export function TicketList({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-sm font-mono text-orange-400">{ticket.ticket_number}</span>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${statusConfig[ticket.status].className}`}>
-                      {statusConfig[ticket.status].icon}
-                      {statusConfig[ticket.status].label}
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${status.className}`}>
+                      {status.icon}
+                      {status.label}
                     </span>
-                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
-                      {priorityConfig[ticket.priority].label}
+                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priority.className}`}>
+                      {priority.label}
                     </span>
                   </div>
 
@@ -442,8 +463,8 @@ export function TicketList({
                   <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                     <span className="flex items-center gap-1">
                       <Tag className="w-3.5 h-3.5" />
-                      <span className={`px-2 py-0.5 rounded text-xs ${categoryConfig[ticket.category].className}`}>
-                        {categoryConfig[ticket.category].label}
+                      <span className={`px-2 py-0.5 rounded text-xs ${category.className}`}>
+                        {category.label}
                       </span>
                     </span>
                     <span className="flex items-center gap-1">
@@ -459,10 +480,12 @@ export function TicketList({
 
                 {/* Right: Assignee & Meta */}
                 <div className="flex flex-col items-end gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-gray-400">
-                    <Building className="w-4 h-4" />
-                    <span className="capitalize">{ticket.department.replace(/_/g, ' ')}</span>
-                  </div>
+                  {ticket.department && (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <Building className="w-4 h-4" />
+                      <span className="capitalize">{ticket.department.replace(/_/g, ' ')}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500">Assigned to:</span>
                     <span className={ticket.assigned_to ? 'text-white' : 'text-gray-500 italic'}>
@@ -477,7 +500,8 @@ export function TicketList({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -1023,6 +1023,20 @@ export function TicketDetail({
     );
   }
 
+  // Data-tolerant badge lookups: a ticket can carry a status/priority value
+  // this build's maps don't know (older rows, future enum additions). An
+  // unmapped value must render a neutral badge — NOT throw on `.className`
+  // and white-screen the whole app.
+  const statusBadge = adminStatusConfig[ticket.status] ?? {
+    label: String(ticket.status || 'Unknown').replace(/_/g, ' '),
+    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+    icon: <AlertCircle className="w-3 h-3" />,
+  };
+  const priorityBadge = priorityConfig[ticket.priority] ?? {
+    label: String(ticket.priority || '—'),
+    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1044,13 +1058,13 @@ export function TicketDetail({
                   type="button"
                   onClick={() => setStatusMenuOpen((v) => !v)}
                   disabled={actionLoading}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${adminStatusConfig[ticket.status].className}`}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${statusBadge.className}`}
                   aria-haspopup="menu"
                   aria-expanded={statusMenuOpen}
                   title="Click to change status without replying"
                 >
-                  {adminStatusConfig[ticket.status].icon}
-                  {adminStatusConfig[ticket.status].label}
+                  {statusBadge.icon}
+                  {statusBadge.label}
                   <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                 </button>
                 {statusMenuOpen && (
@@ -1085,9 +1099,9 @@ export function TicketDetail({
                 )}
               </div>
             ) : (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${adminStatusConfig[ticket.status].className}`}>
-                {adminStatusConfig[ticket.status].icon}
-                {customerStatusLabels[ticket.status]}
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${statusBadge.className}`}>
+                {statusBadge.icon}
+                {customerStatusLabels[ticket.status] ?? statusBadge.label}
               </span>
             )}
             {/* Priority pill.
@@ -1100,12 +1114,12 @@ export function TicketDetail({
                   type="button"
                   onClick={() => setPriorityMenuOpen((v) => !v)}
                   disabled={actionLoading}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${priorityConfig[ticket.priority].className}`}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${priorityBadge.className}`}
                   aria-haspopup="menu"
                   aria-expanded={priorityMenuOpen}
                   title="Click to change priority"
                 >
-                  {priorityConfig[ticket.priority].label}
+                  {priorityBadge.label}
                   <ChevronDown className="w-3 h-3 ml-0.5 opacity-70" />
                 </button>
                 {priorityMenuOpen && (
@@ -1134,8 +1148,8 @@ export function TicketDetail({
                 )}
               </div>
             ) : (
-              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityConfig[ticket.priority].className}`}>
-                {priorityConfig[ticket.priority].label}
+              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityBadge.className}`}>
+                {priorityBadge.label}
               </span>
             )}
           </div>
@@ -1919,7 +1933,7 @@ export function TicketDetail({
                   <Building className="w-4 h-4" />
                   Department
                 </span>
-                <span className="text-white capitalize">{ticket.department.replace(/_/g, ' ')}</span>
+                <span className="text-white capitalize">{(ticket.department || '—').replace(/_/g, ' ')}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 flex items-center gap-2">
