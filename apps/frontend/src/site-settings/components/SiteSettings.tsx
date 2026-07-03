@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield, Database } from 'lucide-react';
 
 interface HeroSlide {
   url: string;
@@ -10,6 +10,7 @@ interface HeroSlide {
 }
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { siteSettingsApi, SiteSetting } from '@/site-settings';
+import { competitionResultsApi } from '@/competition-results';
 import { mediaFilesApi, MediaFile } from '@/media-files';
 import { getStorageUrl } from '@/lib/storage';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
@@ -43,6 +44,10 @@ export default function SiteSettings() {
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailTemplate, setTestEmailTemplate] = useState('');
   const [taskResult, setTaskResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // Data Maintenance (System tab) — one-click cleanups, e.g. trimming stray
+  // whitespace off competition_results.meca_id after imports/deploys.
+  const [trimmingMecaIds, setTrimmingMecaIds] = useState(false);
+  const [dataMaintResult, setDataMaintResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
     hero_image_urls: [] as HeroSlide[],
@@ -578,6 +583,33 @@ export default function SiteSettings() {
       });
     } finally {
       setTriggeringAutoCancel(false);
+    }
+  };
+
+  // Data Maintenance: normalize competition_results.meca_id (trim stray
+  // whitespace from imports). Idempotent — safe to run after any deploy.
+  const handleTrimMecaIds = async () => {
+    if (!confirm('Clean up MECA IDs in competition results (removes stray spaces from imported data)? Safe to run any time.')) {
+      return;
+    }
+    setTrimmingMecaIds(true);
+    setDataMaintResult(null);
+    try {
+      const result = await competitionResultsApi.trimMecaIds();
+      setDataMaintResult({
+        type: 'success',
+        message:
+          result.updated > 0
+            ? `Cleaned ${result.updated} result row${result.updated === 1 ? '' : 's'} that had stray spaces in the MECA ID.`
+            : 'Nothing to clean — all result MECA IDs are already normalized.',
+      });
+    } catch (error: any) {
+      setDataMaintResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to run MECA ID cleanup',
+      });
+    } finally {
+      setTrimmingMecaIds(false);
     }
   };
 
@@ -1874,6 +1906,64 @@ export default function SiteSettings() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Maintenance */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-700 pb-3">
+          <Database className="h-6 w-6 text-teal-500" />
+          <div>
+            <h3 className="text-xl font-semibold text-white">Data Maintenance</h3>
+            <p className="text-sm text-gray-400">
+              One-click data cleanups. Safe to re-run — they only fix rows that need it.
+            </p>
+          </div>
+        </div>
+
+        {dataMaintResult && (
+          <div className={`flex items-center gap-3 p-4 rounded-lg ${
+            dataMaintResult.type === 'success' ? 'bg-green-900/30 border border-green-700' : 'bg-red-900/30 border border-red-700'
+          }`}>
+            {dataMaintResult.type === 'success' ? (
+              <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+            )}
+            <p className={dataMaintResult.type === 'success' ? 'text-green-300' : 'text-red-300'}>
+              {dataMaintResult.message}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-teal-500" />
+              <h4 className="font-semibold text-white">Clean Up Result MECA IDs</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Removes stray spaces from MECA IDs in competition results (imported spreadsheets can
+              carry them, breaking member links). Run once after a deploy or big import.
+            </p>
+            <button
+              onClick={handleTrimMecaIds}
+              disabled={trimmingMecaIds}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {trimmingMecaIds ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Cleaning...
+                </>
+              ) : (
+                <>
+                  <Database className="h-4 w-4" />
+                  Run Cleanup
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

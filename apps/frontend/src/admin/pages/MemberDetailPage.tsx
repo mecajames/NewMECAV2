@@ -5245,18 +5245,41 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
         overrideReason.trim()
       );
 
-      // Same-user reassignment (e.g. reverting a renewal to the member's
-      // original MECA ID): the backend asks for explicit confirmation and
-      // reports how many competition results will move with the change.
+      // The backend asks for explicit confirmation in two cases and reports
+      // how many competition results will move with the change:
+      // - same_user: reverting a renewal to the member's original MECA ID.
+      // - other_user: TAKEOVER — the ID is held by a different account (e.g.
+      //   a stray launch signup was auto-assigned a legacy member's number).
+      //   Confirming strips it from that account and merges results here.
       if (result.requiresConfirmation && result.confirmation) {
         const c = result.confirmation;
-        const endStr = c.sourceEndDate ? new Date(c.sourceEndDate).toLocaleDateString() : 'unknown';
-        const confirmMsg =
-          `MECA ID ${newMecaId} is assigned to this same member, on ${c.sourceExpired ? `an EXPIRED membership (ended ${endStr})` : 'another of their memberships'}.\n\n` +
-          `Reassign ${newMecaId} to this membership?\n\n` +
-          (c.resultsToMove > 0
-            ? `This will also MOVE ${c.resultsToMove} competition result(s) from the freed ID ${c.freeingMecaId} onto ${newMecaId}, and free up ${c.freeingMecaId}.`
-            : `No competition results need to move. ID ${c.freeingMecaId} will be freed up.`);
+        let confirmMsg: string;
+        let isTakeover = false;
+        if (c.conflictType === 'other_user') {
+          isTakeover = true;
+          const holder = [c.holderName, c.holderEmail].filter(Boolean).join(' — ') || 'another user';
+          confirmMsg =
+            `⚠️ CROSS-ACCOUNT TAKEOVER\n\n` +
+            `MECA ID ${newMecaId} is currently held by ${holder}.\n\n` +
+            `Confirming will:\n` +
+            `• STRIP ${newMecaId} from that account — it will be left WITHOUT a MECA ID\n` +
+            ((c.resultsUnderNewId ?? 0) > 0
+              ? `• The ${c.resultsUnderNewId} existing result(s) under ${newMecaId} will now belong to THIS member\n`
+              : '') +
+            (c.resultsToMove > 0
+              ? `• MOVE ${c.resultsToMove} result(s) from this member's current ID ${c.freeingMecaId} onto ${newMecaId} (histories merge)\n`
+              : '') +
+            (c.freeingMecaId ? `• Free up ID ${c.freeingMecaId}\n` : '') +
+            `\nOnly do this if ${newMecaId} rightfully belongs to THIS member. Continue?`;
+        } else {
+          const endStr = c.sourceEndDate ? new Date(c.sourceEndDate).toLocaleDateString() : 'unknown';
+          confirmMsg =
+            `MECA ID ${newMecaId} is assigned to this same member, on ${c.sourceExpired ? `an EXPIRED membership (ended ${endStr})` : 'another of their memberships'}.\n\n` +
+            `Reassign ${newMecaId} to this membership?\n\n` +
+            (c.resultsToMove > 0
+              ? `This will also MOVE ${c.resultsToMove} competition result(s) from the freed ID ${c.freeingMecaId} onto ${newMecaId}, and free up ${c.freeingMecaId}.`
+              : `No competition results need to move. ID ${c.freeingMecaId} will be freed up.`);
+        }
         if (!window.confirm(confirmMsg)) {
           setOverrideLoading(false);
           return;
@@ -5266,7 +5289,8 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
           newMecaId,
           overridePassword.trim(),
           overrideReason.trim(),
-          true,
+          !isTakeover,
+          isTakeover,
         );
         alert(confirmed.message || 'MECA ID reassigned successfully!');
         setShowMecaIdOverrideModal(false);

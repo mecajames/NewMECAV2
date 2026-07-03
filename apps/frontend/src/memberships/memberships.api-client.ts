@@ -867,16 +867,23 @@ export const membershipsApi = {
     superAdminPassword: string,
     reason: string,
     confirmReassign: boolean = false,
+    // Cross-user takeover confirmation: strips the ID from another user's
+    // account (leaving it without a MECA ID) and assigns it here, merging
+    // this member's results onto the taken-over ID.
+    confirmTakeover: boolean = false,
   ): Promise<{
     success: boolean;
     requiresConfirmation?: boolean;
     confirmation?: {
-      conflictType: 'same_user';
-      sourceMembershipId: string;
-      sourceExpired: boolean;
-      sourceEndDate: string | null;
+      conflictType: 'same_user' | 'other_user';
+      sourceMembershipId?: string;
+      sourceExpired?: boolean;
+      sourceEndDate?: string | null;
       holderEmail: string | null;
+      holderName?: string | null;
+      holderMembershipCount?: number;
       resultsToMove: number;
+      resultsUnderNewId?: number;
       freeingMecaId: string | null;
     };
     membership?: Membership;
@@ -887,6 +894,7 @@ export const membershipsApi = {
       superAdminPassword,
       reason,
       confirmReassign,
+      confirmTakeover,
     });
     return response.data;
   },

@@ -2399,16 +2399,23 @@ export class MembershipsService {
     adminUserId: string,
     reason: string,
     confirmReassign: boolean = false,
+    // Cross-user takeover: strip the ID from another user's profile/
+    // membership(s) and give it to this membership. Requires its own
+    // explicit confirmation — the holder is left WITHOUT a MECA ID.
+    confirmTakeover: boolean = false,
   ): Promise<{
     success: boolean;
     requiresConfirmation?: boolean;
     confirmation?: {
-      conflictType: 'same_user';
-      sourceMembershipId: string;
-      sourceExpired: boolean;
-      sourceEndDate: string | null;
+      conflictType: 'same_user' | 'other_user';
+      sourceMembershipId?: string;
+      sourceExpired?: boolean;
+      sourceEndDate?: string | null;
       holderEmail: string | null;
+      holderName?: string | null;
+      holderMembershipCount?: number;
       resultsToMove: number;
+      resultsUnderNewId?: number;
       freeingMecaId: string | null;
     };
     membership?: Membership;
@@ -2435,27 +2442,18 @@ export class MembershipsService {
 
     // --- Conflict detection ---------------------------------------------------
     // A MECA ID can belong to (a) another PROFILE (profiles.meca_id is UNIQUE),
-    // or (b) one or more other MEMBERSHIPS. We treat "another USER holds it" as
-    // a hard block, but "the SAME user holds it on another (usually expired)
-    // membership" as a reassignment/revert that the admin can confirm — that's
-    // the common case of restoring a member's original ID after a renewal
-    // mistakenly minted a new one.
+    // or (b) one or more other MEMBERSHIPS. "The SAME user holds it on another
+    // (usually expired) membership" is a reassignment/revert the admin can
+    // confirm — restoring a member's original ID after a renewal mistakenly
+    // minted a new one. "Another USER holds it" is a TAKEOVER: allowed for
+    // super-admins with its own explicit confirmation (real case: at launch a
+    // stray signup got auto-assigned a legacy member's special ID — the ID and
+    // its results belong to the returning legacy member, not the holder).
 
-    // (a) PROFILE held by a DIFFERENT user → hard block.
-    if (userId) {
-      const conflictingProfile = await em.findOne(Profile, {
-        meca_id: String(newMecaId),
-        id: { $ne: userId },
-      });
-      if (conflictingProfile) {
-        const who = conflictingProfile.email
-          || [conflictingProfile.first_name, conflictingProfile.last_name].filter(Boolean).join(' ').trim()
-          || conflictingProfile.id;
-        throw new BadRequestException(
-          `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
-        );
-      }
-    }
+    // (a) PROFILE held by a DIFFERENT user.
+    const conflictingProfile = userId
+      ? await em.findOne(Profile, { meca_id: String(newMecaId), id: { $ne: userId } })
+      : null;
 
     // (b) MEMBERSHIP(s) holding the ID.
     const otherMemberships = await em.find(
@@ -2463,12 +2461,66 @@ export class MembershipsService {
       { mecaId: newMecaId, id: { $ne: membershipId } },
       { populate: ['user'] },
     );
-    const differentUserMembership = otherMemberships.find(m => m.user?.id && m.user.id !== userId);
-    if (differentUserMembership) {
-      const who = differentUserMembership.user?.email || differentUserMembership.user?.id || differentUserMembership.id;
-      throw new BadRequestException(
-        `MECA ID ${newMecaId} is assigned to another user (${who}) and cannot be used.`,
+    const differentUserMemberships = otherMemberships.filter(m => m.user?.id && m.user.id !== userId);
+
+    if (conflictingProfile || differentUserMemberships.length > 0) {
+      const holderProfile = conflictingProfile || differentUserMemberships[0].user!;
+      const holderEmail = (holderProfile as any)?.email ?? null;
+      const holderName = [
+        (holderProfile as any)?.first_name,
+        (holderProfile as any)?.last_name,
+      ].filter(Boolean).join(' ').trim() || null;
+
+      if (!confirmTakeover) {
+        const [resultsToMove, resultsUnderNewId] = await Promise.all([
+          oldMecaId != null
+            ? this.competitionResultsService.countResultsForMecaId(String(oldMecaId))
+            : Promise.resolve(0),
+          this.competitionResultsService.countResultsForMecaId(String(newMecaId)),
+        ]);
+        return {
+          success: false,
+          requiresConfirmation: true,
+          confirmation: {
+            conflictType: 'other_user',
+            holderEmail,
+            holderName,
+            holderMembershipCount: differentUserMemberships.length,
+            resultsToMove,
+            resultsUnderNewId,
+            freeingMecaId: oldMecaId != null ? String(oldMecaId) : null,
+          },
+          message:
+            `MECA ID ${newMecaId} is currently held by ${holderName || holderEmail || 'another user'}. ` +
+            `Confirming will strip it from that account (leaving it WITHOUT a MECA ID) and assign it here.`,
+        };
+      }
+
+      // --- Confirmed takeover: release the ID from the other user ----------
+      for (const other of differentUserMemberships) {
+        (other as any).mecaId = null;
+        try {
+          const { MecaIdHistory } = await import('./meca-id-history.entity');
+          const release = new MecaIdHistory();
+          release.mecaId = newMecaId;
+          release.membership = other;
+          release.assignedAt = new Date();
+          release.expiredAt = new Date();
+          release.notes = `SUPER ADMIN TAKEOVER by ${adminUserId}: MECA ID ${newMecaId} released from this membership and reassigned to membership ${membershipId}. Reason: ${reason}`;
+          em.persist(release);
+        } catch { /* history is best-effort */ }
+      }
+      if (conflictingProfile) {
+        conflictingProfile.meca_id = null as any;
+      }
+      this.logger.warn(
+        `SUPER ADMIN TAKEOVER: releasing MECA ID ${newMecaId} from ${holderEmail || 'unknown holder'} ` +
+        `(${differentUserMemberships.length} membership(s)${conflictingProfile ? ' + profile' : ''}) → membership ${membershipId}`,
       );
+      // Flush the RELEASE before the apply below: profiles.meca_id is UNIQUE,
+      // and clearing the holder + assigning the new owner in one flush can
+      // execute in an order that trips the constraint.
+      await em.flush();
     }
     const sameUserSource = otherMemberships.find(m => m.user?.id && m.user.id === userId);
 
@@ -2534,6 +2586,7 @@ export class MembershipsService {
       historyRecord.assignedAt = new Date();
       historyRecord.notes = `SUPER ADMIN OVERRIDE by ${adminUserId}: Changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
         (sameUserSource ? ` Reverted to member's own ID (source membership ${sameUserSource.id}).` : '') +
+        (confirmTakeover ? ` Taken over from another account (confirmed cross-user takeover).` : '') +
         ` Reason: ${reason}`;
       em.persist(historyRecord);
       await em.flush();
@@ -2541,11 +2594,15 @@ export class MembershipsService {
       this.logger.error('Failed to create MECA ID history record (non-fatal):', historyError);
     }
 
-    // On a same-user reassignment, move the competition results that were
-    // earned under the id we just freed (oldMecaId) onto the id the member is
-    // keeping (newMecaId), so their history/standings stay under one ID.
+    // Move the competition results that were earned under the id we just
+    // freed (oldMecaId) onto the id the member is keeping (newMecaId), so
+    // their history/standings stay under one ID. Applies to same-user
+    // reverts AND confirmed cross-user takeovers (the member's recent
+    // results merge with the history already sitting under the taken-over
+    // ID — e.g. a legacy member reclaiming their original number).
+    const tookOver = confirmTakeover && (conflictingProfile != null || differentUserMemberships.length > 0);
     let movedResults = 0;
-    if (sameUserSource && oldMecaId != null) {
+    if ((sameUserSource || tookOver) && oldMecaId != null) {
       try {
         movedResults = await this.competitionResultsService.reassignMecaId(String(oldMecaId), String(newMecaId));
       } catch (err) {
@@ -2563,6 +2620,7 @@ export class MembershipsService {
       membership,
       message:
         `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
+        (tookOver ? ` The ID was released from its previous holder (that account now has no MECA ID).` : '') +
         (movedResults ? ` Moved ${movedResults} competition result(s) from ${oldMecaId} to ${newMecaId}.` : ''),
     };
   }

@@ -1120,6 +1120,9 @@ export class MembershipsController {
       superAdminPassword: string;
       reason: string;
       confirmReassign?: boolean;
+      // Cross-user takeover confirmation: strip the ID from another user's
+      // account and assign it to this membership (merges results).
+      confirmTakeover?: boolean;
     },
   ): Promise<{
     success: boolean;
@@ -1153,6 +1156,7 @@ export class MembershipsController {
       profile?.id || 'unknown',
       data.reason,
       data.confirmReassign === true,
+      data.confirmTakeover === true,
     );
 
     return result;

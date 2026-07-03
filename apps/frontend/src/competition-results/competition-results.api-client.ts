@@ -346,6 +346,16 @@ export const competitionResultsApi = {
   },
 
   /**
+   * Admin data maintenance — trim stray whitespace off meca_id in
+   * competition results (re-imports produced " 260014"-style values that
+   * broke member links). Idempotent; returns how many rows were fixed.
+   */
+  trimMecaIds: async (): Promise<{ updated: number }> => {
+    const response = await axios.post('/api/competition-results/admin/trim-meca-ids');
+    return response.data;
+  },
+
+  /**
    * Admin-only — list every result whose class_id can't be resolved
    * (deleted/inactive class AND no text fallback match). These rows
    * are hidden from public results pages but tracked here so an
