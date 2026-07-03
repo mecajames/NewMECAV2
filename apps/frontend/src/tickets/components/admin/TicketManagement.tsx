@@ -167,38 +167,78 @@ function MultiSelectDropdown<T extends string>({
   );
 }
 
+// All filters are multi-select. Empty array = no filter on that field.
+// Status defaults to the 7 "non-terminal" values (matches the legacy
+// 'active' synthetic group) so the admin queue doesn't show
+// Resolved/Closed unless the admin explicitly opts in.
+const ACTIVE_STATUSES: TicketStatus[] = [
+  'open', 'in_progress', 'awaiting_response',
+  'pending_internal_review', 'escalated', 'on_hold', 'reopened',
+];
+
+// ---------------------------------------------------------------------
+// Working-state persistence. Opening a ticket unmounts this component
+// (separate route), which used to throw away every filter/tab/search the
+// agent had set — resolving ONE ticket dumped them back on the default
+// view. The full queue state is snapshotted to sessionStorage on every
+// change and restored on mount. The agent's starred DEFAULT view still
+// applies, but only on a fresh session (no snapshot yet), so it never
+// stomps the view they were just working in.
+const QUEUE_STATE_KEY = 'admin-ticket-queue-state-v1';
+interface QueueSnapshot {
+  activeTab: 'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold';
+  searchQuery: string;
+  statusFilter: TicketStatus[];
+  priorityFilter: TicketPriority[];
+  departmentFilter: string[];
+  assigneeFilter: string[];
+  lastReplyFilter: '' | 'staff' | 'customer' | 'none';
+  waitingOnFilter: '' | 'customer' | 'staff' | 'nobody';
+  page: number;
+  showFilters: boolean;
+  activeSystemFilterId: string | null;
+  activePresetId: string | null;
+}
+function loadQueueSnapshot(): QueueSnapshot | null {
+  try {
+    const raw = sessionStorage.getItem(QUEUE_STATE_KEY);
+    return raw ? (JSON.parse(raw) as QueueSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold'>('all');
+
+  // Restore the previous queue state (if any) exactly once per mount,
+  // BEFORE the useState initializers below read from it.
+  const snapshotRef = useRef<QueueSnapshot | null | undefined>(undefined);
+  if (snapshotRef.current === undefined) snapshotRef.current = loadQueueSnapshot();
+  const snap = snapshotRef.current;
+
+  const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold'>(snap?.activeTab ?? 'all');
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [_statsLoading, setStatsLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(snap?.page ?? 1);
   const [totalPages, setTotalPages] = useState(1);
 
   // Filters
-  const [showFilters, setShowFilters] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  // All filters are now multi-select. Empty array = no filter on that
-  // field. Status defaults to the 7 "non-terminal" values (matches the
-  // legacy 'active' synthetic group) so the admin queue doesn't show
-  // Resolved/Closed unless the admin explicitly opts in.
-  const ACTIVE_STATUSES: TicketStatus[] = [
-    'open', 'in_progress', 'awaiting_response',
-    'pending_internal_review', 'escalated', 'on_hold', 'reopened',
-  ];
-  const [statusFilter, setStatusFilter] = useState<TicketStatus[]>(ACTIVE_STATUSES);
-  const [priorityFilter, setPriorityFilter] = useState<TicketPriority[]>([]);
-  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(snap?.showFilters ?? false);
+  const [searchQuery, setSearchQuery] = useState(snap?.searchQuery ?? '');
+  const [statusFilter, setStatusFilter] = useState<TicketStatus[]>(snap?.statusFilter ?? ACTIVE_STATUSES);
+  const [priorityFilter, setPriorityFilter] = useState<TicketPriority[]>(snap?.priorityFilter ?? []);
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>(snap?.departmentFilter ?? []);
   // Assignee filter — UUIDs of assigned staff, plus the sentinel
   // 'unassigned' for tickets with no assignee. Empty = no filter.
-  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>(snap?.assigneeFilter ?? []);
   // "Who replied last" filter. Single-select since the three buckets
   // (staff, customer, none) are mutually exclusive on any given
   // ticket. Empty string = no filter.
-  const [lastReplyFilter, setLastReplyFilter] = useState<'' | 'staff' | 'customer' | 'none'>('');
+  const [lastReplyFilter, setLastReplyFilter] = useState<'' | 'staff' | 'customer' | 'none'>(snap?.lastReplyFilter ?? '');
   // Staff list for the Assignee dropdown — fetched once on mount.
   const [staffList, setStaffList] = useState<TicketStaffResponse[]>([]);
   // Transient feedback after Save / Reset / Apply preset actions.
@@ -217,11 +257,52 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // filters strip. Clicking one resolves '$me' placeholders to the
   // current user's id and applies the filter to the queue.
   const [systemFilters, setSystemFilters] = useState<SystemFilter[]>([]);
-  const [activeSystemFilterId, setActiveSystemFilterId] = useState<string | null>(null);
+  const [activeSystemFilterId, setActiveSystemFilterId] = useState<string | null>(snap?.activeSystemFilterId ?? null);
+  // Which SAVED view is currently applied — highlights its chip. Cleared
+  // the moment the agent manually changes any filter (the queue is then a
+  // custom, unsaved filter set).
+  const [activePresetId, setActivePresetId] = useState<string | null>(snap?.activePresetId ?? null);
   // Filter by the derived waiting_on enum ('customer'|'staff'|'nobody').
   // Set by system filter chips that include it; can also be set
   // explicitly via the filter panel.
-  const [waitingOnFilter, setWaitingOnFilter] = useState<'' | 'customer' | 'staff' | 'nobody'>('');
+  const [waitingOnFilter, setWaitingOnFilter] = useState<'' | 'customer' | 'staff' | 'nobody'>(snap?.waitingOnFilter ?? '');
+
+  // Snapshot the working state on every change so returning from a ticket
+  // restores the exact view (see QUEUE_STATE_KEY above).
+  useEffect(() => {
+    try {
+      const snapshot: QueueSnapshot = {
+        activeTab, searchQuery, statusFilter, priorityFilter, departmentFilter,
+        assigneeFilter, lastReplyFilter, waitingOnFilter, page, showFilters,
+        activeSystemFilterId, activePresetId,
+      };
+      sessionStorage.setItem(QUEUE_STATE_KEY, JSON.stringify(snapshot));
+    } catch { /* storage blocked/full — non-fatal */ }
+  }, [activeTab, searchQuery, statusFilter, priorityFilter, departmentFilter,
+    assigneeFilter, lastReplyFilter, waitingOnFilter, page, showFilters,
+    activeSystemFilterId, activePresetId]);
+
+  // Deviation tracking: a view chip stays highlighted only while the filter
+  // state still matches what applying that view produced. Any manual change
+  // breaks the match and deselects the chips ("Custom filters"). Signature-
+  // based rather than a consumed-once flag so StrictMode double-effects,
+  // no-op applies, and the mount restore are all harmless.
+  const filtersSignature = JSON.stringify([
+    activeTab, statusFilter, priorityFilter, departmentFilter,
+    assigneeFilter, lastReplyFilter, waitingOnFilter,
+  ]);
+  const appliedSignatureRef = useRef<string | null>(null);
+  if (appliedSignatureRef.current === null) {
+    // First render: whatever state we restored/initialized IS the applied view.
+    appliedSignatureRef.current = filtersSignature;
+  }
+  useEffect(() => {
+    if (appliedSignatureRef.current === filtersSignature) return;
+    appliedSignatureRef.current = filtersSignature;
+    setActivePresetId(null);
+    setActiveSystemFilterId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersSignature]);
 
   const fetchStats = async () => {
     setStatsLoading(true);
@@ -320,7 +401,14 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       const def = rows.find((r) => r.is_default && r.is_owner);
       if (def) {
         setDefaultPresetId(def.id);
-        applyPresetCriteria(def);
+        // Apply the starred default only on a FRESH visit. When the agent
+        // is returning from a ticket, the sessionStorage snapshot has
+        // already restored the exact view they were in — stomping it with
+        // the default was the "my filters reset every time" bug.
+        if (!snapshotRef.current) {
+          applyPresetCriteria(def);
+          setActivePresetId(def.id);
+        }
       }
     }).catch(() => { /* non-fatal */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,17 +427,31 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       if (typeof v === 'string' && v) return v.split(',').map(s => s.trim()).filter(Boolean);
       return [];
     };
-    setStatusFilter(asArray(c.status) as TicketStatus[]);
-    setPriorityFilter(asArray(c.priority) as TicketPriority[]);
-    setDepartmentFilter(asArray(c.department));
-    setAssigneeFilter(asArray(c.assigned_to_id));
-    setLastReplyFilter((c.last_reply_by as any) || '');
+    const nextStatus = asArray(c.status) as TicketStatus[];
+    const nextPriority = asArray(c.priority) as TicketPriority[];
+    const nextDepartment = asArray(c.department);
+    const nextAssignee = asArray(c.assigned_to_id);
+    const nextLastReply = ((c.last_reply_by as any) || '') as '' | 'staff' | 'customer' | 'none';
+    // Pre-register the resulting state as "applied by a view" so the
+    // deviation tracker keeps the chip highlighted.
+    appliedSignatureRef.current = JSON.stringify([
+      'all', nextStatus, nextPriority, nextDepartment, nextAssignee, nextLastReply, '',
+    ]);
+    setStatusFilter(nextStatus);
+    setPriorityFilter(nextPriority);
+    setDepartmentFilter(nextDepartment);
+    setAssigneeFilter(nextAssignee);
+    setLastReplyFilter(nextLastReply);
+    // Presets don't store waiting_on — clear any lingering quick-view value
+    // so the applied view means exactly what it says.
+    setWaitingOnFilter('');
     setActiveTab('all');
     setActiveSystemFilterId(null);
   };
 
   const applyPreset = (preset: SavedTicketFilter) => {
     applyPresetCriteria(preset);
+    setActivePresetId(preset.id);
     setSavedFilterMsg(`Applied "${preset.name}"`);
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
@@ -361,12 +463,23 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
    */
   const applySystemFilter = (filter: SystemFilter) => {
     const resolved = resolveSystemFilterCriteria(filter.criteria, currentUserId);
-    setStatusFilter(resolved.status ? [resolved.status as TicketStatus] : []);
-    setPriorityFilter(resolved.priority ? [resolved.priority as TicketPriority] : []);
-    setDepartmentFilter(resolved.department ? [resolved.department] : []);
-    setAssigneeFilter(resolved.assigned_to_id ? [resolved.assigned_to_id] : []);
+    const nextStatus = resolved.status ? [resolved.status as TicketStatus] : [];
+    const nextPriority = resolved.priority ? [resolved.priority as TicketPriority] : [];
+    const nextDepartment = resolved.department ? [resolved.department] : [];
+    const nextAssignee = resolved.assigned_to_id ? [resolved.assigned_to_id] : [];
+    const nextWaitingOn = ((resolved.waiting_on as any) || '') as '' | 'customer' | 'staff' | 'nobody';
+    // Pre-register the resulting state as "applied by a view" — see
+    // appliedSignatureRef.
+    appliedSignatureRef.current = JSON.stringify([
+      'all', nextStatus, nextPriority, nextDepartment, nextAssignee, '', nextWaitingOn,
+    ]);
+    setActivePresetId(null);
+    setStatusFilter(nextStatus);
+    setPriorityFilter(nextPriority);
+    setDepartmentFilter(nextDepartment);
+    setAssigneeFilter(nextAssignee);
     setLastReplyFilter('');
-    setWaitingOnFilter((resolved.waiting_on as any) || '');
+    setWaitingOnFilter(nextWaitingOn);
     setActiveTab('all');
     setActiveSystemFilterId(filter.id);
     setPage(1);
@@ -379,7 +492,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       alert(`You can save up to ${MAX_PRESETS} filter presets. Delete one first.`);
       return;
     }
-    const name = window.prompt('Name this filter:');
+    const name = window.prompt('Name this view:');
     if (!name || !name.trim()) return;
     try {
       const created = await savedTicketFiltersApi.create({
@@ -393,6 +506,8 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         },
       });
       setPresets((prev) => [...prev, created]);
+      // The current filters ARE this view's criteria — highlight it.
+      setActivePresetId(created.id);
       setSavedFilterMsg(`Saved "${created.name}"`);
       setTimeout(() => setSavedFilterMsg(null), 2000);
     } catch (err: any) {
@@ -494,6 +609,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     setWaitingOnFilter('');
     setAssigneeFilter([]);
     setActiveSystemFilterId(null);
+    setActivePresetId(null);
     setSavedFilterMsg('Filter reset.');
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
@@ -514,6 +630,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     setLastReplyFilter('');
     setWaitingOnFilter('');
     setActiveSystemFilterId(null);
+    setActivePresetId(null);
     setPage(1);
     setSavedFilterMsg('Filters cleared.');
     setTimeout(() => setSavedFilterMsg(null), 2000);
@@ -684,103 +801,117 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         ))}
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by name, MECA ID, email, subject, or ticket #..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 px-4 py-3 rounded-xl transition-colors ${
-            showFilters ? 'bg-orange-600 text-white' : 'bg-slate-800 border border-slate-700 text-gray-300 hover:bg-slate-700'
-          }`}
-        >
-          <Filter className="w-4 h-4" />
-          Filters
-          {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        {hasActiveFilters && (
+      {/* Queue controls — search + views in ONE card so the queue's current
+          "lens" reads as a single unit instead of loose strips. Views come in
+          two rows: Quick views (standard, server-defined, same for every
+          agent) and My views (the agent's saved filter sets — star one as
+          the default that loads on a fresh visit). Exactly one view chip
+          highlights at a time; manually changing any filter deselects it
+          (you're then on a custom, unsaved filter set). */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 space-y-3">
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by name, MECA ID, email, subject, or ticket #..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-slate-900/60 border border-slate-700 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
           <button
-            onClick={handleClearAllFilters}
-            title="Clear the search box, active tab, and all filters"
-            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl transition-colors ${
+              showFilters ? 'bg-orange-600 text-white' : 'bg-slate-900/60 border border-slate-700 text-gray-300 hover:bg-slate-700'
+            }`}
           >
-            <X className="w-4 h-4" />
-            Clear filters
+            <Filter className="w-4 h-4" />
+            Filters
+            {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
-        )}
-      </div>
-
-      {/* System filter chips - hardcoded server-side, identical for
-          every agent. Replaces the legacy localStorage button strip
-          ("My Open Requests", "New and Client Replied", etc) so the
-          labels are consistent and the criteria are guaranteed to
-          actually match the label semantics. */}
-      {systemFilters.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-gray-400 mr-1 flex items-center gap-1">
-            <Bolt className="w-3 h-3" />
-            Quick filters:
-          </span>
-          {systemFilters.map((f) => {
-            const isActive = activeSystemFilterId === f.id;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => applySystemFilter(f)}
-                title={f.description}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors border ${
-                  isActive
-                    ? 'bg-orange-500 text-white border-orange-400'
-                    : 'bg-slate-700 hover:bg-slate-600 text-gray-200 border-slate-600'
-                }`}
-              >
-                {SYSTEM_FILTER_ICONS[f.icon] ?? <span className="w-2 h-2 rounded-full bg-current" />}
-                {f.label}
-              </button>
-            );
-          })}
+          {hasActiveFilters && (
+            <button
+              onClick={handleClearAllFilters}
+              title="Clear the search box, active tab, and all filters"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-700 text-gray-300 hover:bg-slate-700 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Clear filters
+            </button>
+          )}
         </div>
-      )}
 
-      {/* Saved filter presets - server-backed via saved_ticket_filters.
-          Each agent gets up to MAX_PRESETS named combinations that
-          sync across devices. Owners can star a default (auto-loads
-          on mount), toggle team-share (other staff see it read-only),
-          or delete. Shared filters from other agents appear too but
-          are read-only and badged with their owner's name. */}
-      {(presets.length > 0 || showFilters) && (
+        {/* Quick views - hardcoded server-side, identical for every agent. */}
+        {systemFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-400 w-24 shrink-0 flex items-center gap-1">
+              <Bolt className="w-3 h-3" />
+              Quick views:
+            </span>
+            {systemFilters.map((f) => {
+              const isActive = activeSystemFilterId === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => applySystemFilter(f)}
+                  title={f.description}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors border ${
+                    isActive
+                      ? 'bg-orange-500 text-white border-orange-400'
+                      : 'bg-slate-700 hover:bg-slate-600 text-gray-200 border-slate-600'
+                  }`}
+                >
+                  {SYSTEM_FILTER_ICONS[f.icon] ?? <span className="w-2 h-2 rounded-full bg-current" />}
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* My views - server-backed saved filter sets (saved_ticket_filters).
+            Each agent gets up to MAX_PRESETS named combinations that sync
+            across devices. Star one as the DEFAULT (loads on a fresh visit;
+            returning from a ticket restores whatever you were on instead).
+            Owners can rename / update-to-current / team-share / delete via
+            the icons that appear on hover. Shared views from other agents
+            appear read-only, badged with the owner's name. */}
         <div className="flex flex-wrap items-center gap-2">
-          {presets.length > 0 && (
-            <span className="text-xs text-gray-400 mr-1">Saved filters:</span>
+          <span className="text-xs text-gray-400 w-24 shrink-0 flex items-center gap-1">
+            <Star className="w-3 h-3" />
+            My views:
+          </span>
+          {presets.length === 0 && (
+            <span className="text-xs text-gray-500 italic">
+              None yet — set your filters, then save them as a view.
+            </span>
           )}
           {presets.map((preset) => {
             const isDefault = preset.is_default && preset.is_owner;
+            const isApplied = activePresetId === preset.id;
             const ownerLabel = !preset.is_owner && preset.owner
               ? ` (by ${preset.owner.first_name || preset.owner.email || 'staff'})`
               : '';
             return (
               <div
                 key={preset.id}
-                className="group inline-flex items-center bg-slate-700 hover:bg-slate-600 rounded-full pl-2 pr-1 py-1 text-xs text-white border border-slate-600 transition-colors"
+                className={`group inline-flex items-center rounded-full pl-2 pr-1.5 py-1 text-xs text-white border transition-colors ${
+                  isApplied
+                    ? 'bg-orange-500 border-orange-400'
+                    : 'bg-slate-700 hover:bg-slate-600 border-slate-600'
+                }`}
               >
                 {preset.is_owner ? (
                   <button
                     type="button"
                     onClick={() => handleToggleDefault(preset.id)}
-                    title={isDefault ? 'Default (auto-loads on page open). Click to unset.' : 'Set as default - auto-loads next time you open this page.'}
+                    title={isDefault ? 'Your default view (loads when you open this page). Click to unset.' : 'Set as your default view — loads every time you open this page.'}
                     className="mr-1.5 hover:scale-110 transition-transform"
                   >
                     <Star
-                      className={`w-3.5 h-3.5 ${isDefault ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}
+                      className={`w-3.5 h-3.5 ${isDefault ? 'text-yellow-400 fill-yellow-400' : isApplied ? 'text-orange-200 hover:text-white' : 'text-gray-500 hover:text-gray-300'}`}
                     />
                   </button>
                 ) : (
@@ -790,25 +921,30 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                   type="button"
                   onClick={() => applyPreset(preset)}
                   className="px-1 font-medium"
-                  title="Apply this filter"
+                  title="Apply this view"
                 >
                   {preset.name}{ownerLabel}
                 </button>
+                {isDefault && (
+                  <span className={`ml-1 rounded px-1 text-[9px] font-semibold uppercase tracking-wide ${isApplied ? 'bg-white/20 text-white' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                    default
+                  </span>
+                )}
                 {preset.is_owner && (
-                  <>
+                  <span className="hidden group-hover:inline-flex group-focus-within:inline-flex items-center">
                     <button
                       type="button"
                       onClick={() => handleRenamePreset(preset)}
-                      title="Rename this filter"
-                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-white transition-colors"
+                      title="Rename this view"
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-300 hover:text-white transition-colors"
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleUpdatePresetCriteria(preset)}
-                      title="Update this filter to the current selections"
-                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-green-400 transition-colors"
+                      title="Update this view to the current filter selections"
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-300 hover:text-green-400 transition-colors"
                     >
                       <Save className="w-3 h-3" />
                     </button>
@@ -816,33 +952,36 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       type="button"
                       onClick={() => handleToggleShare(preset.id)}
                       title={preset.is_shared_with_team ? 'Shared with team - click to make private' : 'Private - click to share with team'}
-                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-400 hover:text-blue-400 transition-colors"
+                      className="ml-1 p-0.5 rounded hover:bg-slate-500 text-gray-300 hover:text-blue-400 transition-colors"
                     >
                       <Share2 className={`w-3 h-3 ${preset.is_shared_with_team ? 'text-blue-400' : ''}`} />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeletePreset(preset.id)}
-                      title="Delete saved filter"
-                      className="ml-1 p-0.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors"
+                      title="Delete this view"
+                      className="ml-1 p-0.5 rounded hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
-                  </>
+                  </span>
                 )}
               </div>
             );
           })}
-          {showFilters && presets.filter(p => p.is_owner).length < MAX_PRESETS && (
+          {presets.filter(p => p.is_owner).length < MAX_PRESETS && (
             <button
               type="button"
               onClick={handleSavePreset}
               className="inline-flex items-center gap-1 bg-orange-600 hover:bg-orange-700 rounded-full px-3 py-1 text-xs text-white transition-colors"
-              title="Save the current filter selections as a named preset"
+              title="Save the current filter selections as a named view"
             >
               <Plus className="w-3 h-3" />
-              Save current as preset
+              Save current as view
             </button>
+          )}
+          {hasActiveFilters && !activePresetId && !activeSystemFilterId && !searchQuery.trim() && (
+            <span className="text-[11px] italic text-gray-500">Custom filters (not saved)</span>
           )}
           {/* Per-tech Signature and Canned Responses now live in the
               "My Tools" tab of this page. */}
@@ -850,7 +989,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
             <span className="text-xs text-gray-400 ml-auto">{savedFilterMsg}</span>
           )}
         </div>
-      )}
+      </div>
 
       {/* Filter Panel — multi-select on every dimension. The pill row
           above this panel persists named presets; this panel just edits
@@ -929,12 +1068,12 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
             <button
               type="button"
               onClick={handleSavePreset}
-              disabled={presets.length >= MAX_PRESETS}
+              disabled={presets.filter(p => p.is_owner).length >= MAX_PRESETS}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md transition-colors"
-              title={presets.length >= MAX_PRESETS ? `You've saved the max of ${MAX_PRESETS} filters.` : 'Name and save the current filter selections'}
+              title={presets.filter(p => p.is_owner).length >= MAX_PRESETS ? `You've saved the max of ${MAX_PRESETS} views.` : 'Name and save the current filter selections as a view'}
             >
               <Save className="w-3.5 h-3.5" />
-              Save as preset ({presets.length}/{MAX_PRESETS})
+              Save as view ({presets.filter(p => p.is_owner).length}/{MAX_PRESETS})
             </button>
             <button
               type="button"
