@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { canViewMemberContent } from '@/auth/permissions';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
-import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/notifications';
+import { useNotifications, useMarkAsRead, useMarkAllAsRead, Notification } from '@/notifications';
 import { CartIcon } from '@/shop/components/CartIcon';
 
 export default function Navbar() {
@@ -20,7 +20,6 @@ export default function Navbar() {
   const [resultsMenuOpen, setResultsMenuOpen] = useState(false);
   const [teamsResultsMenuOpen, setTeamsResultsMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [activeRulebooks, setActiveRulebooks] = useState<Rulebook[]>([]);
   const { user, profile, signOut } = useAuth();
 
@@ -129,7 +128,10 @@ export default function Navbar() {
             />
           </div>
 
-          <div className="hidden md:flex items-center space-x-4">
+          {/* Full nav needs ~1200px when logged in (all menus + cart + bell +
+              user). Below xl (tablets, incl. landscape) it overflowed and
+              clipped the user menu off-screen — so tablets get the hamburger. */}
+          <div className="hidden xl:flex items-center space-x-1.5 2xl:space-x-3">
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -405,7 +407,7 @@ export default function Navbar() {
             </div>
 
             {user ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 2xl:gap-2">
                 {/* Cart Icon */}
                 <CartIcon />
 
@@ -422,122 +424,26 @@ export default function Navbar() {
                 </button>
 
                 {/* Notifications Bell */}
-                <div className="relative">
-                  <button
-                    className="relative p-2 text-gray-300 hover:text-white transition-colors"
-                    onMouseEnter={() => {
-                      setNotificationsOpen(true);
-                      refetchNotifications(); // Refresh notifications when opening dropdown
-                    }}
-                    onClick={() => {
-                      setNotificationsOpen(!notificationsOpen);
-                      if (!notificationsOpen) {
-                        refetchNotifications();
-                      }
-                    }}
-                  >
-                    <Bell className="h-5 w-5" />
-                    {unreadCount > 0 && (
-                      <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {notificationsOpen && (
-                    <>
-                      {/* Invisible bridge to prevent dropdown from closing */}
-                      <div className="absolute top-full right-0 h-2 w-full" />
-                      <div
-                        className="absolute top-full right-0 mt-2 w-80"
-                        onMouseLeave={() => setNotificationsOpen(false)}
-                      >
-                      <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2 max-h-96 overflow-y-auto">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
-                          <h3 className="font-semibold text-white">Notifications</h3>
-                          {unreadCount > 0 && (
-                            <button
-                              onClick={handleMarkAllNotificationsRead}
-                              className="text-xs text-orange-500 hover:text-orange-400"
-                            >
-                              Mark all read
-                            </button>
-                          )}
-                        </div>
-
-                        {notifications.length === 0 ? (
-                          <div className="px-4 py-8 text-center text-gray-500">
-                            No notifications
-                          </div>
-                        ) : (
-                          notifications.map((notification) => (
-                            <button
-                              key={notification.id}
-                              onClick={() => {
-                                handleMarkNotificationRead(notification.id);
-                                if (notification.link) {
-                                  const isInternal = notification.link.startsWith('/');
-                                  const isExternal = notification.link.startsWith('http');
-                                  if (isExternal) {
-                                    window.open(notification.link, '_blank', 'noopener,noreferrer');
-                                  } else if (isInternal) {
-                                    navigate(notification.link === '/dashboard' ? '/dashboard/mymeca?tab=overview' : notification.link);
-                                  } else if (notification.link.includes('.')) {
-                                    // Looks like a domain (e.g. google.com) — open as external with https
-                                    window.open(`https://${notification.link}`, '_blank', 'noopener,noreferrer');
-                                  } else {
-                                    // Internal path without leading slash
-                                    const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
-                                    navigate(targetPath);
-                                  }
-                                  setNotificationsOpen(false);
-                                }
-                              }}
-                              className={`block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0 ${
-                                !notification.read ? 'bg-slate-750' : ''
-                              }`}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-sm font-medium text-white">
-                                      {notification.title}
-                                    </h4>
-                                    {!notification.read && (
-                                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-gray-400 mt-1">
-                                    {notification.message}
-                                  </p>
-                                  {notification.fromUser && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      From: {`${notification.fromUser.first_name || ''} ${notification.fromUser.last_name || ''}`.trim() || notification.fromUser.email}
-                                    </p>
-                                  )}
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString()}
-                                  </p>
-                                </div>
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <NotificationsBell
+                  notifications={notifications}
+                  unreadCount={unreadCount}
+                  hoverMode
+                  onOpen={refetchNotifications}
+                  onMarkAllRead={handleMarkAllNotificationsRead}
+                  onMarkRead={handleMarkNotificationRead}
+                />
 
                 {/* User Menu */}
                 <div className="relative"
                   onMouseEnter={() => setUserMenuOpen(true)}
                   onMouseLeave={() => setUserMenuOpen(false)}
                 >
-                  <button className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors">
-                    <User className="h-4 w-4" />
-                    {profile?.first_name || profile?.email || 'Account'}
-                    <ChevronDown className="h-4 w-4" />
+                  <button className="flex items-center gap-2 px-2 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-slate-800 hover:text-white transition-colors">
+                    <User className="h-4 w-4 flex-shrink-0" />
+                    <span className="max-w-[8rem] 2xl:max-w-[12rem] truncate">
+                      {profile?.first_name || profile?.email || 'Account'}
+                    </span>
+                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
                   </button>
 
                   {userMenuOpen && (
@@ -629,7 +535,19 @@ export default function Navbar() {
             )}
           </div>
 
-          <div className="md:hidden">
+          {/* Compact cluster (phones + tablets): cart and bell stay reachable
+              outside the hamburger, since the panel doesn't include them. */}
+          <div className="xl:hidden flex items-center gap-1">
+            <CartIcon />
+            {user && (
+              <NotificationsBell
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onOpen={refetchNotifications}
+                onMarkAllRead={handleMarkAllNotificationsRead}
+                onMarkRead={handleMarkNotificationRead}
+              />
+            )}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-md text-gray-300 hover:text-white hover:bg-slate-800"
@@ -641,7 +559,7 @@ export default function Navbar() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 top-16 z-50 bg-slate-800 overflow-y-auto overscroll-contain">
+        <div className="xl:hidden fixed inset-0 top-16 z-50 bg-slate-800 overflow-y-auto overscroll-contain">
           <div className="px-2 pt-2 pb-6 space-y-1">
             {navItems.map((item) => (
               <button
@@ -966,5 +884,146 @@ export default function Navbar() {
         </div>
       )}
     </nav>
+  );
+}
+
+/**
+ * Bell icon + notifications dropdown. Rendered in two places: the desktop
+ * (≥xl) nav cluster with hover-to-open, and the compact cluster next to the
+ * hamburger on phones/tablets with tap-to-open. Module-level (not nested in
+ * Navbar's render) so its open state survives parent re-renders.
+ */
+function NotificationsBell({
+  notifications,
+  unreadCount,
+  hoverMode,
+  onOpen,
+  onMarkAllRead,
+  onMarkRead,
+}: {
+  notifications: Notification[];
+  unreadCount: number;
+  /** Open on hover too (desktop). Compact/touch usage omits it. */
+  hoverMode?: boolean;
+  onOpen: () => void;
+  onMarkAllRead: () => void;
+  onMarkRead: (notificationId: string) => void;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  const handleNotificationClick = (notification: Notification) => {
+    onMarkRead(notification.id);
+    if (notification.link) {
+      const isInternal = notification.link.startsWith('/');
+      const isExternal = notification.link.startsWith('http');
+      if (isExternal) {
+        window.open(notification.link, '_blank', 'noopener,noreferrer');
+      } else if (isInternal) {
+        navigate(notification.link === '/dashboard' ? '/dashboard/mymeca?tab=overview' : notification.link);
+      } else if (notification.link.includes('.')) {
+        // Looks like a domain (e.g. google.com) — open as external with https
+        window.open(`https://${notification.link}`, '_blank', 'noopener,noreferrer');
+      } else {
+        // Internal path without leading slash
+        const targetPath = notification.link === 'dashboard' ? '/dashboard/mymeca?tab=overview' : `/${notification.link}`;
+        navigate(targetPath);
+      }
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        className="relative p-2 text-gray-300 hover:text-white transition-colors"
+        onMouseEnter={
+          hoverMode
+            ? () => {
+                setOpen(true);
+                onOpen(); // Refresh notifications when opening dropdown
+              }
+            : undefined
+        }
+        onClick={() => {
+          setOpen(!open);
+          if (!open) {
+            onOpen();
+          }
+        }}
+      >
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          {/* Invisible bridge to prevent dropdown from closing */}
+          <div className="absolute top-full right-0 h-2 w-full" />
+          <div
+            className="absolute top-full right-0 mt-2 w-80 max-w-[calc(100vw-1rem)]"
+            onMouseLeave={hoverMode ? () => setOpen(false) : undefined}
+          >
+            <div className="bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-2 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
+                <h3 className="font-semibold text-white">Notifications</h3>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={onMarkAllRead}
+                    className="text-xs text-orange-500 hover:text-orange-400"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              {notifications.length === 0 ? (
+                <div className="px-4 py-8 text-center text-gray-500">
+                  No notifications
+                </div>
+              ) : (
+                notifications.map((notification) => (
+                  <button
+                    key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
+                    className={`block w-full text-left px-4 py-3 hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0 ${
+                      !notification.read ? 'bg-slate-750' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-medium text-white">
+                            {notification.title}
+                          </h4>
+                          {!notification.read && (
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {notification.message}
+                        </p>
+                        {notification.fromUser && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            From: {`${notification.fromUser.first_name || ''} ${notification.fromUser.last_name || ''}`.trim() || notification.fromUser.email}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

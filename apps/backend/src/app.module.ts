@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { GlobalAuthGuard } from './auth/global-auth.guard';
+import { ThrottlerBehindProxyGuard } from './auth/throttler-behind-proxy.guard';
 import { MaintenanceModeGuard } from './auth/maintenance-mode.guard';
 import { ActiveMembershipGuard } from './auth/active-membership.guard';
 import { AppController } from './app.controller';
@@ -165,10 +166,12 @@ import { SecurityModule } from './security/security.module';
   controllers: [AppController],
   providers: [
     AppService,
-    // Apply rate limiting globally to all endpoints
+    // Apply rate limiting globally to all endpoints. Proxy-aware tracker:
+    // prod sits behind Cloudflare + nginx, and without it every visitor
+    // shares one per-"IP" throttle bucket (site-wide 429s).
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: ThrottlerBehindProxyGuard,
     },
     // Apply authentication globally - endpoints must use @Public() to opt out
     {
