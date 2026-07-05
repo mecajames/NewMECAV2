@@ -24,6 +24,7 @@ import {
   MultiDayResultsMode,
   EventAssignmentStatus,
   AssignmentRequestType,
+  MembershipStatus,
 } from '@newmeca/shared';
 import { randomUUID } from 'crypto';
 import { EmailService } from '../email/email.service';
@@ -400,6 +401,15 @@ export class EventsService {
       console.log('📝 CREATE MULTI-DAY EVENT - Day Multipliers:', dayMultipliers);
       console.log('📝 CREATE MULTI-DAY EVENT - Results Mode:', multiDayResultsMode);
 
+      // ONE OVERALL TALLY (like World Finals: qualifying days, then results
+      // tabulated on the finals day): EVERY day still gets its own event row
+      // so the public calendar shows the full schedule — but results are
+      // entered ONCE, on the FINAL day. Non-final day rows of a single-tally
+      // group are hidden from results entry and from the public results
+      // browser (see carriesResults in the frontend events api-client), so
+      // competitors never see an empty "Day 1" results listing.
+      const singleTally = multiDayResultsMode === MultiDayResultsMode.SINGLE_TALLY;
+
       // Generate a shared group ID for all days of this event
       const multiDayGroupId = randomUUID();
 
@@ -481,7 +491,7 @@ export class EventsService {
         // Set the date for this specific day
         transformedData.eventDate = dayDate;
 
-        // Set multi-day fields
+        // Set multi-day fields — every day gets a row (full calendar).
         transformedData.multiDayGroupId = multiDayGroupId;
         transformedData.dayNumber = dayNum;
 
@@ -489,12 +499,20 @@ export class EventsService {
         if (multiDayResultsMode) {
           transformedData.multiDayResultsMode = multiDayResultsMode;
         }
+        if (singleTally) {
+          // duration_days on every row lets any consumer decide "is this the
+          // results-carrying final day?" (day_number === duration_days).
+          transformedData.durationDays = numberOfDays;
+        }
 
         // Append day number to description
         const baseDescription = data.description || '';
-        transformedData.description = baseDescription
-          ? `${baseDescription}\n\n(Day ${dayNum} of ${numberOfDays})`
+        const dayNote = singleTally
+          ? `(Day ${dayNum} of ${numberOfDays} — results for the whole event are entered on Day ${numberOfDays})`
           : `(Day ${dayNum} of ${numberOfDays})`;
+        transformedData.description = baseDescription
+          ? `${baseDescription}\n\n${dayNote}`
+          : dayNote;
 
         // Handle registration deadline - only set on day 1
         if (dayNum === 1 && (data as any).registration_deadline) {
@@ -954,8 +972,12 @@ export class EventsService {
       throw new BadRequestException(`Event is not completed. Current status: ${event.status}`);
     }
 
-    // Find all registrations for this event with confirmed status or checked in
-    // EventRegistration has registrationStatus field and uses 'user' for the profile relationship
+    // Recipients come from TWO sources, deduped by email:
+    //   1) Site registrations (confirmed or checked-in) — the original source.
+    //   2) Competitors in the event's RESULTS who hold an ACTIVE membership.
+    // Source 2 is essential: most results are imported from score sheets, so
+    // competitors usually never registered on the site — registrations alone
+    // made real events report "no eligible participants found".
     const registrations = await em.find(
       EventRegistration,
       {
@@ -968,8 +990,30 @@ export class EventsService {
       { populate: ['user'] }
     );
 
-    if (registrations.length === 0) {
-      return { sent: 0, failed: 0, errors: ['No eligible participants found for this event'] };
+    // Distinct MECA IDs from this event's results (trimmed — imported rows
+    // can carry stray spaces; skip the 999999/0 guest sentinels).
+    const resultIdRows: Array<{ meca_id: string }> = await em.getConnection().execute(
+      `SELECT DISTINCT trim(meca_id) AS meca_id
+         FROM public.competition_results
+        WHERE event_id = ?
+          AND trim(meca_id) ~ '^[0-9]+$'
+          AND trim(meca_id) NOT IN ('999999', '0')`,
+      [eventId],
+    );
+    const resultMecaIds = resultIdRows.map((r) => r.meca_id);
+    const resultProfiles = resultMecaIds.length > 0
+      ? await em.find(Profile, {
+          meca_id: { $in: resultMecaIds },
+          membership_status: MembershipStatus.ACTIVE,
+        })
+      : [];
+
+    if (registrations.length === 0 && resultProfiles.length === 0) {
+      return {
+        sent: 0,
+        failed: 0,
+        errors: ['No eligible participants found for this event (no site registrations, and no competitors in the results hold an active membership)'],
+      };
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://meca.com';
@@ -979,17 +1023,31 @@ export class EventsService {
     let failed = 0;
     const errors: string[] = [];
 
+    // Unified recipient list. Registrations first (they may carry a fresher
+    // contact email than the profile), then results-based active members.
+    const recipients: Array<{ email?: string | null; firstName?: string | null; userId?: string; sourceLabel: string }> = [
+      ...registrations.map((registration) => ({
+        email: registration.email || registration.user?.email,
+        firstName: registration.firstName || registration.user?.first_name,
+        userId: registration.user?.id,
+        sourceLabel: `Registration ${registration.id}`,
+      })),
+      ...resultProfiles.map((profile) => ({
+        email: profile.email,
+        firstName: profile.first_name,
+        userId: profile.id,
+        sourceLabel: `Competitor ${profile.meca_id}`,
+      })),
+    ];
+
     // Track emails sent to avoid duplicates
     const sentEmails = new Set<string>();
 
-    // Send email to each participant
-    for (const registration of registrations) {
-      // Use email from registration or from user profile
-      const email = registration.email || registration.user?.email;
-      const firstName = registration.firstName || registration.user?.first_name;
+    for (const recipient of recipients) {
+      const { email, firstName } = recipient;
 
       if (!email) {
-        errors.push(`Registration ${registration.id} has no email`);
+        errors.push(`${recipient.sourceLabel} has no email`);
         failed++;
         continue;
       }
@@ -1016,9 +1074,9 @@ export class EventsService {
           errors.push(`Failed to send to ${email}: ${result.error}`);
         }
 
-        if (registration.user?.id) {
+        if (recipient.userId) {
           await this.notificationsService.createForUser({
-            userId: registration.user.id,
+            userId: recipient.userId,
             title: `Rate your experience at ${event.title}`,
             message: `How was the event? Take a moment to share your feedback.`,
             type: 'info',

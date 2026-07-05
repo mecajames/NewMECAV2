@@ -1,7 +1,26 @@
 import axios from '@/lib/axios';
 import { uploadFile } from '@/api-client/uploads.api-client';
 
-export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points';
+export type MultiDayResultsMode = 'separate' | 'combined_score' | 'combined_points' | 'single_tally';
+
+/**
+ * Whether this event row is the one that carries competition results.
+ *
+ * Single-tally multi-day events show EVERY day on the public calendar, but
+ * results are entered ONCE — on the FINAL day (like World Finals: qualifying
+ * days, then everything tabulated on the finals day). Non-final day rows of
+ * a single-tally group must be hidden from results ENTRY (admin + ED) and
+ * from the public results browser, so competitors never see an empty
+ * "Day 1" results listing. The events CALENDAR is untouched — every day
+ * still shows there.
+ */
+export function carriesResults(
+  event: Pick<Event, 'multi_day_results_mode' | 'day_number' | 'duration_days'>,
+): boolean {
+  if (event.multi_day_results_mode !== 'single_tally') return true;
+  if (!event.day_number || !event.duration_days) return true;
+  return event.day_number >= event.duration_days;
+}
 
 export interface Event {
   id: string;
@@ -38,6 +57,8 @@ export interface Event {
   multi_day_group_id?: string;
   day_number?: number;
   multi_day_results_mode?: MultiDayResultsMode;
+  // Days this single row spans (single-tally multi-day events only).
+  duration_days?: number | null;
   created_at: string;
   updated_at: string;
   event_director?: any;

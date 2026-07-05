@@ -543,6 +543,14 @@ export default function AdminDashboard() {
           navigateTo: '/admin/email-testing',
         },
         {
+          icon: Mail,
+          title: 'Birthday Emails',
+          description: 'Automatic member birthday greetings — template, upcoming list, send status',
+          action: 'birthday-emails',
+          color: 'pink',
+          navigateTo: '/admin/birthdays',
+        },
+        {
           icon: Settings,
           title: 'Site Settings',
           description: 'Configure homepage and site-wide settings',

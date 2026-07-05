@@ -353,13 +353,20 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
             dayDates.push(convertToISO(formData.day3_date)!);
           }
 
-          // Collect per-day multipliers
-          const dayMultipliers: number[] = [parseInt(formData.day1_multiplier)];
-          if (numberOfDays >= 2) {
-            dayMultipliers.push(parseInt(formData.day2_multiplier));
-          }
-          if (numberOfDays >= 3) {
-            dayMultipliers.push(parseInt(formData.day3_multiplier));
+          // Collect per-day multipliers. A single-tally event has one set of
+          // results (final day), so the single Points Multiplier applies to
+          // every day row; per-day modes use the per-day selects.
+          const dayMultipliers: number[] =
+            formData.multi_day_results_mode === 'single_tally'
+              ? Array(numberOfDays).fill(parseInt(formData.points_multiplier))
+              : [parseInt(formData.day1_multiplier)];
+          if (formData.multi_day_results_mode !== 'single_tally') {
+            if (numberOfDays >= 2) {
+              dayMultipliers.push(parseInt(formData.day2_multiplier));
+            }
+            if (numberOfDays >= 3) {
+              dayMultipliers.push(parseInt(formData.day3_multiplier));
+            }
           }
 
           console.log('📤 FRONTEND - Creating multi-day event:', numberOfDays, 'days');
@@ -1163,6 +1170,28 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   />
                 </div>
 
+                {/* When EDITING, show how this event's results are tallied.
+                    The tally structure is set at creation (it decides how
+                    many event rows exist), so here it's informational. */}
+                {editingEvent && (editingEvent.duration_days || editingEvent.day_number || editingEvent.multi_day_results_mode) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Results Tally
+                    </label>
+                    <div className="px-4 py-3 bg-slate-700/60 border border-slate-600 rounded-lg text-sm text-gray-200">
+                      {editingEvent.multi_day_results_mode === 'single_tally' && editingEvent.duration_days
+                        ? `Day ${editingEvent.day_number ?? '?'} of a ${editingEvent.duration_days}-day event with ONE overall results tally — all days show on the calendar; results are entered on Day ${editingEvent.duration_days}${editingEvent.day_number === editingEvent.duration_days ? ' (this day)' : ''}.`
+                        : editingEvent.day_number
+                          ? `Day ${editingEvent.day_number} of a multi-day event — results are tallied for each day separately.`
+                          : 'Multi-day event — results are tallied per day.'}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The tally structure is chosen when the event is created and can't be changed here
+                      (it determines how many event entries exist).
+                    </p>
+                  </div>
+                )}
+
                 {/* Number of Days - only show when creating new event */}
                 {!editingEvent && (
                   <div className="md:col-span-2">
@@ -1178,10 +1207,39 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                       <option value="2">2 Days (Multi-Day Event)</option>
                       <option value="3">3 Days (Multi-Day Event)</option>
                     </select>
+
+                    {/* How results are tallied for a multi-day event. This
+                        decides how many event rows get created, so it lives
+                        right under the day count where directors can't miss
+                        it. "One overall tally" creates a SINGLE event (no
+                        blank Day 2 on the public results). */}
                     {parseInt(formData.number_of_days) > 1 && (
-                      <p className="text-xs text-orange-400 mt-1">
-                        A separate event entry will be created for each day in the calendar.
-                      </p>
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          How are results tallied? *
+                        </label>
+                        <select
+                          value={formData.multi_day_results_mode}
+                          onChange={(e) => setFormData({ ...formData, multi_day_results_mode: e.target.value as MultiDayResultsMode })}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="separate">Results tallied for EACH day — every day has its own results entry and results listing</option>
+                          <option value="single_tally">ONE overall tally — results entered once, on the final day (like World Finals)</option>
+                          <option value="combined_score">Combined Score (legacy) — per-day events; scores summed across days</option>
+                          <option value="combined_points">Combined Points (legacy) — per-day events; points summed across days</option>
+                        </select>
+                        {formData.multi_day_results_mode === 'single_tally' ? (
+                          <p className="text-xs text-green-400 mt-1">
+                            Every day still appears on the events calendar. Results are entered ONCE — on the
+                            final day — and competitors see a single results listing for the whole event
+                            (no empty "Day 1" results).
+                          </p>
+                        ) : (
+                          <p className="text-xs text-orange-400 mt-1">
+                            Every day appears on the calendar AND has its own results entry and results listing.
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1557,8 +1615,10 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                   </div>
                 </div>
 
-                {/* Points Multiplier - show single select for single-day, per-day for multi-day */}
-                {parseInt(formData.number_of_days) === 1 || editingEvent ? (
+                {/* Points Multiplier — one select for single-day events,
+                    single-tally multi-day events (one row = one multiplier),
+                    and edits; per-day selects for per-day multi-day events. */}
+                {parseInt(formData.number_of_days) === 1 || editingEvent || formData.multi_day_results_mode === 'single_tally' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Points Multiplier *
@@ -1634,23 +1694,6 @@ export default function EventManagement({ onViewResults }: EventManagementProps 
                       </p>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Multi-Day Results Mode
-                      </label>
-                      <select
-                        value={formData.multi_day_results_mode}
-                        onChange={(e) => setFormData({ ...formData, multi_day_results_mode: e.target.value as MultiDayResultsMode })}
-                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="separate">Separate - Each day calculated independently</option>
-                        <option value="combined_score">Combined Score - Sum scores across days, then calculate points</option>
-                        <option value="combined_points">Combined Points - Calculate each day's points, then sum totals</option>
-                      </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Determines how results and points are calculated across event days
-                      </p>
-                    </div>
                   </div>
                 )}
 

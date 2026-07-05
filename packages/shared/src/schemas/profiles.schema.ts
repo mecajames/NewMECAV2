@@ -8,6 +8,8 @@ export const CreateProfileSchema = z.object({
   last_name: z.string().min(1).optional(),
   full_name: z.string().optional(),
   phone: z.string().optional(),
+  // PRIVATE birthday (YYYY-MM-DD) — drives the automated birthday email only.
+  birthday: z.string().nullable().optional(),
   role: UserRoleSchema.optional().default(UserRole.USER),
   membership_status: MembershipStatusSchema.optional().default(MembershipStatus.NONE),
   membership_expiry: z.coerce.date().optional(),
@@ -31,6 +33,7 @@ export const ProfileSchema = z.object({
   last_name: z.string().nullable(),
   full_name: z.string().nullable(),
   phone: z.string().nullable(),
+  birthday: z.string().nullable().optional(),
   role: UserRoleSchema,
   membership_status: MembershipStatusSchema,
   membership_expiry: z.coerce.date().nullable(),

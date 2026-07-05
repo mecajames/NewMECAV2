@@ -29,6 +29,9 @@ export default function EventsPage() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
+  // Date sort for the list: 'soonest' puts the nearest event date at the
+  // top (natural for a calendar); 'latest' puts the furthest-out first.
+  const [sortOrder, setSortOrder] = useState<'soonest' | 'latest'>('soonest');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -201,8 +204,15 @@ export default function EventsPage() {
       });
     }
 
+    // Sort by event date. 'soonest' = ascending (nearest date at the top),
+    // 'latest' = descending (furthest-out first).
+    result.sort((a, b) => {
+      const diff = new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      return sortOrder === 'soonest' ? diff : -diff;
+    });
+
     return result;
-  }, [events, filter, dateRangeFilter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate]);
+  }, [events, filter, dateRangeFilter, selectedCountry, selectedState, selectedMultiplier, searchTerm, selectedDate, sortOrder]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -423,30 +433,60 @@ export default function EventsPage() {
             </div>
           </div>
 
-          {/* Third Row: Status Filter */}
+          {/* Third Row: Status Filter + Date Sort */}
           <div>
-            <div className="flex items-center gap-2 text-gray-300 mb-2">
-              <Filter className="h-4 w-4" />
-              <span className="font-medium">Event Status</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: 'all', label: 'All Events' },
-                { value: 'upcoming', label: 'Upcoming' },
-                { value: 'completed', label: 'Completed' },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setFilter(option.value as EventStatus | 'all')}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                    filter === option.value
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-gray-300 mb-2">
+                  <Filter className="h-4 w-4" />
+                  <span className="font-medium">Event Status</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'all', label: 'All Events' },
+                    { value: 'upcoming', label: 'Upcoming' },
+                    { value: 'completed', label: 'Completed' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setFilter(option.value as EventStatus | 'all')}
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                        filter === option.value
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date sort — soonest event first (default) or furthest-out first */}
+              <div>
+                <div className="flex items-center gap-2 text-gray-300 mb-2">
+                  <Calendar className="h-4 w-4" />
+                  <span className="font-medium">Sort by Date</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'soonest', label: 'Soonest First' },
+                    { value: 'latest', label: 'Latest First' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setSortOrder(option.value as 'soonest' | 'latest')}
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                        sortOrder === option.value
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Date Range Sub-filter - shown when Upcoming or Completed is selected */}

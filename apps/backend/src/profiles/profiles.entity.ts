@@ -28,6 +28,11 @@ export class Profile {
   @Property({ type: 'text', nullable: true })
   phone?: string;
 
+  // PRIVATE birthday — set by the member in their profile; never shown
+  // publicly. Only used by the automated birthday email (BirthdaysService).
+  @Property({ type: 'date', nullable: true })
+  birthday?: string;
+
   @Property({ type: 'text', nullable: true })
   address?: string;
 

@@ -182,6 +182,7 @@ const AnalyticsPage = lazy(() => import('@/admin/pages/AnalyticsPage'));
 const MemberActivityDashboardPage = lazy(() => import('@/admin/pages/MemberActivityDashboardPage'));
 const SearchConsolePage = lazy(() => import('@/admin/pages/SearchConsolePage'));
 const SEOSettingsPage = lazy(() => import('@/admin/pages/SEOSettingsPage'));
+const BirthdaysAdminPage = lazy(() => import('@/admin/pages/BirthdaysAdminPage'));
 const WorldRecordsPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsPage'));
 const WorldRecordsAdminPage = lazy(() => import('@/spl-world-records/pages/WorldRecordsAdminPage'));
 const HallOfFameAdminPage = lazy(() => import('@/hall-of-fame/pages/HallOfFameAdminPage'));
@@ -443,6 +444,7 @@ function App() {
               <Route path="/admin/member-activity" element={<L><MemberActivityDashboardPage /></L>} />
               <Route path="/admin/search-console" element={<L><SearchConsolePage /></L>} />
               <Route path="/admin/seo-settings" element={<L><SEOSettingsPage /></L>} />
+              <Route path="/admin/birthdays" element={<L><BirthdaysAdminPage /></L>} />
 
               {/* Admin Membership Cards */}
               <Route path="/admin/membership-cards" element={<L><MembershipCardsAdminPage /></L>} />

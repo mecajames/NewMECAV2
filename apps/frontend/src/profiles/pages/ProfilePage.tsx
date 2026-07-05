@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Calendar, Shield, CreditCard, Lock, ArrowLeft, Phone, MapPin, Building, Pencil, Save, X, Users, Car, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import ChangePassword from '@/profiles/components/ChangePassword';
 import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
@@ -28,6 +28,9 @@ function getStateName(stateCode: string, countryCode: string): string {
 
 interface AddressFormData {
   phone: string;
+  // Private birthday (YYYY-MM-DD) — drives the automated birthday email
+  // only; never shown publicly.
+  birthday: string;
   address: string;
   city: string;
   state: string;
@@ -77,6 +80,7 @@ export default function ProfilePage() {
 
   const [formData, setFormData] = useState<AddressFormData>({
     phone: '',
+    birthday: '',
     address: '',
     city: '',
     state: '',
@@ -140,6 +144,7 @@ export default function ProfilePage() {
     if (profile && !isViewingSecondary) {
       setFormData({
         phone: profile.phone || '',
+        birthday: (profile as any).birthday ? String((profile as any).birthday).slice(0, 10) : '',
         address: profile.address || '',
         city: profile.city || '',
         state: profile.state || '',
@@ -243,8 +248,12 @@ export default function ProfilePage() {
         setSelectedProfile(updatedProfile);
         setSelectedMembership(updatedMembership);
       } else if (profile?.id) {
-        // Save own profile
-        await profilesApi.update(profile.id, formData);
+        // Save own profile. Empty birthday must go over as null — an empty
+        // string is not a valid date for the DB column.
+        await profilesApi.update(profile.id, {
+          ...formData,
+          birthday: formData.birthday || null,
+        } as any);
 
         // Save vehicle info for primary membership
         if (primaryMembership) {
@@ -294,6 +303,7 @@ export default function ProfilePage() {
       // Reset own profile form data
       setFormData({
         phone: profile.phone || '',
+        birthday: (profile as any).birthday ? String((profile as any).birthday).slice(0, 10) : '',
         address: profile.address || '',
         city: profile.city || '',
         state: profile.state || '',
@@ -1030,6 +1040,39 @@ export default function ProfilePage() {
                       </>
                     )}
                   </div>
+
+                  {/* Birthday — PRIVATE. Only drives the automated birthday
+                      email; never shown on any public page. */}
+                  <div>
+                    {isEditing ? (
+                      <>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Birthday <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.birthday}
+                          onChange={(e) => setFormData(prev => ({ ...prev, birthday: e.target.value }))}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Never shown publicly — we only use it to send you a birthday greeting from the MECA team.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                          Birthday <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <div className="bg-slate-700 px-4 py-3 rounded-lg text-white flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-gray-400" />
+                          {(profile as any).birthday
+                            ? new Date(String((profile as any).birthday).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                            : 'Not set'}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1457,87 +1500,15 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Privacy panel — controls first-party page-tracking. The toggle
-                writes profile.analytics_opt_out; when true, the backend
-                /api/analytics/track-page endpoint silently discards page views
-                from this account. */}
-            <PrivacySettingsPanel />
+            {/* NOTE: the member-facing "Privacy / activity tracking" opt-out
+                panel that used to live here was REMOVED on James's order
+                (2026-07-04): activity tracking is part of the membership
+                agreement — every member is tracked, no member-facing toggle.
+                The backend no longer honors analytics_opt_out and a
+                migration reset any existing opt-outs. */}
 
             </>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PrivacySettingsPanel() {
-  const { profile, refreshProfile } = useAuth() as any;
-  const [optOut, setOptOut] = useState<boolean>(profile?.analytics_opt_out ?? false);
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
-
-  // Sync local state if the profile loads/refreshes after this component mounts.
-  useEffect(() => {
-    setOptOut(profile?.analytics_opt_out ?? false);
-  }, [profile?.analytics_opt_out]);
-
-  const toggle = async () => {
-    if (!profile?.id) return;
-    const next = !optOut;
-    setOptOut(next);  // optimistic
-    setSaving(true);
-    try {
-      await profilesApi.update(profile.id, { analytics_opt_out: next });
-      setSavedAt(new Date());
-      if (typeof refreshProfile === 'function') {
-        await refreshProfile();
-      }
-    } catch (err) {
-      // Revert on failure
-      setOptOut(!next);
-      console.error('Failed to update privacy preference:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="bg-slate-800 rounded-xl p-6 shadow-lg mt-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center">
-          <Eye className="h-5 w-5 text-orange-500" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Privacy</h2>
-      </div>
-      <div className="bg-slate-700 rounded-lg p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h3 className="text-white font-semibold mb-1">Activity tracking for logged-in members</h3>
-            <p className="text-gray-400 text-sm leading-relaxed">
-              When enabled, MECA records the pages you visit, time spent on each, your operating system,
-              browser, and approximate location. This is used to improve the platform and to help admins
-              support you when you need help. Anonymous traffic is always tracked separately by Google
-              Analytics regardless of this setting.
-            </p>
-          </div>
-          <button
-            onClick={toggle}
-            disabled={saving}
-            className={`flex-shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${optOut ? 'bg-slate-500' : 'bg-orange-600'}`}
-            aria-label={optOut ? 'Tracking off — click to enable' : 'Tracking on — click to disable'}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${optOut ? 'translate-x-1' : 'translate-x-6'}`} />
-          </button>
-        </div>
-        <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-          {optOut ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          <span>
-            {optOut
-              ? 'Activity tracking is OFF. Your page visits are not being recorded.'
-              : 'Activity tracking is ON. You can turn it off any time.'}
-            {savedAt && <span className="ml-2 text-emerald-500">Saved.</span>}
-          </span>
         </div>
       </div>
     </div>

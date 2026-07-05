@@ -57,6 +57,7 @@ import { TrainingRecordsModule } from './training-records/training-records.modul
 import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
 import { BannersModule } from './banners/banners.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { BirthdaysModule } from './birthdays/birthdays.module';
 import { PointsConfigurationModule } from './points-configuration/points-configuration.module';
 import { StatesModule } from './states/states.module';
 import { ResultTeamsModule } from './result-teams/result-teams.module';
@@ -143,6 +144,7 @@ import { SecurityModule } from './security/security.module';
     ScheduledTasksModule,
     BannersModule,
     AnnouncementsModule,
+    BirthdaysModule,
     PointsConfigurationModule,
     StatesModule,
     ResultTeamsModule,
