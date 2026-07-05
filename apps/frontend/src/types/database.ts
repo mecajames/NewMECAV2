@@ -24,6 +24,8 @@ export interface Profile {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  // Private birthday (YYYY-MM-DD) — birthday emails only; never public.
+  birthday?: string | null;
   role: UserRole | string;
   membership_status: MembershipStatus | string;
   membership_expiry?: string;
@@ -151,6 +153,8 @@ export interface EventRegistration {
   last_name: string;
   email: string;
   phone?: string;
+  // Private birthday (YYYY-MM-DD) — birthday emails only; never public.
+  birthday?: string | null;
   vehicle_info?: string;
   competition_class?: string;
   registration_date: string;

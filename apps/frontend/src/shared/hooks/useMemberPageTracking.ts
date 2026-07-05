@@ -15,8 +15,8 @@ import { useAuth } from '@/auth/contexts/AuthContext';
  *   - Fire-and-forget. Failures are swallowed; analytics never blocks
  *     navigation.
  *
- *   - The backend honors `profile.analytics_opt_out` — even though we still
- *     post here, the server discards the row when the flag is set.
+ *   - Every member is tracked — activity tracking is part of the membership
+ *     agreement; the former analytics_opt_out toggle was removed (2026-07-04).
  */
 const SESSION_KEY = 'mecaSessionId';
 

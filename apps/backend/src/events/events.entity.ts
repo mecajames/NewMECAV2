@@ -107,9 +107,16 @@ export class Event {
   @Property({ type: 'integer', nullable: true, fieldName: 'day_number', serializedName: 'day_number' })
   dayNumber?: number;
 
-  // Multi-day results mode: separate (default), combined_score, or combined_points
+  // Multi-day results mode: separate (default), combined_score,
+  // combined_points, or single_tally (one event row for the whole show).
   @Enum({ items: () => MultiDayResultsMode, nullable: true, fieldName: 'multi_day_results_mode', serializedName: 'multi_day_results_mode' })
   multiDayResultsMode?: MultiDayResultsMode;
+
+  // How many days this single event row spans. Only set for SINGLE_TALLY
+  // multi-day events (one row, one set of results); NULL means a normal
+  // 1-day event or a per-day Day 1/Day 2/… row.
+  @Property({ type: 'integer', nullable: true, fieldName: 'duration_days', serializedName: 'duration_days' })
+  durationDays?: number;
 
   @Property({ onCreate: () => new Date(), serializedName: 'created_at' })
   createdAt: Date = new Date();

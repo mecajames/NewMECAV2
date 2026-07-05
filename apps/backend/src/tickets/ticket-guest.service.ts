@@ -13,6 +13,7 @@ import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
+import { TicketCategoriesService } from './ticket-categories.service';
 
 export interface CreateGuestTicketData {
   title: string;
@@ -84,6 +85,7 @@ export class TicketGuestService {
     private readonly emailService: EmailService,
     private readonly uploadsService: UploadsService,
     private readonly customFieldsService: TicketCustomFieldsService,
+    private readonly categoriesService: TicketCategoriesService,
   ) {}
 
   /**
@@ -400,15 +402,17 @@ export class TicketGuestService {
     // Persist custom-field answers (event_reference folded into ticket.event above).
     await this.customFieldsService.persistAnswers(em, ticket.id, customFields, data.custom_field_answers);
 
-    // Send confirmation email to guest
+    // Send confirmation email to guest. Emails show the category LABEL —
+    // rendering the raw key produced "Ma Renewal" (title-cased ma_renewal).
     const viewTicketUrl = `${this.frontendUrl}/support/guest/ticket/${accessToken}`;
+    const categoryLabel = await this.categoriesService.labelForKey(ticket.category).catch(() => ticket.category);
     this.emailService.sendTicketCreatedEmail({
       to: guestToken.email,
       firstName: data.guest_name.split(' ')[0] || undefined,
       ticketNumber: ticket.ticketNumber,
       ticketTitle: ticket.title,
       ticketDescription: ticket.description,
-      category: ticket.category,
+      category: categoryLabel,
       viewTicketUrl,
     }).catch(err => {
       this.logger.error(`Failed to send guest ticket confirmation email: ${err.message}`);
@@ -434,7 +438,8 @@ export class TicketGuestService {
   private async notifyStaffOfGuestTicket(ticket: Ticket, departmentId?: string): Promise<void> {
     const em = this.em.fork();
     const recipients: { email: string; name?: string }[] = [];
-    let departmentName = ticket.category || 'Support';
+    const categoryLabel = await this.categoriesService.labelForKey(ticket.category).catch(() => ticket.category);
+    let departmentName = categoryLabel || 'Support';
 
     try {
       if (departmentId) {
@@ -480,7 +485,7 @@ export class TicketGuestService {
           ticketNumber: ticket.ticketNumber,
           ticketTitle: ticket.title,
           ticketDescription: ticket.description,
-          category: ticket.category,
+          category: categoryLabel,
           priority: ticket.priority,
           departmentName,
           reporterName: ticket.guestName || 'Guest User',

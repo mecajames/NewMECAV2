@@ -12,7 +12,7 @@ import { Pagination } from '@/shared/components';
 
 // Local storage key for ED's completed assignments tracking (shared with EventDirectorAssignments)
 const COMPLETED_ASSIGNMENTS_KEY = 'ed_completed_assignments';
-import { eventsApi } from '@/events';
+import { eventsApi, carriesResults } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { competitionResultsApi } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
@@ -1479,8 +1479,24 @@ export default function EDEventManagementPage() {
             </div>
           )}
 
-          {/* Results Entry Tab */}
-          {activeTab === 'results' && (
+          {/* Results Entry Tab.
+              Single-tally multi-day events (one overall tally, like World
+              Finals) take results ONLY on their final day — earlier day
+              pages show a pointer instead of the entry form. */}
+          {activeTab === 'results' && event && !carriesResults(event as any) && (
+            <div className="bg-blue-900/20 border border-blue-600/40 rounded-lg p-8 text-center">
+              <Trophy className="h-10 w-10 text-blue-400 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Results are entered on the final day of this event
+              </h3>
+              <p className="text-blue-200 text-sm max-w-xl mx-auto">
+                This is Day {(event as any).day_number} of a {(event as any).duration_days}-day event with
+                ONE overall results tally. Enter all results on the Day {(event as any).duration_days} event
+                page — competitors will see a single results listing for the whole event.
+              </p>
+            </div>
+          )}
+          {activeTab === 'results' && (!event || carriesResults(event as any)) && (
             <div>
               {/* Entry Form */}
               <div className="bg-slate-700/50 rounded-lg p-6 mb-6">

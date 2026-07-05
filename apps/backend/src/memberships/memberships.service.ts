@@ -38,6 +38,7 @@ import { TeamMember } from '../teams/team-member.entity';
 import { EmailService } from '../email/email.service';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 import { StripeService } from '../stripe/stripe.service';
+import { PayPalService } from '../paypal/paypal.service';
 import { RefundService } from '../payments/refund.service';
 import { AdminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -188,6 +189,8 @@ export class MembershipsService {
     private readonly emailService: EmailService,
     @Inject(forwardRef(() => StripeService))
     private readonly stripeService: StripeService,
+    @Inject(forwardRef(() => PayPalService))
+    private readonly paypalService: PayPalService,
     private readonly refundService: RefundService,
     private readonly adminAuditService: AdminAuditService,
     private readonly adminNotificationsService: AdminNotificationsService,
@@ -1693,6 +1696,7 @@ export class MembershipsService {
     const allowEarlyRenewalForManual =
       data.paymentMethod === AdminPaymentMethod.CASH
       || data.paymentMethod === AdminPaymentMethod.CHECK
+      || data.paymentMethod === AdminPaymentMethod.PAYPAL
       || data.paymentMethod === AdminPaymentMethod.COMPLIMENTARY;
     const canPurchase = await this.canPurchaseMembership(
       data.userId,
@@ -1749,6 +1753,7 @@ export class MembershipsService {
     const isManualEarlyRenewal =
       data.paymentMethod === AdminPaymentMethod.CASH
       || data.paymentMethod === AdminPaymentMethod.CHECK
+      || data.paymentMethod === AdminPaymentMethod.PAYPAL
       || data.paymentMethod === AdminPaymentMethod.COMPLIMENTARY;
 
     if (isManualEarlyRenewal) {
@@ -1796,6 +1801,16 @@ export class MembershipsService {
         paymentStatus = PaymentStatus.PAID;
         amountPaid = Number(membershipConfig.price) + (data.hasTeamAddon ? Number(membershipConfig.teamAddonPrice || 0) : 0);
         transactionId = `CHECK-${data.checkNumber}`;
+        break;
+
+      case AdminPaymentMethod.PAYPAL:
+        // Money arrived via PayPal directly (send-money / on-site) without a
+        // site order — recorded after the fact like cash/check.
+        paymentStatus = PaymentStatus.PAID;
+        amountPaid = Number(membershipConfig.price) + (data.hasTeamAddon ? Number(membershipConfig.teamAddonPrice || 0) : 0);
+        transactionId = (data as any).paypalTransactionId
+          ? `PAYPAL-${(data as any).paypalTransactionId}`
+          : `PAYPAL-${Date.now()}`;
         break;
 
       case AdminPaymentMethod.CREDIT_CARD_INVOICE:
@@ -2785,9 +2800,10 @@ export class MembershipsService {
   async manualRenewMembership(
     sourceMembershipId: string,
     data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -2843,7 +2859,9 @@ export class MembershipsService {
 
     const transactionId = data.paymentMethod === 'check'
       ? `CHECK-${data.checkNumber}`
-      : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
+      : data.paymentMethod === 'paypal'
+        ? (data.paypalTransactionId ? `PAYPAL-${data.paypalTransactionId}` : `PAYPAL-${Date.now()}`)
+        : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
 
     // Create the renewal membership — copies everything material from the
     // source so the renewed row has the same vehicle/business/team identity.
@@ -3008,16 +3026,17 @@ export class MembershipsService {
    * Effects:
    *   - paymentStatus → PAID
    *   - amountPaid → membership type config price (or override if provided)
-   *   - transactionId → CASH-{receipt} or CHECK-{checkNumber}
+   *   - transactionId → CASH-{receipt}, CHECK-{checkNumber}, or PAYPAL-{txn}
    *   - generates Order + Invoice (so the transaction appears in billing)
    *   - audit log: membership_apply_manual_payment
    */
   async applyManualPaymentToMembership(
     membershipId: string,
     data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -3055,7 +3074,9 @@ export class MembershipsService {
     membership.amountPaid = totalAmount;
     membership.transactionId = data.paymentMethod === 'check'
       ? `CHECK-${data.checkNumber}`
-      : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
+      : data.paymentMethod === 'paypal'
+        ? (data.paypalTransactionId ? `PAYPAL-${data.paypalTransactionId}` : `PAYPAL-${Date.now()}`)
+        : (data.cashReceiptNumber ? `CASH-${data.cashReceiptNumber}` : `CASH-${Date.now()}`);
 
     // Generate Order + Invoice — same shape adminCreateMembership produces
     // for cash/check payments, so billing reports show this transaction.
@@ -3174,11 +3195,13 @@ export class MembershipsService {
     membershipId: string,
     data: {
       mode?: 'reactivate' | 'renew' | 'payment_only';
-      paymentMethod: 'cash' | 'check' | 'stripe';
+      paymentMethod: 'cash' | 'check' | 'stripe' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
       stripePaymentIntentId?: string;
       stripeSubscriptionId?: string;
+      paypalTransactionId?: string;
+      paypalSubscriptionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -3230,10 +3253,13 @@ export class MembershipsService {
     let stripeChargeId: string | undefined;
     let stripeProductName: string | undefined;
     let paidAt: Date = new Date();
-    // Captured from a Stripe subscription; applied to the end date per-mode below
-    // (NOT mutated inline, so 'payment_only' can leave the term untouched).
+    // Captured from a Stripe OR PayPal subscription; applied to the end date
+    // per-mode below (NOT mutated inline, so 'payment_only' can leave the
+    // term untouched).
     let stripePeriodEnd: Date | null = null;
     let stripeCancelAtPeriodEnd = false;
+    // Payer-email mismatch note for PayPal (see the paypal branch below).
+    let paypalPayerNote: string | null = null;
 
     if (data.paymentMethod === 'stripe') {
       const pi = (data.stripePaymentIntentId ?? '').trim();
@@ -3320,6 +3346,70 @@ export class MembershipsService {
             `(${memberEmail || 'no email on file'}). Enter the Stripe id that belongs to this member.`,
         );
       }
+    } else if (data.paymentMethod === 'paypal') {
+      // Offline PayPal: the member sent money via PayPal directly (send-money
+      // or on-site at an event) without ordering through the site. Optionally
+      // relinks the member's PayPal SUBSCRIPTION at the same time — validated
+      // LIVE against PayPal. Note: PayPal has no list-subscriptions API, so
+      // linking is always by id (the admin reads "I-..." off the PayPal
+      // dashboard or the subscription email).
+      const txn = (data.paypalTransactionId ?? '').trim();
+      const subId = (data.paypalSubscriptionId ?? '').trim();
+      let paypalAmount: number | null = null;
+
+      if (subId) {
+        let sub: any;
+        try {
+          sub = await this.paypalService.getSubscription(subId);
+        } catch {
+          throw new BadRequestException(
+            `PayPal subscription "${subId}" was not found. Check the id (it starts with "I-") in the PayPal dashboard.`,
+          );
+        }
+        const subStatus = String(sub?.status || '').toUpperCase();
+        if (!['ACTIVE', 'APPROVED'].includes(subStatus)) {
+          throw new BadRequestException(
+            `PayPal subscription ${subId} is ${subStatus || 'in an unknown state'} — only an active subscription can be linked. ` +
+              `Record the payment without the subscription id instead.`,
+          );
+        }
+
+        // Unlike Stripe (where checkout used the site email), a member's
+        // PayPal account email routinely differs from their MECA email — so a
+        // mismatch is surfaced in the result message + audit rather than
+        // hard-blocking the link. The admin explicitly typed this id.
+        const payerEmail = (sub?.subscriber?.email_address || '').trim().toLowerCase();
+        const memberEmail = (user.email || '').trim().toLowerCase();
+        if (payerEmail && memberEmail && payerEmail !== memberEmail) {
+          paypalPayerNote = `Note: the PayPal subscription's payer email (${payerEmail}) differs from this member's email (${memberEmail}) — double-check it belongs to them.`;
+        }
+
+        membership.paypalSubscriptionId = subId;
+        membership.hadLegacySubscription = false;
+
+        const nextBilling = sub?.billing_info?.next_billing_time
+          ? new Date(sub.billing_info.next_billing_time)
+          : null;
+        if (nextBilling && !isNaN(nextBilling.getTime())) {
+          stripePeriodEnd = nextBilling; // gateway period end (shared with the Stripe path)
+        }
+        const lastPayment = sub?.billing_info?.last_payment;
+        const lastPaid = parseFloat(lastPayment?.amount?.value ?? '');
+        if (Number.isFinite(lastPaid) && lastPaid > 0) paypalAmount = lastPaid;
+        if (lastPayment?.time) {
+          const t = new Date(lastPayment.time);
+          if (!isNaN(t.getTime())) paidAt = t;
+        }
+      }
+
+      // Store the transaction id so a future refund can go through the
+      // PayPal gateway (refund flow uses membership.paypalCaptureId).
+      if (txn && !membership.paypalCaptureId) {
+        membership.paypalCaptureId = txn;
+      }
+
+      amount = data.amountOverride ?? paypalAmount ?? fallbackAmount;
+      transactionId = txn ? `PAYPAL-${txn}` : (subId || `PAYPAL-${Date.now()}`);
     } else {
       if (data.paymentMethod === 'check' && !data.checkNumber) {
         throw new BadRequestException('Check number is required for check payments');
@@ -3404,7 +3494,9 @@ export class MembershipsService {
     let invoiceId: string | null = null;
     if (amount > 0) {
       const methodLabel =
-        data.paymentMethod === 'stripe' ? 'Stripe' : data.paymentMethod === 'check' ? 'Check' : 'Cash';
+        data.paymentMethod === 'stripe' ? 'Stripe'
+          : data.paymentMethod === 'paypal' ? 'PayPal'
+            : data.paymentMethod === 'check' ? 'Check' : 'Cash';
       const modeLabel = mode === 'renew' ? 'renewal' : mode === 'payment_only' ? 'balance' : 'reactivation';
       const orderNumber = `ORD-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
       const order = em.create(Order, {
@@ -3487,7 +3579,9 @@ export class MembershipsService {
       description:
         `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)} (${mode}) for ${user.email || membership.id}` +
         (stripeSubscriptionId ? ` [sub ${stripeSubscriptionId}]` : '') +
-        (stripePaymentIntentId ? ` [pi ${stripePaymentIntentId}]` : ''),
+        (stripePaymentIntentId ? ` [pi ${stripePaymentIntentId}]` : '') +
+        (membership.paypalSubscriptionId && data.paymentMethod === 'paypal' ? ` [paypal sub ${membership.paypalSubscriptionId}]` : '') +
+        (paypalPayerNote ? ` ${paypalPayerNote}` : ''),
       oldValues: { paymentStatus: oldStatus, amountPaid: oldAmount, endDate: oldEnd },
       newValues: {
         paymentStatus: PaymentStatus.PAID,
@@ -3536,8 +3630,61 @@ export class MembershipsService {
       membership,
       orderId,
       invoiceId,
-      message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)}. ${outcome}${pointsNote}`,
+      message:
+        `Recorded ${data.paymentMethod.toUpperCase()} payment of $${amount.toFixed(2)}. ${outcome}${pointsNote}` +
+        (data.paymentMethod === 'paypal' && membership.paypalSubscriptionId
+          ? ` Linked PayPal subscription ${membership.paypalSubscriptionId} (auto-renew).`
+          : '') +
+        (paypalPayerNote ? ` ${paypalPayerNote}` : ''),
       stripe: stripeResult,
+    };
+  }
+
+  /**
+   * Admin lookup: fetch a PayPal subscription by id and return a display
+   * summary. PayPal has NO list-subscriptions API (unlike Stripe), so admins
+   * find the id ("I-...") in the PayPal dashboard / subscription email and
+   * use this to verify it — status, payer, next billing — before linking it
+   * to a membership via record-payment. Also reports whether any membership
+   * already links this subscription and whether the payer email matches a
+   * member profile, so relinking orphaned subscriptions is confident.
+   */
+  async getPaypalSubscriptionSummary(subId: string) {
+    let sub: any;
+    try {
+      sub = await this.paypalService.getSubscription(subId);
+    } catch {
+      throw new NotFoundException(
+        `PayPal subscription "${subId}" was not found. Check the id (it starts with "I-") in the PayPal dashboard.`,
+      );
+    }
+
+    const em = this.em.fork();
+    const payerEmail = (sub?.subscriber?.email_address || '').trim();
+    const [linked, payerMatch] = await Promise.all([
+      em.findOne(Membership, { paypalSubscriptionId: subId }, { populate: ['user'] }),
+      payerEmail ? em.findOne(Profile, { email: payerEmail.toLowerCase() }) : Promise.resolve(null),
+    ]);
+
+    return {
+      id: sub?.id ?? subId,
+      status: String(sub?.status ?? 'UNKNOWN').toUpperCase(),
+      planId: sub?.plan_id ?? null,
+      payerEmail: payerEmail || null,
+      payerName:
+        [sub?.subscriber?.name?.given_name, sub?.subscriber?.name?.surname].filter(Boolean).join(' ') || null,
+      startTime: sub?.start_time ?? null,
+      nextBillingTime: sub?.billing_info?.next_billing_time ?? null,
+      lastPaymentAmount: sub?.billing_info?.last_payment?.amount?.value ?? null,
+      lastPaymentTime: sub?.billing_info?.last_payment?.time ?? null,
+      // Existing linkage on our side (null = orphaned / not linked yet).
+      linkedMembershipId: linked?.id ?? null,
+      linkedMemberEmail: linked?.user?.email ?? null,
+      // Member whose profile email matches the PayPal payer email.
+      payerMatchedProfileId: payerMatch?.id ?? null,
+      payerMatchedProfileName: payerMatch
+        ? [payerMatch.first_name, payerMatch.last_name].filter(Boolean).join(' ') || payerMatch.email
+        : null,
     };
   }
 

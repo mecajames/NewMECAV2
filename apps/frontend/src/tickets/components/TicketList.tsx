@@ -27,6 +27,7 @@ import {
   TicketCategory,
   TicketListQuery,
 } from '../tickets.api-client';
+import { useTicketCategoryLabels } from '../category-labels';
 
 // Member-facing status badge. Customer-friendly wording — admins use the
 // admin labels in TicketDetail / TicketManagement, not these.
@@ -115,6 +116,9 @@ export function TicketList({
   mode = 'all',
 }: TicketListProps) {
   const navigate = useNavigate();
+  // Admin-defined labels for managed category keys (e.g. 'ma_renewal' must
+  // never render as the title-cased key "Ma Renewal").
+  const managedCategoryLabel = useTicketCategoryLabels();
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -433,7 +437,7 @@ export function TicketList({
               className: 'bg-gray-500/10 text-gray-400 border-gray-500',
             };
             const category = categoryConfig[ticket.category] ?? {
-              label: String(ticket.category || 'Other').replace(/_/g, ' '),
+              label: managedCategoryLabel(ticket.category),
               className: 'bg-gray-500/10 text-gray-400',
             };
             return (

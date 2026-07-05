@@ -127,6 +127,9 @@ export interface AdminAssignMembershipDto {
 export enum AdminPaymentMethod {
   CASH = 'cash',
   CHECK = 'check',
+  // Member sent money via PayPal directly (send-money / on-site) without
+  // ordering through the site — recorded after the fact like cash/check.
+  PAYPAL = 'paypal',
   CREDIT_CARD_INVOICE = 'credit_card_invoice',
   COMPLIMENTARY = 'complimentary',
 }
@@ -168,9 +171,10 @@ export interface AdminCreateMembershipDto {
   billingPostalCode?: string;
   billingCountry?: string;
 
-  // Payment details (for cash/check)
+  // Payment details (for cash/check/paypal)
   cashReceiptNumber?: string;
   checkNumber?: string;
+  paypalTransactionId?: string;
   createInvoice?: boolean;
 
   // Admin notes
@@ -937,9 +941,10 @@ export const membershipsApi = {
   adminManualRenewMembership: async (
     sourceMembershipId: string,
     data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -967,9 +972,10 @@ export const membershipsApi = {
   adminApplyManualPayment: async (
     membershipId: string,
     data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -999,11 +1005,13 @@ export const membershipsApi = {
     membershipId: string,
     data: {
       mode?: 'reactivate' | 'renew' | 'payment_only';
-      paymentMethod: 'cash' | 'check' | 'stripe';
+      paymentMethod: 'cash' | 'check' | 'stripe' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
       stripePaymentIntentId?: string;
       stripeSubscriptionId?: string;
+      paypalTransactionId?: string;
+      paypalSubscriptionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -1017,6 +1025,33 @@ export const membershipsApi = {
     const response = await axios.post(
       `/api/memberships/${membershipId}/admin/record-payment`,
       data,
+    );
+    return response.data;
+  },
+
+  /**
+   * Admin: look up a PayPal subscription by id ("I-..."). PayPal has no
+   * list-subscriptions API — the id comes from the PayPal dashboard. Returns
+   * status/payer/next-billing plus any membership already linking it and
+   * the member profile matching the payer email (for confident relinking).
+   */
+  adminGetPaypalSubscription: async (subId: string): Promise<{
+    id: string;
+    status: string;
+    planId: string | null;
+    payerEmail: string | null;
+    payerName: string | null;
+    startTime: string | null;
+    nextBillingTime: string | null;
+    lastPaymentAmount: string | null;
+    lastPaymentTime: string | null;
+    linkedMembershipId: string | null;
+    linkedMemberEmail: string | null;
+    payerMatchedProfileId: string | null;
+    payerMatchedProfileName: string | null;
+  }> => {
+    const response = await axios.get(
+      `/api/memberships/admin/paypal-subscription/${encodeURIComponent(subId)}`,
     );
     return response.data;
   },

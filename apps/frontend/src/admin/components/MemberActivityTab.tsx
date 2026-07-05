@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from '@/lib/axios';
-import { Activity, Monitor, Smartphone, Clock, ExternalLink, EyeOff } from 'lucide-react';
+import { Activity, Monitor, Smartphone, Clock, ExternalLink } from 'lucide-react';
 
 interface PageVisit {
   id: string;
@@ -55,13 +55,14 @@ function DeviceIcon({ type }: { type?: string }) {
 }
 
 interface Props {
-  member: { id: string; analytics_opt_out?: boolean };
+  member: { id: string };
 }
 
 /**
  * Site Activity tab on the admin member detail page. Pulls per-member
- * page-view history grouped by session. Honors the member's opt-out
- * preference by displaying a notice instead of fetching when set.
+ * page-view history grouped by session. Activity tracking is part of the
+ * membership agreement — every member is tracked; the former opt-out
+ * (and its notice here) was removed on James's order (2026-07-04).
  */
 export default function MemberActivityTab({ member }: Props) {
   const [data, setData] = useState<ActivityResponse | null>(null);
@@ -71,17 +72,13 @@ export default function MemberActivityTab({ member }: Props) {
 
   useEffect(() => {
     if (!member.id) return;
-    if (member.analytics_opt_out) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(null);
     axios.get<ActivityResponse>(`/api/admin/member-activity/${member.id}?limit=200`)
       .then(res => setData(res.data))
       .catch(err => setError(err.response?.data?.message || err.message || 'Failed to load activity'))
       .finally(() => setLoading(false));
-  }, [member.id, member.analytics_opt_out]);
+  }, [member.id]);
 
   // Auto-expand the most recent session so admins see something useful immediately
   useEffect(() => {
@@ -99,19 +96,6 @@ export default function MemberActivityTab({ member }: Props) {
       return next;
     });
   };
-
-  if (member.analytics_opt_out) {
-    return (
-      <div className="bg-slate-800 rounded-xl p-8 text-center">
-        <EyeOff className="h-12 w-12 text-slate-500 mx-auto mb-3" />
-        <h3 className="text-white font-semibold mb-2">This member has opted out of activity tracking</h3>
-        <p className="text-slate-400 text-sm">
-          Their page views are not recorded. They can re-enable tracking from their account
-          Privacy panel at any time.
-        </p>
-      </div>
-    );
-  }
 
   if (loading) {
     return (

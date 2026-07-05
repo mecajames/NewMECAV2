@@ -330,6 +330,13 @@ export class ProfilesController {
       }
     }
 
+    // NO TRACKING OPT-OUT: activity tracking is part of the membership
+    // agreement — every member is tracked. The former member-facing toggle
+    // was removed (James, 2026-07-04); strip the field from ANY update so it
+    // can't be re-set via the API. (The backend tracker no longer honors it
+    // and a migration reset all existing opt-outs to false.)
+    delete (data as any).analytics_opt_out;
+
     // IDENTITY LOCK (members): once a member has a MECA ID, their legal name and
     // email are the ones captured from their credit card at checkout and the ones
     // their competition RESULTS are recorded under — they must stay in sync. A

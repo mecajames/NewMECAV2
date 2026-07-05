@@ -6,6 +6,8 @@ export interface Profile {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  // Private birthday (YYYY-MM-DD) — birthday emails only; never public.
+  birthday?: string | null;
   address?: string;
   city?: string;
   state?: string;
@@ -98,6 +100,8 @@ export interface CreateUserWithPasswordDto {
   firstName?: string;
   lastName?: string;
   phone?: string;
+  // Private birthday (YYYY-MM-DD) — birthday emails only; never public.
+  birthday?: string | null;
   role?: string;
   forcePasswordChange?: boolean;
   sendEmail?: boolean;

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Search, ChevronDown, ChevronUp, Upload, Download, FileSpreadsheet, File, Save, Calculator, Edit2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, HelpCircle, User, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from '@/lib/axios';
-import { eventsApi, Event } from '@/events';
+import { eventsApi, Event, carriesResults } from '@/events';
 import { profilesApi, Profile } from '@/profiles';
 import { competitionResultsApi } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
@@ -453,8 +453,10 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
   const fetchEvents = async () => {
     try {
       const data = await eventsApi.getAll(1, 1000);
+      // carriesResults: single-tally multi-day events accept results ONLY on
+      // their final day — earlier day rows never appear as entry targets.
       const filtered = data.filter(e =>
-        ['upcoming', 'ongoing', 'completed'].includes(e.status)
+        ['upcoming', 'ongoing', 'completed'].includes(e.status) && carriesResults(e)
       );
       setEvents(filtered);
       setFilteredEvents(filtered);

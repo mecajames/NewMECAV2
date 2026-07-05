@@ -489,12 +489,20 @@ export class PaymentFulfillmentService {
         this.logger.error(`Admin notification failed (non-critical): ${err}`);
       });
 
-      // Create billing Order and Invoice for the shop purchase
+      // Create billing Order and Invoice for the shop purchase. Without this
+      // row the sale is invisible to billing "View All Orders" and revenue,
+      // so retry once before giving up (webhook still must not fail).
       try {
         await this.shopService.createBillingOrderAndInvoice(orderId, metadata.email);
-      } catch (invoiceError) {
-        this.logger.error(`CRITICAL: Order/Invoice creation failed for shop order ${orderId}. ` +
-          `Admin can recover via POST /api/shop/admin/orders/${orderId}/create-invoice: ${invoiceError}`);
+      } catch (firstError) {
+        this.logger.warn(`Order/Invoice creation failed for shop order ${orderId}, retrying once: ${firstError}`);
+        try {
+          await new Promise((r) => setTimeout(r, 2000));
+          await this.shopService.createBillingOrderAndInvoice(orderId, metadata.email);
+        } catch (invoiceError) {
+          this.logger.error(`CRITICAL: Order/Invoice creation failed for shop order ${orderId} (after retry). ` +
+            `Recover via the Orders page backfill banner or POST /api/shop/admin/orders/${orderId}/create-invoice: ${invoiceError}`);
+        }
       }
 
       // Sync shop revenue to QuickBooks so it captures ALL income, not just

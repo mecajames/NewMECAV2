@@ -18,6 +18,34 @@ export class TicketCategoriesService {
   }
 
   /**
+   * key → label pairs for DISPLAY of stored ticket categories. Includes
+   * INACTIVE categories — old tickets keep their key forever, and rendering
+   * the raw key produced things like "Ma Renewal" (title-cased `ma_renewal`).
+   * Labels only; no audience/role/visibility data leaks.
+   */
+  async listLabels(): Promise<Array<{ key: string; label: string }>> {
+    const em = this.em.fork();
+    const cats = await em.find(TicketCategoryEntity, {}, { fields: ['key', 'label'] as any });
+    return cats.map((c) => ({ key: c.key, label: c.label }));
+  }
+
+  /**
+   * Human label for a category key — the admin-defined label when the key is
+   * a managed category, otherwise the prettified key (legacy enum values).
+   * Used by the ticket emails so members never see "Ma Renewal".
+   */
+  async labelForKey(key?: string | null): Promise<string> {
+    const k = (key || '').trim();
+    if (!k) return 'General';
+    try {
+      const em = this.em.fork();
+      const row = await em.findOne(TicketCategoryEntity, { key: k });
+      if (row?.label) return row.label;
+    } catch { /* fall back to prettified key */ }
+    return k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /**
    * Active categories for a department (public — drives the form's second
    * dropdown). Pass no department to get all active categories.
    */

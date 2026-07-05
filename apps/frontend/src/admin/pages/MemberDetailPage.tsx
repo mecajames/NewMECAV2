@@ -4733,7 +4733,12 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
   // webhook never landed, then re-syncs the profile to active.
   const [applyPaymentMembership, setApplyPaymentMembership] = useState<Membership | null>(null);
   const [applyPaymentMode, setApplyPaymentMode] = useState<'reactivate' | 'renew' | 'payment_only'>('reactivate');
-  const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check' | 'stripe'>('cash');
+  const [applyPaymentMethod, setApplyPaymentMethod] = useState<'cash' | 'check' | 'stripe' | 'paypal'>('cash');
+  // PayPal subscription linking (record-payment modal): optional "I-..." id,
+  // with a live lookup so the admin can verify status/payer before linking.
+  const [applyPaymentPaypalSub, setApplyPaymentPaypalSub] = useState('');
+  const [paypalSubLookup, setPaypalSubLookup] = useState<Awaited<ReturnType<typeof membershipsApi.adminGetPaypalSubscription>> | null>(null);
+  const [lookingUpPaypalSub, setLookingUpPaypalSub] = useState(false);
   const [applyPaymentReference, setApplyPaymentReference] = useState('');
   const [applyPaymentAmount, setApplyPaymentAmount] = useState<string>('');
   const [applyPaymentNotes, setApplyPaymentNotes] = useState('');
@@ -6974,7 +6979,7 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
               </div>
               <div>
                 <label className="text-slate-300 text-sm font-medium block mb-1">Payment method *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <button
                     onClick={() => setApplyPaymentMethod('cash')}
                     className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'cash'
@@ -6993,6 +6998,12 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                       ? 'bg-indigo-600 text-white'
                       : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
                   >Stripe (CC)</button>
+                  <button
+                    onClick={() => setApplyPaymentMethod('paypal')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${applyPaymentMethod === 'paypal'
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                  >PayPal</button>
                 </div>
               </div>
 
@@ -7026,6 +7037,83 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                     <p className="text-slate-500 text-xs mt-1">If this is a recurring membership, add the subscription so the end date is set from Stripe&apos;s billing period.</p>
                   </div>
                 </>
+              ) : applyPaymentMethod === 'paypal' ? (
+                <>
+                  <div className="rounded-lg bg-sky-950/40 border border-sky-800/50 p-3 text-xs text-sky-200">
+                    For money the member sent through PayPal directly (send-money or on-site at an event) without ordering
+                    on the site. Optionally link their PayPal <span className="font-medium">subscription</span> too — PayPal has
+                    no way to list subscriptions, so grab the id (starts with <span className="font-mono">I-</span>) from the
+                    PayPal dashboard and verify it with <span className="text-sky-100 font-medium">Look&nbsp;Up</span> before saving.
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">PayPal transaction ID (optional)</label>
+                    <input
+                      type="text"
+                      value={applyPaymentReference}
+                      onChange={(e) => setApplyPaymentReference(e.target.value)}
+                      placeholder="from the PayPal dashboard / payment email — blank for auto-generated"
+                      className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-sky-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 text-sm font-medium block mb-1">PayPal subscription (I-…) — optional</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={applyPaymentPaypalSub}
+                        onChange={(e) => { setApplyPaymentPaypalSub(e.target.value); setPaypalSubLookup(null); }}
+                        placeholder="I-BW452GLLEP1G"
+                        className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-sky-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={!applyPaymentPaypalSub.trim() || lookingUpPaypalSub}
+                        onClick={async () => {
+                          setLookingUpPaypalSub(true);
+                          setApplyPaymentError(null);
+                          try {
+                            const summary = await membershipsApi.adminGetPaypalSubscription(applyPaymentPaypalSub.trim());
+                            setPaypalSubLookup(summary);
+                          } catch (err: any) {
+                            setPaypalSubLookup(null);
+                            setApplyPaymentError(err.response?.data?.message || 'PayPal subscription lookup failed');
+                          } finally {
+                            setLookingUpPaypalSub(false);
+                          }
+                        }}
+                        className="px-3 py-2 bg-sky-700 hover:bg-sky-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+                      >
+                        {lookingUpPaypalSub ? 'Looking…' : 'Look Up'}
+                      </button>
+                    </div>
+                    <p className="text-slate-500 text-xs mt-1">Linking sets the membership's auto-renewal and its end date from PayPal&apos;s next billing date.</p>
+                    {paypalSubLookup && (
+                      <div className={`mt-2 rounded-lg border p-3 text-xs space-y-1 ${paypalSubLookup.status === 'ACTIVE'
+                        ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-100'
+                        : 'bg-amber-950/40 border-amber-700/60 text-amber-100'}`}
+                      >
+                        <div><span className="opacity-70">Status:</span> <span className="font-semibold">{paypalSubLookup.status}</span></div>
+                        {paypalSubLookup.payerName || paypalSubLookup.payerEmail ? (
+                          <div><span className="opacity-70">Payer:</span> {[paypalSubLookup.payerName, paypalSubLookup.payerEmail && `(${paypalSubLookup.payerEmail})`].filter(Boolean).join(' ')}</div>
+                        ) : null}
+                        {paypalSubLookup.nextBillingTime && (
+                          <div><span className="opacity-70">Next billing:</span> {new Date(paypalSubLookup.nextBillingTime).toLocaleDateString()}</div>
+                        )}
+                        {paypalSubLookup.lastPaymentAmount && (
+                          <div><span className="opacity-70">Last payment:</span> ${paypalSubLookup.lastPaymentAmount}{paypalSubLookup.lastPaymentTime ? ` on ${new Date(paypalSubLookup.lastPaymentTime).toLocaleDateString()}` : ''}</div>
+                        )}
+                        {paypalSubLookup.linkedMembershipId && paypalSubLookup.linkedMembershipId !== applyPaymentMembership.id && (
+                          <div className="text-amber-300 font-medium">
+                            ⚠ Already linked to another membership{paypalSubLookup.linkedMemberEmail ? ` (${paypalSubLookup.linkedMemberEmail})` : ''}.
+                          </div>
+                        )}
+                        {paypalSubLookup.payerMatchedProfileName && (
+                          <div><span className="opacity-70">Payer email matches member:</span> {paypalSubLookup.payerMatchedProfileName}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div>
                   <label className="text-slate-300 text-sm font-medium block mb-1">
@@ -7043,7 +7131,7 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
 
               <div>
                 <label className="text-slate-300 text-sm font-medium block mb-1">
-                  Amount override (optional){applyPaymentMethod === 'stripe' ? ' — leave blank to use the Stripe amount' : ''}
+                  Amount override (optional){applyPaymentMethod === 'stripe' ? ' — leave blank to use the Stripe amount' : applyPaymentMethod === 'paypal' ? " — leave blank to use PayPal's last payment (when a subscription is linked)" : ''}
                 </label>
                 <input
                   type="number"
@@ -7074,6 +7162,7 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                   setApplyPaymentMembership(null);
                   setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
                   setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+                  setApplyPaymentPaypalSub(''); setPaypalSubLookup(null);
                   setApplyPaymentError(null);
                 }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors"
@@ -7098,12 +7187,15 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                       cashReceiptNumber: applyPaymentMethod === 'cash' ? applyPaymentReference.trim() || undefined : undefined,
                       stripePaymentIntentId: applyPaymentMethod === 'stripe' ? applyPaymentStripePi.trim() || undefined : undefined,
                       stripeSubscriptionId: applyPaymentMethod === 'stripe' ? applyPaymentStripeSub.trim() || undefined : undefined,
+                      paypalTransactionId: applyPaymentMethod === 'paypal' ? applyPaymentReference.trim() || undefined : undefined,
+                      paypalSubscriptionId: applyPaymentMethod === 'paypal' ? applyPaymentPaypalSub.trim() || undefined : undefined,
                       amountOverride: applyPaymentAmount ? parseFloat(applyPaymentAmount) : undefined,
                       notes: applyPaymentNotes.trim() || undefined,
                     });
                     setApplyPaymentMembership(null);
                     setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
                     setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+                    setApplyPaymentPaypalSub(''); setPaypalSubLookup(null);
                     // Refresh the membership list. The top-level member
                     // banner will update on next page load — we don't have a
                     // refresh callback in scope here.

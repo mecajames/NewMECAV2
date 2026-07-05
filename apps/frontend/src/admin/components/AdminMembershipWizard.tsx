@@ -728,6 +728,23 @@ export default function AdminMembershipWizard({
                       </div>
                     </button>
 
+                    {/* PayPal — money sent directly (send-money / on-site),
+                        recorded after the fact like cash/check. */}
+                    <button
+                      onClick={() => updateFormData('paymentMethod', AdminPaymentMethod.PAYPAL)}
+                      className={`w-full flex items-center gap-4 p-4 rounded-lg border transition-colors text-left ${
+                        formData.paymentMethod === AdminPaymentMethod.PAYPAL
+                          ? 'border-orange-500 bg-orange-500/10'
+                          : 'border-slate-600 hover:border-slate-500'
+                      }`}
+                    >
+                      <CreditCard className="h-6 w-6 text-sky-400" />
+                      <div>
+                        <div className="font-medium text-white">PayPal (sent directly)</div>
+                        <div className="text-sm text-gray-400">Member sent the payment via PayPal outside the site</div>
+                      </div>
+                    </button>
+
                     {/* Credit Card / Invoice */}
                     <button
                       onClick={() => updateFormData('paymentMethod', AdminPaymentMethod.CREDIT_CARD_INVOICE)}
@@ -791,6 +808,29 @@ export default function AdminMembershipWizard({
                         <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
                         <div className="text-sm text-gray-300">
                           An invoice and payment receipt will be automatically created to record this check payment.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.paymentMethod === AdminPaymentMethod.PAYPAL && (
+                    <div className="mt-4 p-4 bg-slate-700/50 rounded-lg space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          PayPal Transaction ID (optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={(formData as any).paypalTransactionId || ''}
+                          onChange={e => updateFormData('paypalTransactionId' as any, e.target.value)}
+                          placeholder="from the PayPal dashboard / payment email"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="flex items-start gap-3 pt-2 border-t border-slate-600">
+                        <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
+                        <div className="text-sm text-gray-300">
+                          An invoice and payment receipt will be automatically created to record this PayPal payment.
                         </div>
                       </div>
                     </div>

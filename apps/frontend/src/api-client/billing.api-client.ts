@@ -28,8 +28,9 @@ export interface SubscriptionListItem {
   memberName: string | null;
   email: string | null;
   membershipType: string | null;
-  source: 'stripe' | 'legacy';
+  source: 'stripe' | 'paypal' | 'legacy';
   stripeSubscriptionId: string | null;
+  paypalSubscriptionId: string | null;
   paymentStatus: string;
   amountPaid: number | null;
   endDate: string | null;
@@ -228,6 +229,11 @@ export interface AllPaymentRow {
   membership: {
     id: string;
     typeName: string | null;
+  } | null;
+  /** The order this payment belongs to (if any) — for cross-linking. */
+  order: {
+    id: string;
+    orderNumber: string | null;
   } | null;
 }
 
@@ -694,7 +700,7 @@ export const billingApi = {
    * Subscriptions page. Pure DB read — no live Stripe calls.
    */
   getSubscriptions: async (params?: {
-    source?: 'stripe' | 'legacy';
+    source?: 'stripe' | 'paypal' | 'legacy';
     search?: string;
   }): Promise<SubscriptionListItem[]> => {
     const response = await axios.get('/api/billing/subscriptions', { params });

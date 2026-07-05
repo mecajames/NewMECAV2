@@ -10,6 +10,9 @@ import { z } from 'zod';
 export enum AdminPaymentMethod {
   CASH = 'cash',
   CHECK = 'check',
+  // Member sent money via PayPal directly (send-money / on-site at an event)
+  // without ordering through the site — admin records it after the fact.
+  PAYPAL = 'paypal',
   CREDIT_CARD_INVOICE = 'credit_card_invoice', // Send invoice, user pays online
   COMPLIMENTARY = 'complimentary', // Free/waived - no payment required
 }

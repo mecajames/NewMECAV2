@@ -38,6 +38,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { StaffSignaturesService } from './staff-signatures.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
+import { TicketCategoriesService } from './ticket-categories.service';
 
 /**
  * Statuses that mean nobody is actively expected to reply.
@@ -86,6 +87,7 @@ export class TicketsService {
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly signaturesService: StaffSignaturesService,
     private readonly customFieldsService: TicketCustomFieldsService,
+    private readonly categoriesService: TicketCategoriesService,
   ) {}
 
   // ==========================================================================
@@ -1884,6 +1886,11 @@ export class TicketsService {
     // no route, so the recipient landed on the homepage.
     const viewTicketUrl = `${this.frontendUrl}/tickets/${ticket.id}`;
 
+    // tickets.category stores the managed category KEY (e.g. 'ma_renewal');
+    // emails must show the admin-defined LABEL — title-casing the key put
+    // "Ma Renewal" in front of members.
+    const categoryLabel = await this.categoriesService.labelForKey(ticket.category);
+
     // Send confirmation email to submitter
     if (ticket.reporter?.email) {
       await this.emailService.sendTicketCreatedEmail({
@@ -1892,7 +1899,7 @@ export class TicketsService {
         ticketNumber: ticket.ticketNumber,
         ticketTitle: ticket.title,
         ticketDescription: ticket.description,
-        category: ticket.category,
+        category: categoryLabel,
         viewTicketUrl,
       });
     }
@@ -1910,13 +1917,13 @@ export class TicketsService {
     // Always alert staff/admins of a new ticket. sendStaffAlertEmails falls back
     // to all admins when there's no department or no staff assigned, so a new
     // ticket never silently notifies nobody.
-    await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl);
+    await this.sendStaffAlertEmails(ticket, departmentId, viewTicketUrl, categoryLabel);
   }
 
   /**
    * Send alert emails to all staff members assigned to a department
    */
-  private async sendStaffAlertEmails(ticket: Ticket, departmentId: string | undefined, _viewTicketUrl: string): Promise<void> {
+  private async sendStaffAlertEmails(ticket: Ticket, departmentId: string | undefined, _viewTicketUrl: string, categoryLabel?: string): Promise<void> {
     const em = this.em.fork();
 
     const reporterName = ticket.reporter
@@ -1981,7 +1988,7 @@ export class TicketsService {
           ticketNumber: ticket.ticketNumber,
           ticketTitle: ticket.title,
           ticketDescription: ticket.description,
-          category: ticket.category,
+          category: categoryLabel ?? ticket.category,
           priority: ticket.priority,
           departmentName,
           reporterName,

@@ -470,55 +470,8 @@ export default function BillingDashboardPage() {
           </div>
         )}
 
-        {/* Subscription KPIs */}
-        {subStats && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">
-                Subscriptions <span className="text-xs font-normal text-gray-500 uppercase">· live</span>
-              </h2>
-              <button
-                onClick={() => navigate('/admin/billing/subscriptions')}
-                className="text-sm text-orange-500 hover:text-orange-400"
-              >
-                Manage subscriptions →
-              </button>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Active</p>
-                <p className="text-white font-semibold text-2xl mt-1">{subStats.active}</p>
-              </div>
-              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
-                <p className="text-gray-400 text-xs uppercase tracking-wide">MRR</p>
-                <p className="text-white font-semibold text-2xl mt-1">{subStats.mrrFormatted}</p>
-              </div>
-              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Renewing &lt;14d</p>
-                <p className="text-white font-semibold text-2xl mt-1">{subStats.upcomingRenewalsNext14Days}</p>
-              </div>
-              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Churn 30d</p>
-                <p className={`font-semibold text-2xl mt-1 ${subStats.churnLast30Days > 0 ? 'text-amber-400' : 'text-white'}`}>
-                  {subStats.churnLast30Days}
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/admin/billing/failed-payments')}
-                className="bg-slate-800 hover:bg-slate-700 rounded-xl p-5 shadow-lg text-left transition-colors group"
-                title="View failed payments"
-              >
-                <p className="text-gray-400 text-xs uppercase tracking-wide group-hover:text-gray-300">Failed 30d</p>
-                <p className={`font-semibold text-2xl mt-1 ${subStats.failedPaymentsLast30Days > 0 ? 'text-red-400' : 'text-white'}`}>
-                  {subStats.failedPaymentsLast30Days}
-                </p>
-                <p className="text-orange-400 text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View list →</p>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Stats Grid */}
+        {/* Stats Grid — Revenue & Orders lead the page (James 2026-07-05);
+            the subscription KPIs live BELOW this section. */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h2 className="text-lg font-semibold text-white">Revenue &amp; Orders</h2>
           <SeasonSelect value={seasonId} onChange={setSeasonId} />
@@ -583,6 +536,55 @@ export default function BillingDashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Subscription KPIs — live gateway-recurring numbers (Stripe +
+            PayPal), independent of the season selector above. */}
+        {subStats && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">
+                Subscriptions <span className="text-xs font-normal text-gray-500 uppercase">· live · stripe + paypal</span>
+              </h2>
+              <button
+                onClick={() => navigate('/admin/billing/subscriptions')}
+                className="text-sm text-orange-500 hover:text-orange-400"
+              >
+                Manage subscriptions →
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Active</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.active}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">MRR</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.mrrFormatted}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Renewing &lt;14d</p>
+                <p className="text-white font-semibold text-2xl mt-1">{subStats.upcomingRenewalsNext14Days}</p>
+              </div>
+              <div className="bg-slate-800 rounded-xl p-5 shadow-lg">
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Churn 30d</p>
+                <p className={`font-semibold text-2xl mt-1 ${subStats.churnLast30Days > 0 ? 'text-amber-400' : 'text-white'}`}>
+                  {subStats.churnLast30Days}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/admin/billing/failed-payments')}
+                className="bg-slate-800 hover:bg-slate-700 rounded-xl p-5 shadow-lg text-left transition-colors group"
+                title="View failed payments"
+              >
+                <p className="text-gray-400 text-xs uppercase tracking-wide group-hover:text-gray-300">Failed 30d</p>
+                <p className={`font-semibold text-2xl mt-1 ${subStats.failedPaymentsLast30Days > 0 ? 'text-red-400' : 'text-white'}`}>
+                  {subStats.failedPaymentsLast30Days}
+                </p>
+                <p className="text-orange-400 text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity">View list →</p>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Quick Links */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -655,7 +657,9 @@ export default function BillingDashboardPage() {
               <Zap className="h-6 w-6" />
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Recurring Invoices</h3>
-            <p className="text-gray-400 text-sm">Subscriptions & templates</p>
+            {/* NOT gateway subscriptions — these are MECA-issued invoice
+                templates that auto-generate an emailed invoice on a cadence. */}
+            <p className="text-gray-400 text-sm">Auto-generated invoice templates (not card subscriptions)</p>
           </button>
 
           <button
@@ -665,9 +669,9 @@ export default function BillingDashboardPage() {
             <div className="w-12 h-12 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center mb-4">
               <CreditCard className="h-6 w-6" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Stripe Subscriptions</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Subscriptions</h3>
             <p className="text-gray-400 text-sm">
-              {subStats?.active ?? 0} active · assign, move &amp; convert legacy
+              Stripe + PayPal · {subStats?.active ?? 0} active · assign &amp; convert legacy
             </p>
           </button>
 

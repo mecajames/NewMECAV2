@@ -120,10 +120,15 @@ export enum EventType {
 // - SEPARATE: Each day's results are calculated independently (default)
 // - COMBINED_SCORE: Sum scores across days, determine placement from total, then calculate points
 // - COMBINED_POINTS: Each day calculates points separately, total points are summed
+// - SINGLE_TALLY: The event runs 2-3 days but results are entered ONCE for
+//   the whole event — creation produces a SINGLE event row (dated day 1,
+//   duration recorded on events.duration_days) instead of Day 1/Day 2/…
+//   rows, so the calendar/results never show a blank per-day entry.
 export enum MultiDayResultsMode {
   SEPARATE = 'separate',
   COMBINED_SCORE = 'combined_score',
   COMBINED_POINTS = 'combined_points',
+  SINGLE_TALLY = 'single_tally',
 }
 
 export enum PaymentMethod {

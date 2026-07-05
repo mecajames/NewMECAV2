@@ -228,6 +228,26 @@ export const shopApi = {
   },
 
   /**
+   * Paid shop orders that never got a billing Order/Invoice (admin). These
+   * are invisible to billing View All Orders + revenue until backfilled.
+   */
+  adminGetOrdersMissingBilling: async (): Promise<Array<{ id: string; orderNumber?: string }>> => {
+    const response = await axios.get('/api/shop/admin/orders/missing-invoices');
+    return Array.isArray(response.data) ? response.data : (response.data?.orders ?? []);
+  },
+
+  /**
+   * Bulk-create the missing billing Order + Invoice records (admin).
+   */
+  adminBackfillBillingOrders: async (): Promise<{
+    attempted: number; created: number;
+    failed: Array<{ id: string; orderNumber?: string; error: string }>;
+  }> => {
+    const response = await axios.post('/api/shop/admin/orders/backfill-billing');
+    return response.data;
+  },
+
+  /**
    * Update order status (admin)
    */
   adminUpdateOrderStatus: async (id: string, status: ShopOrderStatus): Promise<ShopOrder> => {

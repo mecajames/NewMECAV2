@@ -77,7 +77,7 @@ export default function ManualRenewalModal({ memberId, memberName, preselectMemb
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'check'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'check' | 'paypal'>('cash');
   const [reference, setReference] = useState('');
   const [amountOverride, setAmountOverride] = useState('');
   const [notes, setNotes] = useState('');
@@ -146,6 +146,7 @@ export default function ManualRenewalModal({ memberId, memberName, preselectMemb
         paymentMethod,
         checkNumber: paymentMethod === 'check' ? reference.trim() : undefined,
         cashReceiptNumber: paymentMethod === 'cash' ? reference.trim() || undefined : undefined,
+        paypalTransactionId: paymentMethod === 'paypal' ? reference.trim() || undefined : undefined,
         amountOverride: amountOverride ? parseFloat(amountOverride) : undefined,
         notes: notes.trim() || undefined,
       });
@@ -330,7 +331,7 @@ export default function ManualRenewalModal({ memberId, memberName, preselectMemb
                   <div className="space-y-4">
                     <div>
                       <label className="text-slate-300 text-sm font-medium block mb-1.5">Payment method *</label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           onClick={() => setPaymentMethod('cash')}
                           className={`px-3 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${paymentMethod === 'cash'
@@ -347,17 +348,35 @@ export default function ManualRenewalModal({ memberId, memberName, preselectMemb
                         >
                           Check
                         </button>
+                        {/* Member sent money via PayPal directly (send-money /
+                            on-site) without ordering through the site. */}
+                        <button
+                          onClick={() => setPaymentMethod('paypal')}
+                          className={`px-3 py-2.5 rounded-lg text-sm font-medium ${paymentMethod === 'paypal'
+                            ? 'bg-orange-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                        >
+                          PayPal
+                        </button>
                       </div>
                     </div>
                     <div>
                       <label className="text-slate-300 text-sm font-medium block mb-1.5">
-                        {paymentMethod === 'check' ? 'Check number *' : 'Cash receipt number (optional)'}
+                        {paymentMethod === 'check'
+                          ? 'Check number *'
+                          : paymentMethod === 'paypal'
+                            ? 'PayPal transaction ID (optional)'
+                            : 'Cash receipt number (optional)'}
                       </label>
                       <input
                         type="text"
                         value={reference}
                         onChange={e => setReference(e.target.value)}
-                        placeholder={paymentMethod === 'check' ? '1234' : 'leave blank for auto-generated'}
+                        placeholder={paymentMethod === 'check'
+                          ? '1234'
+                          : paymentMethod === 'paypal'
+                            ? 'from the PayPal dashboard / email — blank for auto-generated'
+                            : 'leave blank for auto-generated'}
                         className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-orange-500 outline-none"
                       />
                     </div>

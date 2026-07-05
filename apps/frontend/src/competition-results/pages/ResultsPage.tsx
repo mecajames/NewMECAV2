@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Trophy, Calendar, Award, Search, ArrowUpDown, ArrowUp, ArrowDown, Layers, MapPin, ChevronDown, CheckCircle, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { eventsApi, Event } from '@/events';
+import { eventsApi, Event, carriesResults } from '@/events';
 import { competitionResultsApi, CompetitionResult } from '@/competition-results';
 import { competitionClassesApi, CompetitionClass } from '@/competition-classes';
 import { competitionFormatsApi } from '@/competition-formats';
@@ -291,7 +291,10 @@ export default function ResultsPage() {
         seasonId: selectedSeasonId || undefined,
       });
 
-      const completedEvents = response.events as Event[];
+      // carriesResults: for single-tally multi-day events, competitors see
+      // ONE results listing (the final day, where results live) — the empty
+      // earlier-day rows stay on the calendar but never in the results list.
+      const completedEvents = (response.events as Event[]).filter(carriesResults);
 
       // Build result counts from the response data
       const resultCounts: Record<string, number> = {};

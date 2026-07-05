@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Download, XCircle } from 'lucide-react';
 import { billingApi, ordersApi, Order, OrderListParams, OrderItemCategory } from '../../../api-client/billing.api-client';
+import { shopApi } from '@/shop/shop.api-client';
 import { OrderTable } from '../components/OrderTable';
 import { OrderStatus, OrderType } from '../billing.types';
 import { seasonsApi, Season } from '@/seasons';
@@ -31,6 +32,11 @@ export default function OrdersPage() {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [itemCategoryFilter, setItemCategoryFilter] = useState<OrderItemCategory | ''>('');
   const [itemSearch, setItemSearch] = useState<string>('');
+  // Paid SHOP orders that never got a billing Order row (the fulfillment
+  // step that creates it is best-effort) — they're invisible in this list
+  // until backfilled, so surface them right here.
+  const [missingShopBilling, setMissingShopBilling] = useState<number>(0);
+  const [backfillingShop, setBackfillingShop] = useState(false);
 
   // Generate years for filter (last 5 years)
   const currentYear = new Date().getFullYear();
@@ -64,6 +70,30 @@ export default function OrdersPage() {
     };
     fetchSeasons();
   }, []);
+
+  // Check for paid shop orders missing their billing record (non-fatal).
+  useEffect(() => {
+    shopApi.adminGetOrdersMissingBilling()
+      .then((rows) => setMissingShopBilling(rows.length))
+      .catch(() => setMissingShopBilling(0));
+  }, []);
+
+  const runShopBackfill = async () => {
+    setBackfillingShop(true);
+    try {
+      const report = await shopApi.adminBackfillBillingOrders();
+      alert(
+        `Created billing records for ${report.created} of ${report.attempted} shop order(s).` +
+        (report.failed.length ? ` ${report.failed.length} failed — see server logs.` : ''),
+      );
+      setMissingShopBilling(report.failed.length);
+      fetchOrders({ page: pagination.page });
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Backfill failed');
+    } finally {
+      setBackfillingShop(false);
+    }
+  };
 
   const fetchOrders = async (params: OrderListParams = {}) => {
     try {
@@ -270,6 +300,24 @@ export default function OrdersPage() {
             </button>
           </div>
         </div>
+
+        {/* Paid shop orders with no billing record are invisible below —
+            offer the one-click backfill right where the gap is felt. */}
+        {missingShopBilling > 0 && (
+          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-amber-200">
+              <strong>{missingShopBilling}</strong> paid shop order{missingShopBilling !== 1 ? 's are' : ' is'} not in this
+              list yet — the purchase was completed but its billing order/invoice record was never created.
+            </div>
+            <button
+              onClick={runShopBackfill}
+              disabled={backfillingShop}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            >
+              {backfillingShop ? 'Creating…' : 'Create missing records'}
+            </button>
+          </div>
+        )}
 
         {/* Search */}
         <div className="mb-6">

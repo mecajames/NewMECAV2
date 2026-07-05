@@ -105,7 +105,58 @@ export class BillingController {
   ) {
     await this.requireAdmin(authHeader);
     const validatedQuery = OrderListQuerySchema.parse(query);
-    return this.ordersService.findAll(validatedQuery);
+    const result = await this.ordersService.findAll(validatedQuery);
+
+    // Enrich each order row with its invoice + latest payment so the admin
+    // orders table shows the whole story on ONE row (order · invoice ·
+    // payment) instead of three disconnected lists. Two batch queries for
+    // the page — no per-row N+1.
+    const orderIds = result.data.map((o: any) => o.id).filter(Boolean);
+    if (orderIds.length > 0) {
+      const conn = this.em.getConnection();
+      // One `?` per id: MikroORM's raw `?` binding expands an array into a
+      // comma list, so `ANY(?)` renders as invalid SQL (see tickets.service).
+      const inPlaceholders = orderIds.map(() => '?').join(',');
+      const [invoices, payments] = await Promise.all([
+        conn.execute(
+          `SELECT order_id, id, invoice_number, status
+             FROM public.invoices
+            WHERE order_id IN (${inPlaceholders})`,
+          orderIds,
+        ),
+        conn.execute(
+          `SELECT DISTINCT ON (order_id)
+                  order_id, id, payment_method, payment_status, amount,
+                  stripe_payment_intent_id, paypal_capture_id, transaction_id
+             FROM public.payments
+            WHERE order_id IN (${inPlaceholders})
+            ORDER BY order_id, created_at DESC`,
+          orderIds,
+        ),
+      ]);
+      const invByOrder = new Map<string, any>(invoices.map((i: any) => [i.order_id, i]));
+      const payByOrder = new Map<string, any>(payments.map((p: any) => [p.order_id, p]));
+      const data = result.data.map((o: any) => {
+        const json = typeof o.toJSON === 'function' ? o.toJSON() : { ...o };
+        const inv = invByOrder.get(o.id);
+        const pay = payByOrder.get(o.id);
+        json.invoiceSummary = inv
+          ? { id: inv.id, invoiceNumber: inv.invoice_number, status: inv.status }
+          : null;
+        json.paymentSummary = pay
+          ? {
+              id: pay.id,
+              method: pay.payment_method,
+              status: pay.payment_status,
+              amount: pay.amount != null ? Number(pay.amount).toFixed(2) : null,
+              transactionId: pay.stripe_payment_intent_id || pay.paypal_capture_id || pay.transaction_id || null,
+            }
+          : null;
+        return json;
+      });
+      return { ...result, data };
+    }
+    return result;
   }
 
   /**
@@ -659,11 +710,19 @@ export class BillingController {
         WHERE p.order_id IN (SELECT id FROM completed_orders)
       ),
       renewal_rev AS (
+        -- Paid membership money NOT represented by a completed order:
+        -- order-less renewal payments (subscription charges) AND payments
+        -- whose order never reached 'completed' (e.g. a recorded payment on
+        -- a stuck order). The old "order_id IS NULL"-only version silently
+        -- dropped the latter — real money missing from Total Revenue.
+        -- Completed orders are excluded here regardless of date range so a
+        -- charge is always attributed to exactly one period (the order's).
         SELECT COALESCE(SUM(p.amount - COALESCE(p.amount_refunded, 0)), 0)::numeric AS amt
         FROM payments p
-        WHERE p.order_id IS NULL
-          AND p.payment_status = 'paid'
-          AND p.payment_type = 'membership'${payDateSql}
+        LEFT JOIN orders o2 ON o2.id = p.order_id
+        WHERE p.payment_status = 'paid'
+          AND p.payment_type = 'membership'
+          AND (p.order_id IS NULL OR o2.status <> 'completed')${payDateSql}
       )
       SELECT
         (SELECT COALESCE(SUM(total), 0) FROM completed_orders)         AS gross_orders,
@@ -745,25 +804,36 @@ export class BillingController {
 
   /**
    * Subscription-focused KPIs: active count, churn (30d), MRR, upcoming renewals
-   * (next 14 days), failed payments (30d). Pure SQL — no Stripe API calls.
+   * (next 14 days), failed payments (30d). Pure SQL — no gateway API calls.
+   *
+   * ALL five metrics are scoped to RECURRING memberships — ones carrying a
+   * Stripe OR PayPal subscription id. The panel is labeled "Subscriptions";
+   * the old version counted EVERY active membership (comps, one-time annuals)
+   * in ACTIVE while MRR/renewing were Stripe-only, so the cards disagreed
+   * with each other and PayPal subscribers were invisible in MRR/renewals.
    */
   @Get('stats/subscriptions')
   async getSubscriptionStats(@Headers('authorization') authHeader: string) {
     await this.requireAdmin(authHeader);
     const conn = this.em.getConnection();
 
-    // All five metrics + MRR in one round trip via a CTE-shaped union of counts.
-    // Sum is annual amount_paid for active stripe-subscription rows; MRR ≈ /12.
+    // "recurring" = the row is attached to a gateway subscription.
+    // Sum is annual amount_paid for active recurring rows; MRR ≈ /12.
     const rows = await conn.execute<Array<{
       active: string; churn: string; renew: string; failed: string; annual_sum: string;
     }>>(`
+      WITH recurring AS (
+        SELECT * FROM memberships
+         WHERE NULLIF(TRIM(stripe_subscription_id), '') IS NOT NULL
+            OR NULLIF(TRIM(paypal_subscription_id), '') IS NOT NULL
+      )
       SELECT
-        COUNT(*) FILTER (WHERE payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW()))                                              AS active,
-        COUNT(*) FILTER (WHERE cancelled_at >= NOW() - INTERVAL '30 days')                                                                                                AS churn,
-        COUNT(*) FILTER (WHERE stripe_subscription_id IS NOT NULL AND payment_status = 'paid' AND cancelled_at IS NULL AND end_date BETWEEN NOW() AND NOW() + INTERVAL '14 days') AS renew,
-        COUNT(*) FILTER (WHERE payment_status = 'failed' AND updated_at >= NOW() - INTERVAL '30 days')                                                                    AS failed,
-        COALESCE(SUM(amount_paid) FILTER (WHERE stripe_subscription_id IS NOT NULL AND payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW())), 0) AS annual_sum
-      FROM memberships
+        COUNT(*) FILTER (WHERE payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW()))                          AS active,
+        COUNT(*) FILTER (WHERE cancelled_at >= NOW() - INTERVAL '30 days')                                                                            AS churn,
+        COUNT(*) FILTER (WHERE payment_status = 'paid' AND cancelled_at IS NULL AND end_date BETWEEN NOW() AND NOW() + INTERVAL '14 days')            AS renew,
+        COUNT(*) FILTER (WHERE payment_status = 'failed' AND updated_at >= NOW() - INTERVAL '30 days')                                                AS failed,
+        COALESCE(SUM(amount_paid) FILTER (WHERE payment_status = 'paid' AND cancelled_at IS NULL AND (end_date IS NULL OR end_date >= NOW())), 0)     AS annual_sum
+      FROM recurring
     `);
     const row = rows[0] || { active: '0', churn: '0', renew: '0', failed: '0', annual_sum: '0' };
     const mrrCents = Math.round((parseFloat(row.annual_sum) / 12) * 100);
@@ -780,28 +850,37 @@ export class BillingController {
 
   /**
    * Dedicated subscriptions list for the billing Subscriptions page. Returns
-   * every membership that either carries a live Stripe subscription id or is
-   * still flagged legacy, joined to its member (name, MECA ID, email), with a
-   * derived `source` (stripe | legacy). Pure SQL — no Stripe API calls, so the
-   * list stays fast; live status is fetched per-row on the detail view.
+   * every membership that carries a Stripe subscription id, a PAYPAL
+   * subscription id, or is still flagged legacy — joined to its member (name,
+   * MECA ID, email), with a derived `source` (stripe | paypal | legacy).
+   * Pure SQL — no gateway API calls, so the list stays fast; live status is
+   * fetched per-row on the detail view.
    */
   @Get('subscriptions')
   async getSubscriptions(
     @Headers('authorization') authHeader: string,
-    @Query('source') source?: 'stripe' | 'legacy',
+    @Query('source') source?: 'stripe' | 'paypal' | 'legacy',
     @Query('search') search?: string,
   ) {
     await this.requireAdmin(authHeader);
     const conn = this.em.getConnection();
 
+    // NULLIF(TRIM(...)) everywhere: imported rows can carry EMPTY-STRING
+    // gateway ids, which are "NOT NULL" to SQL but falsy to the JS source
+    // mapper — without this a ''-id row matches the PayPal/Stripe filter yet
+    // renders as Legacy, which reads as mislabeled data.
+    const stripeId = `NULLIF(TRIM(m.stripe_subscription_id), '')`;
+    const paypalId = `NULLIF(TRIM(m.paypal_subscription_id), '')`;
     const where: string[] = [
-      `(m.stripe_subscription_id IS NOT NULL OR m.had_legacy_subscription = true)`,
+      `(${stripeId} IS NOT NULL OR ${paypalId} IS NOT NULL OR m.had_legacy_subscription = true)`,
     ];
     const params: any[] = [];
     if (source === 'stripe') {
-      where.push(`m.stripe_subscription_id IS NOT NULL`);
+      where.push(`${stripeId} IS NOT NULL`);
+    } else if (source === 'paypal') {
+      where.push(`${paypalId} IS NOT NULL`);
     } else if (source === 'legacy') {
-      where.push(`m.had_legacy_subscription = true AND m.stripe_subscription_id IS NULL`);
+      where.push(`m.had_legacy_subscription = true AND ${stripeId} IS NULL AND ${paypalId} IS NULL`);
     }
     const term = (search ?? '').trim().toLowerCase();
     if (term) {
@@ -813,7 +892,9 @@ export class BillingController {
     }
 
     const rows = await conn.execute(
-      `SELECT m.id AS membership_id, m.user_id, m.meca_id, m.stripe_subscription_id,
+      `SELECT m.id AS membership_id, m.user_id, m.meca_id,
+              ${stripeId} AS stripe_subscription_id,
+              ${paypalId} AS paypal_subscription_id,
               m.payment_status, m.amount_paid, m.end_date, m.cancel_at_period_end,
               m.had_legacy_subscription,
               p.first_name, p.last_name, p.email,
@@ -835,8 +916,9 @@ export class BillingController {
         [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || null,
       email: r.email ?? null,
       membershipType: r.membership_type ?? null,
-      source: r.stripe_subscription_id ? 'stripe' : 'legacy',
+      source: r.stripe_subscription_id ? 'stripe' : r.paypal_subscription_id ? 'paypal' : 'legacy',
       stripeSubscriptionId: r.stripe_subscription_id ?? null,
+      paypalSubscriptionId: r.paypal_subscription_id ?? null,
       paymentStatus: r.payment_status,
       amountPaid: r.amount_paid != null ? Number(r.amount_paid) : null,
       endDate: r.end_date ?? null,
@@ -1140,32 +1222,36 @@ export class BillingController {
     if (methodParam) where.paymentMethod = methodParam;
     if (typeParam) where.paymentType = typeParam;
 
+    // Free-text search happens IN THE DATABASE so it works with pagination.
+    // (It used to filter in-memory AFTER limit/offset, so a search only
+    // matched rows on the current page and `total` ignored it entirely.)
+    const search = (searchParam ?? '').trim();
+    if (search) {
+      const like = `%${search}%`;
+      const or: any[] = [
+        { user: { first_name: { $ilike: like } } },
+        { user: { last_name: { $ilike: like } } },
+        { user: { email: { $ilike: like } } },
+        { stripePaymentIntentId: { $ilike: like } },
+        { paypalCaptureId: { $ilike: like } },
+        { transactionId: { $ilike: like } },
+      ];
+      // profiles.meca_id is NUMERIC in the real DB (entity says text) — ILIKE
+      // on it throws, so MECA IDs match by equality on an all-digits term.
+      if (/^\d+$/.test(search)) {
+        or.push({ user: { meca_id: search } });
+      }
+      where.$or = or;
+    }
+
     const [rows, total] = await em.findAndCount(Payment, where, {
-      populate: ['user', 'membership', 'membership.membershipTypeConfig'],
+      populate: ['user', 'membership', 'membership.membershipTypeConfig', 'order'] as any,
       orderBy: { createdAt: 'DESC' },
       limit,
       offset,
     });
 
-    // Apply free-text search in-memory after the DB filter. Keeps the
-    // SQL simple — payment volumes here are O(thousands), not millions.
-    const search = (searchParam ?? '').trim().toLowerCase();
-    const filtered = !search
-      ? rows
-      : rows.filter((p) => {
-          const name = `${p.user?.first_name ?? ''} ${p.user?.last_name ?? ''}`.toLowerCase();
-          const email = (p.user?.email ?? '').toLowerCase();
-          const meca = String(p.user?.meca_id ?? '');
-          const txn = (p.stripePaymentIntentId ?? p.paypalCaptureId ?? p.transactionId ?? '').toLowerCase();
-          return (
-            name.includes(search) ||
-            email.includes(search) ||
-            meca.includes(search) ||
-            txn.includes(search)
-          );
-        });
-
-    const data = filtered.map((p) => {
+    const data = rows.map((p) => {
       const name = [p.user?.first_name, p.user?.last_name].filter(Boolean).join(' ').trim();
       return {
         id: p.id,
@@ -1192,6 +1278,14 @@ export class BillingController {
           ? {
               id: (p.membership as any).id,
               typeName: (p.membership as any).membershipTypeConfig?.name ?? null,
+            }
+          : null,
+        // The order this payment belongs to (if any) — lets the payments list
+        // link straight to the order instead of being a dead-end row.
+        order: p.order
+          ? {
+              id: (p.order as any).id,
+              orderNumber: (p.order as any).orderNumber ?? null,
             }
           : null,
       };

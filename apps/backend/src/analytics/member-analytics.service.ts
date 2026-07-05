@@ -44,12 +44,13 @@ export class MemberAnalyticsService {
   ): Promise<{ tracked: boolean; reason?: string }> {
     const em = this.em.fork();
 
-    // Honor opt-out without writing anything
+    // Activity tracking is part of the membership agreement — EVERY member
+    // is tracked. The former analytics_opt_out check was removed on James's
+    // order (2026-07-04); there is no member-facing opt-out.
     const profile = await em.findOne(Profile, { id: userId }, {
-      fields: ['id', 'analytics_opt_out'] as any,
+      fields: ['id'] as any,
     });
     if (!profile) return { tracked: false, reason: 'profile_not_found' };
-    if (profile.analytics_opt_out) return { tracked: false, reason: 'opted_out' };
 
     const parsed = this.parseUserAgent(data.userAgent);
     const now = new Date();
