@@ -501,6 +501,20 @@ export default function BillingDashboardPage() {
                 <p className="text-white font-semibold text-2xl">
                   {stats?.orders.total || 0}
                 </p>
+                {stats?.orders.byType && (() => {
+                  // Season-scoped composition: memberships (new + renewal),
+                  // shop, events — the three businesses this platform runs.
+                  const t = stats.orders.byType;
+                  const n = (k: string) => t[k]?.count ?? 0;
+                  const memberships = n('new_membership') + n('membership_renewal') + n('membership');
+                  const shop = n('shop');
+                  const events = n('event_registration') + n('world_finals');
+                  return (
+                    <p className="text-gray-500 text-xs">
+                      {memberships} membership{memberships !== 1 ? 's' : ''} · {shop} shop · {events} event{events !== 1 ? 's' : ''}
+                    </p>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -586,8 +600,21 @@ export default function BillingDashboardPage() {
           </div>
         )}
 
-        {/* Quick Links */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* ────────────────────────────────────────────────────────────────
+            RECORDS — the four ledgers admins live in day to day. One card
+            per record type with a plain-English definition of what it holds,
+            so nobody has to guess which list answers their question.
+
+            Deliberately NOT here (James 2026-07-05, "disjointed" review):
+            - Subscriptions card — the KPI strip above IS the subscriptions
+              entry point ("Manage subscriptions →"); two doors to the same
+              room read as clutter.
+            - Recurring Invoices card — recurring invoice TEMPLATES are a
+              niche accounts-receivable tool (auto-emailed invoices on a
+              schedule, e.g. sponsor billing), not member subscriptions; it
+              now lives as a secondary link inside the Invoices card. */}
+        <h2 className="text-lg font-semibold text-white mb-3">Records</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <button
             onClick={() => navigate('/admin/billing/payments')}
             className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left ring-1 ring-orange-500/20 hover:ring-orange-500/40"
@@ -595,24 +622,9 @@ export default function BillingDashboardPage() {
             <div className="w-12 h-12 rounded-full bg-orange-500/15 text-orange-400 flex items-center justify-center mb-4">
               <CreditCard className="h-6 w-6" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">All Payments</h3>
-            <p className="text-gray-400 text-sm">Unified Stripe + PayPal — all statuses</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/admin/billing/failed-payments')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
-          >
-            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center mb-4">
-              <XOctagon className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Failed Payments</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Payments</h3>
             <p className="text-gray-400 text-sm">
-              Triage queue —{' '}
-              <span className={subStats && subStats.failedPaymentsLast30Days > 0 ? 'text-red-400 font-semibold' : ''}>
-                {subStats?.failedPaymentsLast30Days ?? 0}
-              </span>{' '}
-              in the last 30 days
+              Every transaction — Stripe, PayPal &amp; manually recorded. The money ledger.
             </p>
           </button>
 
@@ -623,21 +635,56 @@ export default function BillingDashboardPage() {
             <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 flex items-center justify-center mb-4">
               <ShoppingCart className="h-6 w-6" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">View All Orders</h3>
-            <p className="text-gray-400 text-sm">{stats?.orders.total || 0} total orders</p>
+            <h3 className="text-lg font-semibold text-white mb-2">Orders</h3>
+            <p className="text-gray-400 text-sm">
+              What was purchased — memberships, shop &amp; event registrations, with the invoice and payment on each row.
+            </p>
           </button>
 
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => navigate('/admin/billing/invoices')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/admin/billing/invoices'); }}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left cursor-pointer"
           >
             <div className="w-12 h-12 rounded-full bg-green-500/10 text-green-500 hover:bg-green-500/20 flex items-center justify-center mb-4">
               <FileText className="h-6 w-6" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">View All Invoices</h3>
-            <p className="text-gray-400 text-sm">{stats?.invoices.total || 0} total invoices</p>
-          </button>
+            <h3 className="text-lg font-semibold text-white mb-2">Invoices</h3>
+            <p className="text-gray-400 text-sm">
+              The billing document behind each order — send, remind, mark paid, credit.
+            </p>
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate('/admin/billing/recurring'); }}
+              className="mt-3 text-xs text-indigo-300 hover:text-indigo-200 hover:underline"
+            >
+              Recurring invoice templates →
+            </button>
+          </div>
 
+          <button
+            onClick={() => navigate('/admin/billing/failed-payments')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center mb-4">
+              <XOctagon className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Failed Payments</h3>
+            <p className="text-gray-400 text-sm">
+              Declined &amp; failed charges to follow up —{' '}
+              <span className={subStats && subStats.failedPaymentsLast30Days > 0 ? 'text-red-400 font-semibold' : ''}>
+                {subStats?.failedPaymentsLast30Days ?? 0}
+              </span>{' '}
+              in the last 30 days
+            </p>
+          </button>
+        </div>
+
+        {/* REPORTS & TOOLS — analysis and verification, separate from the
+            day-to-day record browsing above. */}
+        <h2 className="text-lg font-semibold text-white mb-3">Reports &amp; Tools</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <button
             onClick={() => navigate('/admin/billing/revenue')}
             className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
@@ -646,32 +693,8 @@ export default function BillingDashboardPage() {
               <TrendingUp className="h-6 w-6" />
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Revenue Reports</h3>
-            <p className="text-gray-400 text-sm">View detailed analytics</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/admin/billing/recurring')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
-          >
-            <div className="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 flex items-center justify-center mb-4">
-              <Zap className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Recurring Invoices</h3>
-            {/* NOT gateway subscriptions — these are MECA-issued invoice
-                templates that auto-generate an emailed invoice on a cadence. */}
-            <p className="text-gray-400 text-sm">Auto-generated invoice templates (not card subscriptions)</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/admin/billing/subscriptions')}
-            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left ring-1 ring-indigo-500/20 hover:ring-indigo-500/40"
-          >
-            <div className="w-12 h-12 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center mb-4">
-              <CreditCard className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Subscriptions</h3>
             <p className="text-gray-400 text-sm">
-              Stripe + PayPal · {subStats?.active ?? 0} active · assign &amp; convert legacy
+              Revenue by period and category, with CSV exports for accounting.
             </p>
           </button>
 
@@ -683,7 +706,9 @@ export default function BillingDashboardPage() {
               <ShieldAlert className="h-6 w-6" />
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">Reconciliation</h3>
-            <p className="text-gray-400 text-sm">Ledger consistency &amp; webhook errors</p>
+            <p className="text-gray-400 text-sm">
+              Verifies our records against Stripe &amp; PayPal and flags real discrepancies.
+            </p>
           </button>
         </div>
 

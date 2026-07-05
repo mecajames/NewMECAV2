@@ -2932,7 +2932,7 @@ export class MembershipsService {
     });
     em.create(OrderItem, {
       order,
-      description: `${config.name} Membership — Manual Renewal`,
+      description: `${config.name} — Manual Renewal`,
       quantity: 1,
       unitPrice: price.toFixed(2),
       total: price.toFixed(2),
@@ -2973,7 +2973,7 @@ export class MembershipsService {
     } as any);
     em.create(InvoiceItem, {
       invoice,
-      description: `${config.name} Membership — Manual Renewal`,
+      description: `${config.name} — Manual Renewal`,
       quantity: 1,
       unitPrice: price.toFixed(2),
       total: price.toFixed(2),
