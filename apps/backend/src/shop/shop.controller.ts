@@ -287,6 +287,35 @@ export class ShopController {
     return this.shopService.createBillingOrderAndInvoice(id);
   }
 
+  /**
+   * Bulk recovery: create the billing Order + Invoice for EVERY paid shop
+   * order that's missing one. The per-payment creation step is best-effort
+   * (fulfillment must not fail the webhook), so paid shop orders can end up
+   * only in shop_orders — invisible to billing "View All Orders" and revenue
+   * until this runs. Idempotent: only touches rows with billing_order_id NULL.
+   */
+  @Post('admin/orders/backfill-billing')
+  async adminBackfillBillingOrders(
+    @Headers('authorization') authHeader: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const missing = await this.shopService.findPaidOrdersMissingInvoices();
+    const results = { attempted: missing.length, created: 0, failed: [] as Array<{ id: string; orderNumber?: string; error: string }> };
+    for (const row of missing) {
+      try {
+        await this.shopService.createBillingOrderAndInvoice((row as any).id);
+        results.created++;
+      } catch (err: any) {
+        results.failed.push({
+          id: (row as any).id,
+          orderNumber: (row as any).orderNumber ?? (row as any).order_number,
+          error: err?.message || String(err),
+        });
+      }
+    }
+    return results;
+  }
+
   @Get('admin/orders/:id')
   async adminGetOrder(
     @Headers('authorization') authHeader: string,

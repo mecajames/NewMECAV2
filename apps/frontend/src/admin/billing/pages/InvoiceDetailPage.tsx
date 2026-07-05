@@ -13,6 +13,9 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showManualPaymentModal, setShowManualPaymentModal] = useState(false);
+  // Per-payment ledger for this invoice, resolved through its order (payments
+  // carry an order_id FK; the invoice itself has no direct payment link).
+  const [orderPayments, setOrderPayments] = useState<Awaited<ReturnType<typeof billingApi.getOrderBillingDetail>>['payments'] | null>(null);
 
   const isNew = id === 'new';
 
@@ -30,6 +33,16 @@ export default function InvoiceDetailPage() {
       const data = await billingApi.getInvoice(id!);
       setInvoice(data);
       setError(null);
+      // Load the payment ledger via the invoice's order (non-fatal — an
+      // invoice with no order simply shows no ledger).
+      const orderId = (data as any)?.order?.id;
+      if (orderId) {
+        billingApi.getOrderBillingDetail(orderId)
+          .then((detail) => setOrderPayments(detail.payments))
+          .catch(() => setOrderPayments(null));
+      } else {
+        setOrderPayments(null);
+      }
     } catch (err) {
       console.error('Error fetching invoice:', err);
       setError('Failed to load invoice details');
@@ -423,6 +436,57 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Payments ledger — resolved through the invoice's order. Shows
+                HOW the invoice was actually paid (Stripe / PayPal / manual),
+                mirroring the ledger on the order detail page. Without this,
+                the invoice view only showed an amount-paid rollup with no way
+                to see the gateway or transaction. */}
+            {orderPayments && orderPayments.length > 0 && (
+              <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
+                <div className="flex items-center gap-2 mb-4">
+                  <Banknote className="h-5 w-5 text-emerald-400" />
+                  <h2 className="text-lg font-semibold text-white">Payments</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-gray-400 text-xs uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left pb-2">Date</th>
+                        <th className="text-left pb-2">Method</th>
+                        <th className="text-left pb-2">Status</th>
+                        <th className="text-right pb-2">Amount</th>
+                        <th className="text-left pb-2 pl-4">Transaction</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/60">
+                      {orderPayments.map((p) => (
+                        <tr key={p.id}>
+                          <td className="py-2 text-gray-300 whitespace-nowrap">
+                            {p.paidAt || p.createdAt ? new Date((p.paidAt || p.createdAt)!).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="py-2 text-gray-300 capitalize">{(p.paymentMethod || '—').replace(/_/g, ' ')}</td>
+                          <td className="py-2">
+                            <span className={
+                              p.paymentStatus === 'paid' ? 'text-emerald-400'
+                                : p.paymentStatus === 'refunded' ? 'text-purple-300'
+                                  : p.paymentStatus === 'failed' ? 'text-red-400' : 'text-gray-300'
+                            }>
+                              {p.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right font-mono text-white">${Number(p.amount).toFixed(2)}</td>
+                          <td className="py-2 pl-4 font-mono text-[11px] text-gray-400 max-w-[220px] truncate"
+                              title={p.stripePaymentIntentId || p.paypalCaptureId || p.transactionId || ''}>
+                            {p.stripePaymentIntentId || p.paypalCaptureId || p.transactionId || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Notes */}
             {invoice.notes && (

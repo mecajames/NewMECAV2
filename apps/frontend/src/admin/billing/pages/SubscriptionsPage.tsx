@@ -10,8 +10,9 @@ import {
 } from '../../../api-client/billing.api-client';
 
 /**
- * Dedicated Stripe Subscriptions view. Lists every membership carrying a live
- * Stripe subscription id or still flagged legacy, with a "Convert legacy" tool
+ * Dedicated Subscriptions view (Stripe + PayPal). Lists every membership
+ * carrying a live Stripe or PayPal subscription id or still flagged legacy,
+ * with a "Convert legacy" tool
  * that links a live Stripe subscription where one exists (matched by member
  * email) and otherwise clears the legacy flag. Row click jumps to the member
  * detail page where the Assign Subscription modal lives.
@@ -27,13 +28,23 @@ function errMsg(err: unknown, fallback: string): string {
   return e?.response?.data?.message || e?.message || fallback;
 }
 
-function SourceBadge({ source }: { source: 'stripe' | 'legacy' }) {
+function SourceBadge({ source }: { source: 'stripe' | 'paypal' | 'legacy' }) {
+  if (source === 'paypal') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-sky-500/15 text-sky-300 border-sky-500/30">
+        <Repeat className="w-3 h-3" /> PayPal
+      </span>
+    );
+  }
   return source === 'stripe' ? (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-indigo-500/15 text-indigo-300 border-indigo-500/30">
       <Zap className="w-3 h-3" /> Stripe
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-amber-500/15 text-amber-300 border-amber-500/30">
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-amber-500/15 text-amber-300 border-amber-500/30"
+      title="Recurring in the OLD system — the original gateway (Stripe or PayPal) was never recorded in the import. Use Convert Legacy to link a live Stripe subscription by email, or the member's Record Payment → PayPal to link a PayPal subscription by its I-… id."
+    >
       <Layers className="w-3 h-3" /> Legacy
     </span>
   );
@@ -44,7 +55,7 @@ export default function SubscriptionsPage() {
   const [rows, setRows] = useState<SubscriptionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sourceFilter, setSourceFilter] = useState<'' | 'stripe' | 'legacy'>('');
+  const [sourceFilter, setSourceFilter] = useState<'' | 'stripe' | 'paypal' | 'legacy'>('');
   const [search, setSearch] = useState('');
 
   // Legacy-conversion tool state
@@ -73,12 +84,13 @@ export default function SubscriptionsPage() {
   }, [sourceFilter]);
 
   const counts = useMemo(() => {
-    let stripe = 0, legacy = 0;
+    let stripe = 0, paypal = 0, legacy = 0;
     for (const r of rows) {
       if (r.source === 'stripe') stripe++;
+      else if (r.source === 'paypal') paypal++;
       else legacy++;
     }
-    return { stripe, legacy };
+    return { stripe, paypal, legacy };
   }, [rows]);
 
   const runConversion = async (dryRun: boolean) => {
@@ -112,10 +124,10 @@ export default function SubscriptionsPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
               <Repeat className="w-7 h-7 text-orange-400" />
-              Stripe Subscriptions
+              Subscriptions (Stripe + PayPal)
             </h1>
             <p className="text-gray-400 text-sm mt-1">
-              {counts.stripe} Stripe-linked · {counts.legacy} legacy. Click a row to open the member and assign/move a subscription.
+              {counts.stripe} Stripe · {counts.paypal} PayPal · {counts.legacy} legacy. Click a row to open the member and assign/move a subscription.
             </p>
           </div>
           <button
@@ -199,11 +211,12 @@ export default function SubscriptionsPage() {
             </div>
             <select
               value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value as '' | 'stripe' | 'legacy')}
+              onChange={(e) => setSourceFilter(e.target.value as '' | 'stripe' | 'paypal' | 'legacy')}
               className="bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white text-sm focus:outline-none"
             >
               <option value="">All sources</option>
               <option value="stripe">Stripe-linked</option>
+              <option value="paypal">PayPal-linked</option>
               <option value="legacy">Legacy only</option>
             </select>
             <button
@@ -262,7 +275,7 @@ export default function SubscriptionsPage() {
                       <td className="px-4 py-3 text-gray-300">{r.membershipType || '—'}</td>
                       <td className="px-4 py-3"><SourceBadge source={r.source} /></td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-400">
-                        {r.stripeSubscriptionId || '—'}
+                        {r.stripeSubscriptionId || r.paypalSubscriptionId || '—'}
                         {r.cancelAtPeriodEnd && (
                           <span className="ml-2 text-amber-400">(cancels at period end)</span>
                         )}

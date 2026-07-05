@@ -304,14 +304,27 @@ export default function AllPaymentsPage() {
                         )}
                       </td>
                       <td className="p-3 whitespace-nowrap">
-                        {r.member.id && (
-                          <Link
-                            to={`/admin/members/${r.member.id}`}
-                            className="text-xs text-orange-400 hover:text-orange-300"
-                          >
-                            View member →
-                          </Link>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          {/* Cross-links: a payment is only useful when you can
+                              jump to the thing it paid for. */}
+                          {r.order?.id && (
+                            <Link
+                              to={`/admin/billing/orders/${r.order.id}`}
+                              className="text-xs text-sky-400 hover:text-sky-300"
+                              title={r.order.orderNumber ?? undefined}
+                            >
+                              View order →
+                            </Link>
+                          )}
+                          {r.member.id && (
+                            <Link
+                              to={`/admin/members/${r.member.id}`}
+                              className="text-xs text-orange-400 hover:text-orange-300"
+                            >
+                              View member →
+                            </Link>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -136,10 +136,11 @@ export const AdminCreateMembershipSchema = z.object({
   billingPostalCode: z.string().optional(),
   billingCountry: z.string().optional().default('USA'),
 
-  // Payment details (for cash/check)
+  // Payment details (for cash/check/paypal)
   cashReceiptNumber: z.string().optional(), // Receipt number for cash payments
   checkNumber: z.string().optional(), // Check number for check payments
-  createInvoice: z.boolean().optional().default(false), // Whether to create invoice for records (cash/check)
+  paypalTransactionId: z.string().optional(), // PayPal transaction id for offline PayPal payments
+  createInvoice: z.boolean().optional().default(false), // Whether to create invoice for records (cash/check/paypal)
 
   // Admin notes
   notes: z.string().optional(),

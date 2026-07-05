@@ -719,6 +719,24 @@ export class MembershipsController {
   }
 
   /**
+   * Admin: look up a PayPal subscription by id ("I-...") — status, payer,
+   * next billing, plus whether any membership already links it and which
+   * member profile matches the payer email. PayPal has no list-subscriptions
+   * API, so this by-id lookup (with the id from the PayPal dashboard) is how
+   * orphaned subscriptions get verified before relinking via record-payment.
+   */
+  @Get('admin/paypal-subscription/:subId')
+  async getPaypalSubscription(
+    @Headers('authorization') authHeader: string,
+    @Param('subId') subId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const trimmed = (subId || '').trim();
+    if (!trimmed) throw new BadRequestException('A PayPal subscription id is required');
+    return this.membershipsService.getPaypalSubscriptionSummary(trimmed);
+  }
+
+  /**
    * Admin: Get MECA ID history
    */
   @Get('admin/meca-id-history')
@@ -1258,16 +1276,17 @@ export class MembershipsController {
     @Param('id') sourceMembershipId: string,
     @Headers('authorization') authHeader: string,
     @Body() data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
   ) {
     const { profile } = await this.requireAdmin(authHeader);
-    if (!data.paymentMethod || (data.paymentMethod !== 'cash' && data.paymentMethod !== 'check')) {
-      throw new BadRequestException('paymentMethod must be "cash" or "check"');
+    if (!data.paymentMethod || !['cash', 'check', 'paypal'].includes(data.paymentMethod)) {
+      throw new BadRequestException('paymentMethod must be "cash", "check", or "paypal"');
     }
     return this.membershipsService.manualRenewMembership(
       sourceMembershipId,
@@ -1286,16 +1305,17 @@ export class MembershipsController {
     @Param('id') membershipId: string,
     @Headers('authorization') authHeader: string,
     @Body() data: {
-      paymentMethod: 'cash' | 'check';
+      paymentMethod: 'cash' | 'check' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
+      paypalTransactionId?: string;
       amountOverride?: number;
       notes?: string;
     },
   ) {
     const { profile } = await this.requireAdmin(authHeader);
-    if (!data.paymentMethod || (data.paymentMethod !== 'cash' && data.paymentMethod !== 'check')) {
-      throw new BadRequestException('paymentMethod must be "cash" or "check"');
+    if (!data.paymentMethod || !['cash', 'check', 'paypal'].includes(data.paymentMethod)) {
+      throw new BadRequestException('paymentMethod must be "cash", "check", or "paypal"');
     }
     return this.membershipsService.applyManualPaymentToMembership(
       membershipId,
@@ -1320,11 +1340,13 @@ export class MembershipsController {
     @Headers('authorization') authHeader: string,
     @Body() data: {
       mode?: 'reactivate' | 'renew' | 'payment_only';
-      paymentMethod: 'cash' | 'check' | 'stripe';
+      paymentMethod: 'cash' | 'check' | 'stripe' | 'paypal';
       checkNumber?: string;
       cashReceiptNumber?: string;
       stripePaymentIntentId?: string;
       stripeSubscriptionId?: string;
+      paypalTransactionId?: string;
+      paypalSubscriptionId?: string;
       amountOverride?: number;
       notes?: string;
     },
@@ -1332,9 +1354,9 @@ export class MembershipsController {
     const { profile } = await this.requireAdmin(authHeader);
     if (
       !data.paymentMethod ||
-      !['cash', 'check', 'stripe'].includes(data.paymentMethod)
+      !['cash', 'check', 'stripe', 'paypal'].includes(data.paymentMethod)
     ) {
-      throw new BadRequestException('paymentMethod must be "cash", "check", or "stripe"');
+      throw new BadRequestException('paymentMethod must be "cash", "check", "stripe", or "paypal"');
     }
     if (data.mode && !['reactivate', 'renew', 'payment_only'].includes(data.mode)) {
       throw new BadRequestException('mode must be "reactivate", "renew", or "payment_only"');

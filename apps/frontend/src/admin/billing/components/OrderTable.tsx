@@ -128,6 +128,11 @@ export function OrderTable({
             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
+            {/* Invoice + payment on the SAME row as the order — the admin
+                shouldn't have to open three lists to see one transaction. */}
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              Invoice / Payment
+            </th>
             <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
               Total
             </th>
@@ -286,6 +291,40 @@ export function OrderTable({
               </td>
               <td className="whitespace-nowrap px-4 py-3">
                 <OrderStatusBadge status={order.status} size="sm" />
+              </td>
+              <td className="whitespace-nowrap px-4 py-3">
+                {(order as any).invoiceSummary ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/admin/billing/invoices/${(order as any).invoiceSummary.id}`);
+                    }}
+                    className="text-xs text-purple-300 hover:text-purple-200 hover:underline font-mono block text-left"
+                    title={`Invoice ${(order as any).invoiceSummary.status}`}
+                  >
+                    {(order as any).invoiceSummary.invoiceNumber}
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-600 block">no invoice</span>
+                )}
+                {(order as any).paymentSummary ? (
+                  <span
+                    className="text-xs text-gray-400 capitalize"
+                    title={(order as any).paymentSummary.transactionId ?? undefined}
+                  >
+                    {String((order as any).paymentSummary.method || '').replace(/_/g, ' ')}
+                    {' · '}
+                    <span className={
+                      (order as any).paymentSummary.status === 'paid' ? 'text-emerald-400'
+                        : (order as any).paymentSummary.status === 'failed' ? 'text-red-400'
+                          : (order as any).paymentSummary.status === 'refunded' ? 'text-purple-300' : 'text-gray-300'
+                    }>
+                      {(order as any).paymentSummary.status}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-600">no payment record</span>
+                )}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-right">
                 <span className="text-sm font-medium text-white">
