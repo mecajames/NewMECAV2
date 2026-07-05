@@ -364,6 +364,16 @@ export class TicketAdminController {
     return this.categoriesService.findForForm(departmentId, viewerFromQuery(audience, roles));
   }
 
+  // Public — key→label pairs for DISPLAYING stored ticket categories
+  // (includes inactive categories: old tickets keep their key forever).
+  // Labels only, nothing sensitive. Powers the frontend's label lookup so
+  // a ticket never renders its raw key ("Ma Renewal" ← ma_renewal).
+  @Public()
+  @Get('categories/labels')
+  async listCategoryLabels() {
+    return this.categoriesService.listLabels();
+  }
+
   @Get('categories')
   async listCategories(@Headers('authorization') authHeader: string) {
     await this.requireAdmin(authHeader);

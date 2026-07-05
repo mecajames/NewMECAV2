@@ -47,6 +47,8 @@ import {
   SystemFilter,
 } from '../../ticket-support-tools.api-client';
 import { reportError } from './error-helper';
+import { useTicketCategoryLabels } from '../../category-labels';
+import { OPEN_LIFECYCLE_STATUSES, LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../../status-lifecycle';
 
 // Map of icon names returned by the system-filters endpoint -> the
 // rendered React node. Only the icons we use are included so the
@@ -168,13 +170,9 @@ function MultiSelectDropdown<T extends string>({
 }
 
 // All filters are multi-select. Empty array = no filter on that field.
-// Status defaults to the 7 "non-terminal" values (matches the legacy
-// 'active' synthetic group) so the admin queue doesn't show
-// Resolved/Closed unless the admin explicitly opts in.
-const ACTIVE_STATUSES: TicketStatus[] = [
-  'open', 'in_progress', 'awaiting_response',
-  'pending_internal_review', 'escalated', 'on_hold', 'reopened',
-];
+// The default LENS is the "All Open" tab (every open-lifecycle ticket);
+// the status multi-select starts empty so the "All Tickets" tab genuinely
+// shows every ticket in the system.
 
 // ---------------------------------------------------------------------
 // Working-state persistence. Opening a ticket unmounts this component
@@ -186,7 +184,7 @@ const ACTIVE_STATUSES: TicketStatus[] = [
 // stomps the view they were just working in.
 const QUEUE_STATE_KEY = 'admin-ticket-queue-state-v1';
 interface QueueSnapshot {
-  activeTab: 'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold';
+  activeTab: 'all' | 'open' | 'closed' | 'assigned' | 'member_replied' | 'unassigned' | 'critical' | 'on_hold';
   searchQuery: string;
   statusFilter: TicketStatus[];
   priorityFilter: TicketPriority[];
@@ -210,6 +208,9 @@ function loadQueueSnapshot(): QueueSnapshot | null {
 
 export function TicketManagement({ currentUserId }: TicketManagementProps) {
   const navigate = useNavigate();
+  // Admin-defined labels for managed category keys (e.g. 'ma_renewal' must
+  // never render as the title-cased key "Ma Renewal").
+  const categoryLabel = useTicketCategoryLabels();
 
   // Restore the previous queue state (if any) exactly once per mount,
   // BEFORE the useState initializers below read from it.
@@ -217,7 +218,11 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   if (snapshotRef.current === undefined) snapshotRef.current = loadQueueSnapshot();
   const snap = snapshotRef.current;
 
-  const [activeTab, setActiveTab] = useState<'all' | 'assigned' | 'unassigned' | 'critical' | 'on_hold'>(snap?.activeTab ?? 'all');
+  // Default lens = "All Open": every open-lifecycle ticket regardless of
+  // sub-status or assignee. "All Tickets" shows genuinely everything.
+  // ('critical' is no longer a tab — the "Critical & Open" quick view covers
+  // it — but stays in the type so restored snapshots don't break.)
+  const [activeTab, setActiveTab] = useState<'all' | 'open' | 'closed' | 'assigned' | 'member_replied' | 'unassigned' | 'critical' | 'on_hold'>(snap?.activeTab ?? 'open');
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -229,7 +234,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   // Filters
   const [showFilters, setShowFilters] = useState(snap?.showFilters ?? false);
   const [searchQuery, setSearchQuery] = useState(snap?.searchQuery ?? '');
-  const [statusFilter, setStatusFilter] = useState<TicketStatus[]>(snap?.statusFilter ?? ACTIVE_STATUSES);
+  const [statusFilter, setStatusFilter] = useState<TicketStatus[]>(snap?.statusFilter ?? []);
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority[]>(snap?.priorityFilter ?? []);
   const [departmentFilter, setDepartmentFilter] = useState<string[]>(snap?.departmentFilter ?? []);
   // Assignee filter — UUIDs of assigned staff, plus the sentinel
@@ -355,7 +360,19 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
         // Tab-specific filters. These pin the relevant fields regardless of
         // the filter-panel selections so e.g. the "On Hold" tab always shows
         // on_hold tickets even if the Status dropdown is on something else.
-        if (activeTab === 'assigned') {
+        if (activeTab === 'open') {
+          // Every OPEN request — any sub-status, any assignee. Reopened is
+          // open too; only Resolved/Closed are excluded.
+          query.status = OPEN_LIFECYCLE_STATUSES as any;
+        } else if (activeTab === 'closed') {
+          // Finished work: resolved + closed.
+          query.status = ['resolved', 'closed'] as any;
+        } else if (activeTab === 'member_replied') {
+          // Open tickets where the MEMBER replied last — the ball is in our
+          // court, regardless of assignee.
+          query.status = OPEN_LIFECYCLE_STATUSES as any;
+          query.last_reply_by = 'customer';
+        } else if (activeTab === 'assigned') {
           query.assigned_to_id = currentUserId;
         } else if (activeTab === 'critical') {
           query.priority = 'critical';
@@ -602,7 +619,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
   }, [page, activeTab, statusFilter, priorityFilter, departmentFilter, assigneeFilter, lastReplyFilter, waitingOnFilter]);
 
   const handleResetFilter = () => {
-    setStatusFilter(ACTIVE_STATUSES);
+    setStatusFilter([]);
     setPriorityFilter([]);
     setDepartmentFilter([]);
     setLastReplyFilter('');
@@ -621,9 +638,9 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
    * leaves the search box / tab alone.
    */
   const handleClearAllFilters = () => {
-    setActiveTab('all');
+    setActiveTab('open');
     setSearchQuery('');
-    setStatusFilter(ACTIVE_STATUSES);
+    setStatusFilter([]);
     setPriorityFilter([]);
     setDepartmentFilter([]);
     setAssigneeFilter([]);
@@ -638,14 +655,11 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
 
   // True when anything deviates from the default view — gates the "Clear
   // filters" button so it only appears when there's actually something to
-  // clear. Status counts as "filtered" only when it differs from the default
-  // active-status set.
-  const statusIsDefault =
-    statusFilter.length === ACTIVE_STATUSES.length &&
-    ACTIVE_STATUSES.every((s) => statusFilter.includes(s));
+  // clear. Default = "All Open" tab with no explicit status selection.
+  const statusIsDefault = statusFilter.length === 0;
   const hasActiveFilters =
     searchQuery.trim() !== '' ||
-    activeTab !== 'all' ||
+    activeTab !== 'open' ||
     priorityFilter.length > 0 ||
     departmentFilter.length > 0 ||
     assigneeFilter.length > 0 ||
@@ -781,9 +795,11 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       <div className="flex items-center gap-2 border-b border-slate-700 overflow-x-auto">
         {[
           { id: 'all', label: 'All Tickets', icon: <Ticket className="w-4 h-4" /> },
+          { id: 'open', label: 'All Open', icon: <AlertCircle className="w-4 h-4" /> },
+          { id: 'closed', label: 'All Closed', icon: <CheckCircle className="w-4 h-4" /> },
           { id: 'assigned', label: 'Assigned to Me', icon: <User className="w-4 h-4" /> },
+          { id: 'member_replied', label: 'Member Replied', icon: <MessageSquare className="w-4 h-4" /> },
           { id: 'unassigned', label: 'Unassigned', icon: <Users className="w-4 h-4" /> },
-          { id: 'critical', label: 'Critical', icon: <AlertCircle className="w-4 h-4" /> },
           { id: 'on_hold', label: `Tickets on Hold${stats?.on_hold ? ` (${stats.on_hold})` : ''}`, icon: <PauseCircle className="w-4 h-4" /> },
         ].map((tab) => (
           <button
@@ -1116,14 +1132,11 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
               </thead>
               <tbody className="divide-y divide-slate-700">
                 {tickets.map((ticket) => {
-                  // Tolerate unmapped status/priority values (older rows,
-                  // future enum additions) — render a neutral badge instead
-                  // of throwing on `.className` and whiting the page.
-                  const statusBadge = statusConfig[ticket.status] ?? {
-                    label: String(ticket.status || 'Unknown').replace(/_/g, ' '),
-                    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
-                    icon: null,
-                  };
+                  // Two-level status: lifecycle (Open / Resolved / Closed)
+                  // with the working sub-status underneath while open.
+                  // Tolerates unmapped values (older rows, future enums).
+                  const lifecycle = LIFECYCLE_BADGE[lifecycleOf(ticket.status)];
+                  const subStatus = subStatusOf(ticket.status);
                   const priorityBadge = priorityConfig[ticket.priority] ?? {
                     label: String(ticket.priority || '—'),
                     className: 'bg-gray-500/10 text-gray-400 border-gray-500',
@@ -1138,14 +1151,16 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       <div>
                         <span className="text-xs font-mono text-orange-400">{ticket.ticket_number}</span>
                         <p className="text-white font-medium truncate max-w-xs">{ticket.title}</p>
-                        <p className="text-xs text-gray-500 capitalize">{(ticket.category || '—').replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-gray-500">{categoryLabel(ticket.category)}</p>
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${statusBadge.className}`}>
-                        {statusBadge.icon}
-                        {statusBadge.label}
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${lifecycle.className}`}>
+                        {lifecycle.label}
                       </span>
+                      {subStatus && (
+                        <p className="text-[11px] text-gray-400 mt-1">{subStatus}</p>
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityBadge.className}`}>

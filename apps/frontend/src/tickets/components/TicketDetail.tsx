@@ -66,6 +66,8 @@ import { sanitizeAnnouncementHtml } from '@/announcements/sanitize';
 import { TicketAttachmentImage } from './TicketAttachmentImage';
 import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
+import { useTicketCategoryLabels } from '../category-labels';
+import { LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../status-lifecycle';
 
 // Admin-facing status pill. The pill name itself says who has the ball —
 // no separate Waiting On badge anymore (it duplicated the status name).
@@ -164,6 +166,9 @@ export function TicketDetail({
   const navigate = useNavigate();
   const { id: paramTicketId } = useParams<{ id: string }>();
   const ticketId = propTicketId || paramTicketId;
+  // Admin-defined label for the stored category KEY ("ma_renewal" must
+  // render as its label, never as the title-cased key "Ma Renewal").
+  const categoryLabel = useTicketCategoryLabels();
 
   const [ticket, setTicket] = useState<TicketType | null>(null);
   const [comments, setComments] = useState<TicketComment[]>([]);
@@ -1023,14 +1028,18 @@ export function TicketDetail({
     );
   }
 
-  // Data-tolerant badge lookups: a ticket can carry a status/priority value
-  // this build's maps don't know (older rows, future enum additions). An
-  // unmapped value must render a neutral badge — NOT throw on `.className`
-  // and white-screen the whole app.
-  const statusBadge = adminStatusConfig[ticket.status] ?? {
-    label: String(ticket.status || 'Unknown').replace(/_/g, ' '),
-    className: 'bg-gray-500/10 text-gray-400 border-gray-500',
-    icon: <AlertCircle className="w-3 h-3" />,
+  // Two-level status display: lifecycle (Open / Resolved / Closed) with the
+  // working sub-status while open — "Open · In Progress", "Open · Pending
+  // Customer", etc. Stored statuses are unchanged; presentation only.
+  // Tolerates unmapped values (older rows, future enum additions).
+  const ticketLifecycle = LIFECYCLE_BADGE[lifecycleOf(ticket.status)];
+  const ticketSubStatus = subStatusOf(ticket.status);
+  // Primary pill = lifecycle ONLY (Open / Resolved / Closed — end of story);
+  // the working sub-status renders as its own neutral chip beside it.
+  const statusBadge = {
+    label: ticketLifecycle.label,
+    className: ticketLifecycle.className,
+    icon: adminStatusConfig[ticket.status]?.icon ?? <AlertCircle className="w-3 h-3" />,
   };
   const priorityBadge = priorityConfig[ticket.priority] ?? {
     label: String(ticket.priority || '—'),
@@ -1043,7 +1052,7 @@ export function TicketDetail({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <span className="text-lg font-mono font-bold text-orange-400">{ticket.ticket_number}</span>
+            <span className="text-2xl font-mono font-bold text-orange-400 tracking-wide">{ticket.ticket_number}</span>
             {/* Status pill.
                 - Staff: clickable. Opens an inline menu of allowed
                   transitions (the no-reply housekeeping path). Reply-driven
@@ -1053,12 +1062,15 @@ export function TicketDetail({
                 Customer / In Progress / Escalated / etc.) so there's no
                 separate Waiting On badge. */}
             {isStaff ? (
-              <div className="relative" ref={statusMenuRef}>
+              // `flex items-center` on the wrapper: a plain block div sizes
+              // itself as a text line around the inline-flex button, which
+              // let the pills drift a few px against each other.
+              <div className="relative flex items-center" ref={statusMenuRef}>
                 <button
                   type="button"
                   onClick={() => setStatusMenuOpen((v) => !v)}
                   disabled={actionLoading}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${statusBadge.className}`}
+                  className={`inline-flex items-center gap-1 h-6 px-2.5 text-xs font-medium leading-none rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${statusBadge.className}`}
                   aria-haspopup="menu"
                   aria-expanded={statusMenuOpen}
                   title="Click to change status without replying"
@@ -1099,9 +1111,20 @@ export function TicketDetail({
                 )}
               </div>
             ) : (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${statusBadge.className}`}>
+              <span className={`inline-flex items-center gap-1 h-6 px-2.5 text-xs font-medium leading-none rounded-full border ${statusBadge.className}`}>
                 {statusBadge.icon}
-                {customerStatusLabels[ticket.status] ?? statusBadge.label}
+                {statusBadge.label}
+              </span>
+            )}
+            {/* Working sub-status while OPEN ("In Queue", "In Progress",
+                "Pending Customer", …) — its own neutral chip so the primary
+                pill stays a clean Open/Resolved/Closed. Members see their
+                customer-facing wording instead. */}
+            {ticketSubStatus && (
+              <span className="inline-flex items-center h-6 px-2.5 text-xs font-medium leading-none rounded-full border bg-slate-700/60 text-gray-300 border-slate-600">
+                {!isStaff && customerStatusLabels[ticket.status]
+                  ? customerStatusLabels[ticket.status]
+                  : ticketSubStatus}
               </span>
             )}
             {/* Priority pill.
@@ -1109,12 +1132,12 @@ export function TicketDetail({
                   directly (no reply required).
                 - Members: static span — read-only. */}
             {isStaff ? (
-              <div className="relative" ref={priorityMenuRef}>
+              <div className="relative flex items-center" ref={priorityMenuRef}>
                 <button
                   type="button"
                   onClick={() => setPriorityMenuOpen((v) => !v)}
                   disabled={actionLoading}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${priorityBadge.className}`}
+                  className={`inline-flex items-center gap-1 h-6 px-2.5 text-xs font-medium leading-none rounded-full border transition-opacity hover:opacity-80 disabled:opacity-50 ${priorityBadge.className}`}
                   aria-haspopup="menu"
                   aria-expanded={priorityMenuOpen}
                   title="Click to change priority"
@@ -1148,7 +1171,7 @@ export function TicketDetail({
                 )}
               </div>
             ) : (
-              <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${priorityBadge.className}`}>
+              <span className={`inline-flex items-center h-6 px-2.5 text-xs font-medium leading-none rounded-full border ${priorityBadge.className}`}>
                 {priorityBadge.label}
               </span>
             )}
@@ -1926,7 +1949,7 @@ export function TicketDetail({
                   <Tag className="w-4 h-4" />
                   Category
                 </span>
-                <span className="text-white capitalize">{ticket.category.replace(/_/g, ' ')}</span>
+                <span className="text-white">{categoryLabel(ticket.category)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 flex items-center gap-2">
