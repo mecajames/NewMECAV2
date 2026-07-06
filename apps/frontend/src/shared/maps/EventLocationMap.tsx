@@ -105,6 +105,11 @@ export default function EventLocationMap({
       streetViewControl: false,
       fullscreenControl: true,
       gestureHandling: 'cooperative',
+      // Shrink the default controls (zoom +/- and fullscreen) — at Google's
+      // default 40px they dominate the small mobile map. 26px on phones,
+      // 32px elsewhere.
+      controlSize:
+        typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 26 : 32,
     }),
     []
   );
@@ -139,7 +144,22 @@ export default function EventLocationMap({
   }
 
   return (
-    <div className="aspect-video rounded-lg overflow-hidden bg-slate-700 relative">
+    <div>
+      {/* MOBILE: the map is small, so overlays buried it (address on top of
+          the map + buttons over the bottom left almost nothing visible).
+          Address goes ABOVE the map, action buttons BELOW it — overlays are
+          desktop-only (sm:). */}
+      <div className="sm:hidden mb-2 bg-slate-800 rounded-lg px-3 py-2.5 border border-slate-700">
+        <div className="flex items-start gap-2">
+          <MapPin className="h-4 w-4 text-orange-500 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-white font-semibold text-sm">{venueName}</p>
+            <p className="text-gray-300 text-xs mt-0.5">{fullAddress}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="aspect-video rounded-lg overflow-hidden bg-slate-700 relative">
       <GoogleMap mapContainerStyle={containerStyle} center={center} zoom={15} options={mapOptions}>
         {/* Custom MECA marker */}
         <MarkerF position={center} icon={markerIcon} onClick={onMarkerClick} />
@@ -186,8 +206,8 @@ export default function EventLocationMap({
         )}
       </GoogleMap>
 
-      {/* Address overlay — top left */}
-      <div className="absolute top-3 left-3 bg-slate-800/90 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg max-w-xs">
+      {/* Address overlay — top left (DESKTOP only; on mobile it sits above the map) */}
+      <div className="hidden sm:block absolute top-3 left-3 bg-slate-800/90 backdrop-blur-sm rounded-lg px-4 py-3 shadow-lg max-w-xs">
         <div className="flex items-start gap-2">
           <MapPin className="h-4 w-4 text-orange-500 flex-shrink-0 mt-0.5" />
           <div className="min-w-0">
@@ -197,8 +217,8 @@ export default function EventLocationMap({
         </div>
       </div>
 
-      {/* Overlay Buttons — bottom left */}
-      <div className="absolute bottom-3 left-3 flex gap-2">
+      {/* Overlay Buttons — bottom left (DESKTOP only; on mobile they sit below the map) */}
+      <div className="hidden sm:flex absolute bottom-3 left-3 gap-2">
         <a
           href={directionsUrl}
           target="_blank"
@@ -220,6 +240,36 @@ export default function EventLocationMap({
           ) : (
             <>
               <Eye className="h-4 w-4" />
+              Street View
+            </>
+          )}
+        </button>
+      </div>
+      </div>
+
+      {/* MOBILE action buttons — compact, directly under the map */}
+      <div className="sm:hidden mt-2 grid grid-cols-2 gap-2">
+        <a
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg transition-colors"
+        >
+          <Navigation className="h-3.5 w-3.5" />
+          Get Directions
+        </a>
+        <button
+          onClick={() => setShowStreetView((prev) => !prev)}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg transition-colors border border-slate-500"
+        >
+          {showStreetView ? (
+            <>
+              <EyeOff className="h-3.5 w-3.5" />
+              Map View
+            </>
+          ) : (
+            <>
+              <Eye className="h-3.5 w-3.5" />
               Street View
             </>
           )}

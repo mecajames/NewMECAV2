@@ -61,7 +61,20 @@ export interface Event {
   duration_days?: number | null;
   created_at: string;
   updated_at: string;
-  event_director?: any;
+  /**
+   * Assigned event director. Two shapes depending on endpoint:
+   * - public list enrichment: { name, email, phone }
+   * - detail endpoint (populated profile): { first_name, last_name, email, phone }
+   */
+  event_director?: {
+    name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
+  /** Public list enrichment: accepted/confirmed judges for the event. */
+  judges?: Array<{ name: string }>;
   season?: any;
   result_count?: number;
 }
