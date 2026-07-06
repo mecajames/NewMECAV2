@@ -35,6 +35,11 @@ export interface WorldFinalsQualification {
     first_name?: string;
     last_name?: string;
   };
+  /**
+   * The member's CURRENT profile name (via account link or MECA ID) —
+   * compare with competitor_name to flag stale pre-name-lock nicknames.
+   */
+  profile_name?: string | null;
 }
 
 export interface QualificationStats {
@@ -173,6 +178,17 @@ export const worldFinalsApi = {
    */
   sendInvitation: async (qualificationId: string): Promise<WorldFinalsQualification> => {
     const response = await axios.post(`${API_BASE}/qualifications/${qualificationId}/send-invitation`);
+    return response.data;
+  },
+
+  /**
+   * Overwrite a qualification's stamped competitor name with the member's
+   * CURRENT profile name (admin only) — fixes stale pre-name-lock nicknames.
+   */
+  syncQualificationName: async (
+    qualificationId: string,
+  ): Promise<{ success: boolean; competitor_name: string; message: string }> => {
+    const response = await axios.post(`${API_BASE}/qualifications/${qualificationId}/sync-name`);
     return response.data;
   },
 

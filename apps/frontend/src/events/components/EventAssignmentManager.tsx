@@ -100,9 +100,11 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
     }
   }
 
-  async function loadAvailablePersonnel() {
+  // Explicit type param (not read from state): callers switch the tab and
+  // load in the same tick, and reading activeTab here would see the OLD value.
+  async function loadAvailablePersonnel(type: 'judges' | 'eds') {
     try {
-      if (activeTab === 'judges') {
+      if (type === 'judges') {
         const judges = await getAllJudges({ isActive: true });
         // Filter out already assigned judges
         const assignedJudgeIds = judgeAssignments.map(a => a.judge_id);
@@ -116,6 +118,15 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
     } catch (err: any) {
       console.error('Error loading available personnel:', err);
     }
+  }
+
+  // Open the add-staff modal, defaulting to whichever role is still missing
+  // (no ED yet → EDs tab; otherwise judges).
+  function openAddModal() {
+    const startTab: 'judges' | 'eds' = edAssignments.length === 0 ? 'eds' : 'judges';
+    setActiveTab(startTab);
+    setShowAddModal(true);
+    loadAvailablePersonnel(startTab);
   }
 
   async function handleAddAssignment(personId: string) {
@@ -195,7 +206,7 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
       <div className="bg-slate-700 rounded-lg p-6">
         <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
           <Users className="h-5 w-5 text-orange-500" />
-          Event Staff Assignments
+          Your Event Staff
         </h3>
         <div className="flex justify-center py-8">
           <div className="animate-spin h-8 w-8 border-4 border-orange-500 border-r-transparent rounded-full"></div>
@@ -204,18 +215,19 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
     );
   }
 
+  const nothingAssigned = edAssignments.length === 0 && judgeAssignments.length === 0;
+
   return (
     <div className="bg-slate-700 rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-white font-semibold flex items-center gap-2">
           <Users className="h-5 w-5 text-orange-500" />
-          Event Staff Assignments
+          Your Event Staff
         </h3>
+        {/* Kept visible even with staff assigned — for switching, changing,
+            or adding additional people. */}
         <button
-          onClick={() => {
-            setShowAddModal(true);
-            loadAvailablePersonnel();
-          }}
+          onClick={openAddModal}
           className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
         >
           <UserPlus className="h-4 w-4" />
@@ -233,132 +245,134 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setActiveTab('judges')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-            activeTab === 'judges'
-              ? 'bg-orange-600 text-white'
-              : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
-          }`}
-        >
-          <Gavel className="h-4 w-4" />
-          Judges ({judgeAssignments.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('eds')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-            activeTab === 'eds'
-              ? 'bg-purple-600 text-white'
-              : 'bg-slate-600 text-gray-300 hover:bg-slate-500'
-          }`}
-        >
-          <ClipboardList className="h-4 w-4" />
-          Event Directors ({edAssignments.length})
-        </button>
-      </div>
-
-      {/* Assignments List */}
-      {activeTab === 'judges' ? (
-        <div className="space-y-2">
-          {judgeAssignments.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">No judges assigned to this event</p>
-          ) : (
-            judgeAssignments.map(assignment => (
-              <div key={assignment.id} className="bg-slate-600 rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Gavel className="h-5 w-5 text-orange-400" />
-                  <div>
-                    <p className="text-white font-medium">
-                      {assignment.judge?.user?.first_name || ''} {assignment.judge?.user?.last_name || ''}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400 text-xs">
-                        {assignment.judge?.user?.email}
-                      </span>
-                      <span className="text-orange-400 text-xs">
-                        {ROLE_LABELS[assignment.role as EventAssignmentRole] || assignment.role}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <select
-                      value={assignment.status}
-                      onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'judge')}
-                      disabled={updatingStatus === assignment.id}
-                      className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
-                    >
-                      <option value={EventAssignmentStatus.REQUESTED}>requested</option>
-                      <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
-                      <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
-                      <option value={EventAssignmentStatus.COMPLETED}>completed</option>
-                      <option value={EventAssignmentStatus.DECLINED}>declined</option>
-                      <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
-                    </select>
-                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
-                  </div>
-                  <button
-                    onClick={() => handleRemoveAssignment(assignment.id, 'judge')}
-                    className="p-1 text-gray-400 hover:text-red-400 transition-colors"
-                    title="Remove assignment"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+      {/* Everyone visible at once, no tabs to click (James 2026-07-05):
+          EVENT DIRECTOR group first, then JUDGES. */}
+      {nothingAssigned ? (
+        <div className="text-center py-6">
+          <p className="text-gray-400 text-sm mb-4">No staff assigned to this event yet.</p>
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Staff
+          </button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {edAssignments.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">No event directors assigned to this event</p>
-          ) : (
-            edAssignments.map(assignment => (
-              <div key={assignment.id} className="bg-slate-600 rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <ClipboardList className="h-5 w-5 text-purple-400" />
-                  <div>
-                    <p className="text-white font-medium">
-                      {assignment.eventDirector?.user?.first_name || ''} {assignment.eventDirector?.user?.last_name || ''}
-                    </p>
-                    <span className="text-gray-400 text-xs">
-                      {assignment.eventDirector?.user?.email}
-                    </span>
+        <>
+          {/* Event Director(s) — first */}
+          <div className="mb-4">
+            <h4 className="text-purple-300 text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <ClipboardList className="h-3.5 w-3.5" />
+              Event Director{edAssignments.length !== 1 ? 's' : ''}
+            </h4>
+            <div className="space-y-2">
+              {edAssignments.length === 0 ? (
+                <p className="text-gray-400 text-sm py-1">No event director assigned yet.</p>
+              ) : (
+                edAssignments.map(assignment => (
+                  <div key={assignment.id} className="bg-slate-600 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <ClipboardList className="h-5 w-5 text-purple-400" />
+                      <div>
+                        <p className="text-white font-medium">
+                          {assignment.eventDirector?.user?.first_name || ''} {assignment.eventDirector?.user?.last_name || ''}
+                        </p>
+                        <span className="text-gray-400 text-xs">
+                          {assignment.eventDirector?.user?.email}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <select
+                          value={assignment.status}
+                          onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'ed')}
+                          disabled={updatingStatus === assignment.id}
+                          className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
+                        >
+                          <option value={EventAssignmentStatus.REQUESTED}>requested</option>
+                          <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
+                          <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
+                          <option value={EventAssignmentStatus.COMPLETED}>completed</option>
+                          <option value={EventAssignmentStatus.DECLINED}>declined</option>
+                          <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
+                        </select>
+                        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                      </div>
+                      <button
+                        onClick={() => handleRemoveAssignment(assignment.id, 'ed')}
+                        className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                        title="Remove assignment"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <select
-                      value={assignment.status}
-                      onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'ed')}
-                      disabled={updatingStatus === assignment.id}
-                      className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
-                    >
-                      <option value={EventAssignmentStatus.REQUESTED}>requested</option>
-                      <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
-                      <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
-                      <option value={EventAssignmentStatus.COMPLETED}>completed</option>
-                      <option value={EventAssignmentStatus.DECLINED}>declined</option>
-                      <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
-                    </select>
-                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Judges — second */}
+          <div>
+            <h4 className="text-orange-300 text-xs font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <Gavel className="h-3.5 w-3.5" />
+              Judge{judgeAssignments.length !== 1 ? 's' : ''}
+            </h4>
+            <div className="space-y-2">
+              {judgeAssignments.length === 0 ? (
+                <p className="text-gray-400 text-sm py-1">No judges assigned yet.</p>
+              ) : (
+                judgeAssignments.map(assignment => (
+                  <div key={assignment.id} className="bg-slate-600 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Gavel className="h-5 w-5 text-orange-400" />
+                      <div>
+                        <p className="text-white font-medium">
+                          {assignment.judge?.user?.first_name || ''} {assignment.judge?.user?.last_name || ''}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 text-xs">
+                            {assignment.judge?.user?.email}
+                          </span>
+                          <span className="text-orange-400 text-xs">
+                            {ROLE_LABELS[assignment.role as EventAssignmentRole] || assignment.role}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <select
+                          value={assignment.status}
+                          onChange={(e) => handleStatusUpdate(assignment.id, e.target.value as EventAssignmentStatus, 'judge')}
+                          disabled={updatingStatus === assignment.id}
+                          className={`appearance-none pl-2 pr-7 py-1 rounded-full text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500 ${STATUS_STYLES[assignment.status]} ${updatingStatus === assignment.id ? 'opacity-50' : ''}`}
+                        >
+                          <option value={EventAssignmentStatus.REQUESTED}>requested</option>
+                          <option value={EventAssignmentStatus.ACCEPTED}>accepted</option>
+                          <option value={EventAssignmentStatus.CONFIRMED}>confirmed</option>
+                          <option value={EventAssignmentStatus.COMPLETED}>completed</option>
+                          <option value={EventAssignmentStatus.DECLINED}>declined</option>
+                          <option value={EventAssignmentStatus.NO_SHOW}>no show</option>
+                        </select>
+                        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 pointer-events-none" />
+                      </div>
+                      <button
+                        onClick={() => handleRemoveAssignment(assignment.id, 'judge')}
+                        className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                        title="Remove assignment"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleRemoveAssignment(assignment.id, 'ed')}
-                    className="p-1 text-gray-400 hover:text-red-400 transition-colors"
-                    title="Remove assignment"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Add Staff Modal */}
@@ -380,25 +394,12 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
               </button>
             </div>
 
-            {/* Tabs in modal */}
+            {/* Tabs in modal — ED first to match the list order */}
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => {
-                  setActiveTab('judges');
-                  loadAvailablePersonnel();
-                }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'judges'
-                    ? 'bg-orange-600 text-white'
-                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                }`}
-              >
-                Judges
-              </button>
-              <button
-                onClick={() => {
                   setActiveTab('eds');
-                  loadAvailablePersonnel();
+                  loadAvailablePersonnel('eds');
                 }}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === 'eds'
@@ -407,6 +408,19 @@ export default function EventAssignmentManager({ eventId, eventTitle: _eventTitl
                 }`}
               >
                 Event Directors
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('judges');
+                  loadAvailablePersonnel('judges');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'judges'
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                }`}
+              >
+                Judges
               </button>
             </div>
 

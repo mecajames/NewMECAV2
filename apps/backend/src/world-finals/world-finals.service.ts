@@ -235,6 +235,33 @@ export class WorldFinalsService {
     const userIds = [...new Set(qualifications.map(q => (q.user as any)?.id || q.user).filter(Boolean))] as string[];
     const profileMap = await this.loadProfiles(em, userIds);
 
+    // Current profile name per row — the stamped competitor_name can be a
+    // stale nickname from before the name-identity lock; the admin UI flags
+    // rows where it no longer matches the member's profile. Rows without a
+    // user link resolve by MECA ID (one batch query).
+    const unlinkedMecaIds = [
+      ...new Set(
+        qualifications
+          .filter(q => !((q.user as any)?.id || q.user) && q.mecaId != null)
+          .map(q => q.mecaId),
+      ),
+    ];
+    const mecaNameMap = new Map<number, string>();
+    if (unlinkedMecaIds.length > 0) {
+      // One `?` per id — MikroORM's raw `?` expands arrays into comma lists,
+      // so ANY(?) is a syntax error (see tickets.service).
+      const placeholders = unlinkedMecaIds.map(() => '?').join(',');
+      const rows = await em.getConnection().execute(
+        `SELECT meca_id, first_name, last_name FROM public.profiles
+          WHERE meca_id IN (${placeholders})`,
+        unlinkedMecaIds,
+      );
+      for (const r of rows as any[]) {
+        const name = [r.first_name, r.last_name].filter(Boolean).join(' ').trim();
+        if (name) mecaNameMap.set(Number(r.meca_id), name);
+      }
+    }
+
     return qualifications.map(q => {
       const userId = (q.user as any)?.id || q.user;
       const profile = userId ? profileMap.get(userId) : null;
@@ -248,9 +275,65 @@ export class WorldFinalsService {
           last_name: profile.last_name,
           full_name: profile.full_name,
         };
+        obj.profile_name =
+          [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() || null;
+      } else {
+        obj.profile_name = q.mecaId != null ? (mecaNameMap.get(Number(q.mecaId)) ?? null) : null;
       }
       return obj;
     });
+  }
+
+  /**
+   * One-click fix for a stale qualification name: overwrite competitor_name
+   * with the member's CURRENT profile name (resolved via the account link,
+   * else by MECA ID). Members can no longer change their names (identity
+   * lock), so the profile is the source of truth.
+   */
+  async syncQualificationName(
+    id: string,
+  ): Promise<{ success: boolean; competitor_name: string; message: string }> {
+    const em = this.em.fork();
+    const q = await em.findOne(WorldFinalsQualification, { id });
+    if (!q) throw new NotFoundException(`Qualification ${id} not found`);
+
+    let first: string | null = null;
+    let last: string | null = null;
+    const userId = (q.user as any)?.id || q.user;
+    if (userId) {
+      const profile = await em.findOne(Profile, { id: userId as string });
+      if (profile) {
+        first = profile.first_name ?? null;
+        last = profile.last_name ?? null;
+      }
+    }
+    if (first == null && last == null && q.mecaId != null) {
+      const rows = await em.getConnection().execute(
+        `SELECT first_name, last_name FROM public.profiles WHERE meca_id = ? LIMIT 1`,
+        [q.mecaId],
+      );
+      if ((rows as any[])[0]) {
+        first = (rows as any[])[0].first_name ?? null;
+        last = (rows as any[])[0].last_name ?? null;
+      }
+    }
+
+    const name = [first, last].filter(Boolean).join(' ').trim();
+    if (!name) {
+      throw new BadRequestException(
+        'No member profile found for this qualification (by account link or MECA ID) — nothing to sync the name from.',
+      );
+    }
+
+    const oldName = q.competitorName;
+    q.competitorName = name;
+    await em.flush();
+    this.logger.log(`WF qualification ${id}: competitor name synced "${oldName}" → "${name}"`);
+    return {
+      success: true,
+      competitor_name: name,
+      message: `Updated "${oldName}" to "${name}" from the member profile.`,
+    };
   }
 
   /**

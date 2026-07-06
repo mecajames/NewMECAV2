@@ -1402,7 +1402,7 @@ export default function MembersPage() {
                                     onlineUserIds.has(member.id) ? 'bg-green-500' : 'bg-red-500'
                                   }`}
                                   title={onlineUserIds.has(member.id)
-                                    ? 'Online — used the site within the last 30 minutes (site login, independent of membership status)'
+                                    ? 'Online — hit the site within the last 30 minutes. For an expired member this is their renewal visit: the system blocks their access and routes them to renew.'
                                     : 'Offline — no activity in the last 30 minutes'}
                                 />
                               </div>

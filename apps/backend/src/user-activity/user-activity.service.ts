@@ -107,25 +107,46 @@ export class UserActivityService {
   }
 
   /**
-   * Get count of users active in the last 30 minutes.
+   * "Online" = active in the last 30 minutes AND able to hold a real session.
+   *
+   * last_seen_at is stamped by middleware BEFORE the ActiveMembershipGuard
+   * runs, so an EXPIRED member's bounced renewal visit stamps it too — which
+   * made expired members show as "online" in the admin members list (James
+   * 2026-07-05: "I thought online meant they were logged in"). Expired
+   * members cannot stay signed in (the guard 403s + the frontend signs them
+   * out), so they are excluded here. Staff/admin/ED/judge are exempt from
+   * the membership gate and always count.
+   */
+  private static readonly ONLINE_WHERE = `
+       "last_seen_at" > now() - interval '30 minutes'
+       AND NOT (
+         "membership_status" = 'expired'
+         AND COALESCE("is_staff", false) = false
+         AND COALESCE("role"::text, '') NOT IN ('admin', 'event_director', 'judge')
+       )`;
+
+  /**
+   * Get count of users active in the last 30 minutes (excludes expired
+   * members — see ONLINE_WHERE).
    */
   async getOnlineCount(): Promise<number> {
     const conn = this.em.getConnection();
     const result = await conn.execute(
       `SELECT COUNT(*)::int AS count FROM "public"."profiles"
-       WHERE "last_seen_at" > now() - interval '30 minutes'`,
+       WHERE ${UserActivityService.ONLINE_WHERE}`,
     );
     return result[0]?.count || 0;
   }
 
   /**
-   * Get list of user IDs active in the last 30 minutes.
+   * Get list of user IDs active in the last 30 minutes (excludes expired
+   * members — see ONLINE_WHERE).
    */
   async getOnlineUserIds(): Promise<string[]> {
     const conn = this.em.getConnection();
     const rows = await conn.execute(
       `SELECT "id" FROM "public"."profiles"
-       WHERE "last_seen_at" > now() - interval '30 minutes'`,
+       WHERE ${UserActivityService.ONLINE_WHERE}`,
     );
     return rows.map((r: any) => r.id);
   }

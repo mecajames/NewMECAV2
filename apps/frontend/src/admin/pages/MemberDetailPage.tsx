@@ -2714,6 +2714,7 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
     first_name: member.first_name,
     last_name: member.last_name,
     phone: member.phone || '',
+    birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
     meca_id: member.meca_id ? String(member.meca_id) : '',
     role: member.role,
     membership_status: member.membership_status,
@@ -2746,7 +2747,8 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
 
     setSaving(true);
     try {
-      await profilesApi.update(member.id, formData);
+      // Birthday: empty string must clear the field (null), not fail date parsing.
+      await profilesApi.update(member.id, { ...formData, birthday: formData.birthday || null } as any);
 
       // Optionally propagate the corrected name to all competition results + memberships.
       if (alsoUpdateResults && nameChanged && member.meca_id) {
@@ -2775,6 +2777,7 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
       first_name: member.first_name,
       last_name: member.last_name,
       phone: member.phone || '',
+      birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
       meca_id: member.meca_id ? String(member.meca_id) : '',
       role: member.role,
       membership_status: member.membership_status,
@@ -2909,6 +2912,25 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
               />
             ) : (
               <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{member.phone || 'Not provided'}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Birthday <span className="text-gray-500 text-xs">(private — birthday emails only)</span>
+            </label>
+            {isEditing ? (
+              <input
+                type="date"
+                value={formData.birthday}
+                onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">
+                {(member as any).birthday
+                  ? new Date(String((member as any).birthday).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                  : 'Not set'}
+              </div>
             )}
           </div>
           <div>

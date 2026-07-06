@@ -175,10 +175,93 @@ export class EventsService {
         em.count(Event, filter)
       ]);
 
-      return { events, total, page, limit };
+      // Enrich each event with its assigned EVENT DIRECTOR (name + contact)
+      // and accepted/confirmed JUDGES — the public calendar shows who's
+      // running/judging each event straight from the existing assignments,
+      // so admins never re-enter this per event (James 2026-07-05).
+      // Two batch queries for the page — no per-event N+1.
+      const enriched = await this.attachDirectorsAndJudges(em, events);
+
+      return { events: enriched as any, total, page, limit };
     } catch (error) {
       this.logger.error('Error in findPublicEvents:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Attach `event_director {name,email,phone}` and `judges [{name}]` to
+   * serialized event rows. Director = the event's event_director_id profile;
+   * judges = accepted/confirmed/completed EventJudgeAssignments (requested /
+   * declined ones aren't public). Judge display name prefers the judge's
+   * preferred name. Never throws — the calendar must render even if this
+   * enrichment hits a schema/migration lag.
+   */
+  private async attachDirectorsAndJudges(em: EntityManager, events: Event[]): Promise<any[]> {
+    const plain = () =>
+      events.map((e) => (typeof (e as any).toJSON === 'function' ? (e as any).toJSON() : { ...e }));
+    if (events.length === 0) return [];
+    try {
+      const conn = em.getConnection();
+      const eventIds = events.map((e) => e.id);
+      const directorIds = [
+        ...new Set(events.map((e) => (e.eventDirector as any)?.id ?? e.eventDirector).filter(Boolean)),
+      ] as string[];
+
+      // One `?` per id — MikroORM's raw `?` binding expands arrays into comma
+      // lists, so ANY(?) is a syntax error (see tickets.service).
+      const evPlaceholders = eventIds.map(() => '?').join(',');
+
+      const [directorRows, judgeRows] = await Promise.all([
+        directorIds.length > 0
+          ? conn.execute(
+              `SELECT id, first_name, last_name, email, phone
+                 FROM public.profiles
+                WHERE id IN (${directorIds.map(() => '?').join(',')})`,
+              directorIds,
+            )
+          : Promise.resolve([] as any[]),
+        conn.execute(
+          `SELECT a.event_id, j.preferred_name, p.first_name, p.last_name
+             FROM public.event_judge_assignments a
+             JOIN public.judges j ON j.id = a.judge_id
+        LEFT JOIN public.profiles p ON p.id = j.user_id
+            WHERE a.event_id IN (${evPlaceholders})
+              AND a.status IN ('accepted', 'confirmed', 'completed')
+            ORDER BY p.first_name NULLS LAST`,
+          eventIds,
+        ),
+      ]);
+
+      const directorMap = new Map<string, any>((directorRows as any[]).map((d) => [d.id, d]));
+      const judgesByEvent = new Map<string, Array<{ name: string }>>();
+      for (const j of judgeRows as any[]) {
+        const name =
+          (j.preferred_name || '').trim() ||
+          [j.first_name, j.last_name].filter(Boolean).join(' ').trim();
+        if (!name) continue;
+        const list = judgesByEvent.get(j.event_id) ?? [];
+        list.push({ name });
+        judgesByEvent.set(j.event_id, list);
+      }
+
+      return events.map((e) => {
+        const json = typeof (e as any).toJSON === 'function' ? (e as any).toJSON() : { ...e };
+        const dirId = (e.eventDirector as any)?.id ?? e.eventDirector;
+        const d = dirId ? directorMap.get(dirId as string) : null;
+        json.event_director = d
+          ? {
+              name: [d.first_name, d.last_name].filter(Boolean).join(' ').trim() || null,
+              email: d.email ?? null,
+              phone: d.phone ?? null,
+            }
+          : null;
+        json.judges = judgesByEvent.get(e.id) ?? [];
+        return json;
+      });
+    } catch (err) {
+      this.logger.error('attachDirectorsAndJudges failed (non-fatal, calendar renders without them):', err);
+      return plain();
     }
   }
 

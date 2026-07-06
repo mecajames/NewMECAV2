@@ -714,6 +714,53 @@ export default function EventsPage() {
                       </div>
                     </div>
 
+                    {/* Who's running/judging — straight from the admin's ED &
+                        judge assignments; nothing re-entered per event. */}
+                    {(event as any).event_director?.name && (
+                      <div className="flex items-start gap-2 text-gray-300 text-sm sm:text-base">
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <div>
+                            <span className="text-gray-400">Event Director:</span>{' '}
+                            {(event as any).event_director.name}
+                          </div>
+                          {((event as any).event_director.email || (event as any).event_director.phone) && (
+                            <div className="text-xs sm:text-sm text-gray-400 break-all">
+                              {(event as any).event_director.email && (
+                                <a
+                                  href={`mailto:${(event as any).event_director.email}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="hover:text-orange-400"
+                                >
+                                  {(event as any).event_director.email}
+                                </a>
+                              )}
+                              {(event as any).event_director.email && (event as any).event_director.phone && ' · '}
+                              {(event as any).event_director.phone && (
+                                <a
+                                  href={`tel:${(event as any).event_director.phone}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="hover:text-orange-400 whitespace-nowrap"
+                                >
+                                  {(event as any).event_director.phone}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {((event as any).judges?.length ?? 0) > 0 && (
+                      <div className="flex items-start gap-2 text-gray-300 text-sm sm:text-base">
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-gray-400">Judge{(event as any).judges.length !== 1 ? 's' : ''}:</span>{' '}
+                          {(event as any).judges.map((j: { name: string }) => j.name).join(', ')}
+                        </div>
+                      </div>
+                    )}
+
                     {event.registration_fee > 0 && (
                       <div className="flex items-center gap-2 text-gray-300 text-sm sm:text-base">
                         <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500 flex-shrink-0" />

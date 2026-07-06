@@ -57,6 +57,7 @@ export default function WorldFinalsAdminPage() {
   const [, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sendingInvitation, setSendingInvitation] = useState<string | null>(null);
+  const [syncingName, setSyncingName] = useState<string | null>(null);
   const [sendingAllInvitations, setSendingAllInvitations] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
 
@@ -206,6 +207,28 @@ export default function WorldFinalsAdminPage() {
   const handleSendInvitation = async (id: string) => {
     try { setSendingInvitation(id); await worldFinalsApi.sendInvitation(id); await fetchData(); }
     catch { alert('Failed'); } finally { setSendingInvitation(null); }
+  };
+  // Stale-name fix: names here were stamped at qualification time, so
+  // pre-name-lock nicknames survive even though the member's profile is now
+  // correct. The button only shows on mismatched rows and disappears once
+  // the name is synced from the profile.
+  const nameMismatch = (q: WorldFinalsQualification): boolean => {
+    if (!q.profile_name) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    return norm(q.profile_name) !== norm(q.competitor_name || '');
+  };
+  const handleSyncName = async (q: WorldFinalsQualification) => {
+    try {
+      setSyncingName(q.id);
+      const res = await worldFinalsApi.syncQualificationName(q.id);
+      setQualifications(prev =>
+        prev.map(row => (row.id === q.id ? { ...row, competitor_name: res.competitor_name } : row)),
+      );
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to update the name');
+    } finally {
+      setSyncingName(null);
+    }
   };
   const handleSendAllInvitations = async () => {
     if (!confirm('Send invitations to all pending qualifiers?')) return;
@@ -478,7 +501,19 @@ export default function WorldFinalsAdminPage() {
                   <tbody className="divide-y divide-slate-700">
                     {filteredQualifications.map(q => (
                       <tr key={q.id} className="hover:bg-slate-700/50">
-                        <td className="px-4 py-3 text-white">{q.competitor_name}</td>
+                        <td className="px-4 py-3 text-white">
+                          {q.competitor_name}
+                          {nameMismatch(q) && (
+                            <button
+                              onClick={() => handleSyncName(q)}
+                              disabled={syncingName === q.id}
+                              title={`This name doesn't match the member's profile (profile says "${q.profile_name}"). Click to update it from the profile.`}
+                              className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-600/50 text-[11px] rounded-full disabled:opacity-50"
+                            >
+                              {syncingName === q.id ? 'Fixing…' : `≠ profile — fix to "${q.profile_name}"`}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3"><span className="text-orange-400 font-mono">{q.meca_id}</span></td>
                         <td className="px-4 py-3"><span className="px-2 py-0.5 bg-slate-700 rounded text-sm text-white">{q.competition_class}</span></td>
                         <td className="px-4 py-3 text-green-400 font-bold">{q.total_points}</td>

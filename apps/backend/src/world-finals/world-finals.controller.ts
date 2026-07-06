@@ -95,6 +95,19 @@ export class WorldFinalsController {
   }
 
   /**
+   * Admin: overwrite a qualification's stamped competitor_name with the
+   * member's CURRENT profile name (stale nicknames predate the name lock).
+   */
+  @Post('qualifications/:id/sync-name')
+  async syncQualificationName(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.worldFinalsService.syncQualificationName(id);
+  }
+
+  /**
    * Send invitation to a specific qualified competitor
    */
   @Post('qualifications/:id/send-invitation')
