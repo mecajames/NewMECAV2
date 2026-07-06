@@ -1401,7 +1401,9 @@ export default function MembersPage() {
                                   className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-800 ${
                                     onlineUserIds.has(member.id) ? 'bg-green-500' : 'bg-red-500'
                                   }`}
-                                  title={onlineUserIds.has(member.id) ? 'Online' : 'Offline'}
+                                  title={onlineUserIds.has(member.id)
+                                    ? 'Online — used the site within the last 30 minutes (site login, independent of membership status)'
+                                    : 'Offline — no activity in the last 30 minutes'}
                                 />
                               </div>
                               <div className="ml-3 min-w-0">

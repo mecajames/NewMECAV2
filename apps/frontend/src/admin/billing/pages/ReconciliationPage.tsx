@@ -130,28 +130,28 @@ export default function ReconciliationPage() {
           </div>
         </div>
 
-        {/* Mode toggle */}
-        <div className="inline-flex rounded-lg bg-slate-800 border border-slate-700 p-1 mb-5">
-          <button
-            onClick={() => switchMode('ledger')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              mode === 'ledger' ? 'bg-orange-600 text-white' : 'text-gray-300 hover:text-white'
-            }`}
-          >
-            Ledger (internal)
-          </button>
-          <button
-            onClick={() => switchMode('gateway')}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              mode === 'gateway' ? 'bg-orange-600 text-white' : 'text-gray-300 hover:text-white'
-            }`}
-          >
-            Gateway (live)
-          </button>
-        </div>
-
-        {/* Controls */}
+        {/* Controls — ONE row (James 2026-07-05): mode toggle · window ·
+            Run Now on the left, last-run timestamp pinned to the far right
+            so it can't push the controls around. Wraps on small screens. */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="inline-flex rounded-lg bg-slate-800 border border-slate-700 p-1">
+            <button
+              onClick={() => switchMode('ledger')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                mode === 'ledger' ? 'bg-orange-600 text-white' : 'text-gray-300 hover:text-white'
+              }`}
+            >
+              Ledger (internal)
+            </button>
+            <button
+              onClick={() => switchMode('gateway')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                mode === 'gateway' ? 'bg-orange-600 text-white' : 'text-gray-300 hover:text-white'
+              }`}
+            >
+              Gateway (live)
+            </button>
+          </div>
           <label className="text-sm text-gray-400">Window:</label>
           <select
             value={windowDays}
@@ -181,7 +181,9 @@ export default function ReconciliationPage() {
             {running ? 'Running…' : 'Run Now'}
           </button>
           {report?.generatedAt && (
-            <span className="text-xs text-gray-500">Last run: {formatDateTime(report.generatedAt)}</span>
+            <span className="ml-auto text-xs text-gray-500 whitespace-nowrap">
+              Last run: {formatDateTime(report.generatedAt)}
+            </span>
           )}
         </div>
 

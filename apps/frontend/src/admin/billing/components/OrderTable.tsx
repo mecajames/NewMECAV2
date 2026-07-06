@@ -39,8 +39,15 @@ export function OrderTable({
   const allSelected = selectionEnabled && orders.length > 0 && orders.every(o => selectedIds!.has(o.id));
   const someSelected = selectionEnabled && orders.some(o => selectedIds!.has(o.id));
 
-  // Single-line "Mon DD, YYYY HH:MM" used in the table cell. Two lines
-  // would push the row height up; one compact line keeps the table dense.
+  // Date-only in the cell ("May 12, 2026") — the time rides in the hover
+  // title. Dropping the time was part of the 2026-07-05 width diet so the
+  // table fits tablets without sideways scrolling.
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   const formatDateTime = (dateString: string) => {
     const d = new Date(dateString);
     return d.toLocaleString('en-US', {
@@ -103,40 +110,41 @@ export function OrderTable({
                 />
               </th>
             )}
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Order
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400 whitespace-nowrap">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400 whitespace-nowrap">
               Date
             </th>
             {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Customer
               </th>
             )}
             {!compact && (
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                 Items
               </th>
             )}
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Type
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-              Subscription
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            {/* Subscription column removed (James 2026-07-05): it was "-" on
+                almost every row and one long sub_… id forced the whole table
+                wide; subscription info lives on the member page and the
+                billing Subscriptions page. */}
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Status
             </th>
             {/* Invoice + payment on the SAME row as the order — the admin
                 shouldn't have to open three lists to see one transaction. */}
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
               Invoice / Payment
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
+            <th className="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
               Total
             </th>
-            <th className="relative px-4 py-3">
+            <th className="relative px-3 py-3">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -158,7 +166,7 @@ export function OrderTable({
                   />
                 </td>
               )}
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="whitespace-nowrap px-3 py-3">
                 <div className="text-sm font-medium text-white">
                   {order.orderNumber}
                 </div>
@@ -168,16 +176,14 @@ export function OrderTable({
                   </div>
                 )}
               </td>
-              {/* Date / time the order was created. Placed early in the
-                  row so it's visible without horizontal scrolling on
-                  the wider admin tables. */}
-              <td className="whitespace-nowrap px-4 py-3">
-                <span className="text-sm text-gray-300">
-                  {formatDateTime(order.createdAt)}
+              {/* Date the order was created (time in the hover title). */}
+              <td className="whitespace-nowrap px-3 py-3">
+                <span className="text-sm text-gray-300" title={formatDateTime(order.createdAt)}>
+                  {formatDate(order.createdAt)}
                 </span>
               </td>
               {!compact && (
-                <td className="whitespace-nowrap px-4 py-3">
+                <td className="px-3 py-3">
                   {(() => {
                     // Backend exposes this relation as `member`; older paths
                     // used `user`. Read whichever is present so we never
@@ -191,24 +197,25 @@ export function OrderTable({
                     const hasProfile = !!owner?.id;
 
                     return (
-                      <>
+                      <div className="max-w-[170px]">
                         {hasProfile ? (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/admin/members/${owner!.id}`);
                             }}
-                            className="text-sm text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
+                            className="block w-full truncate text-sm text-orange-400 hover:text-orange-300 hover:underline font-medium text-left"
+                            title={customerName}
                           >
                             {customerName}
                           </button>
                         ) : (
-                          <div className="text-sm text-gray-300">
+                          <div className="truncate text-sm text-gray-300" title={customerName}>
                             {customerName}
                           </div>
                         )}
                         {owner && (
-                          <div className="text-xs text-gray-500">
+                          <div className="truncate text-xs text-gray-500" title={owner.email || undefined}>
                             {owner.email}
                             {owner.meca_id && (
                               <span className="ml-2 text-orange-400">#{owner.meca_id}</span>
@@ -217,24 +224,37 @@ export function OrderTable({
                         )}
                         {!hasProfile && (
                           <div className="text-xs text-amber-400">
-                            Guest Purchase (no account)
+                            Guest (no account)
                           </div>
                         )}
-                      </>
+                      </div>
                     );
                   })()}
                 </td>
               )}
               {!compact && (
-                <td className="px-4 py-3">
+                <td className="px-3 py-3">
                   {order.items.length > 0 ? (
-                    <div className="max-w-xs">
-                      <div
-                        className="text-sm text-gray-300 truncate"
-                        title={order.items[0].description}
-                      >
-                        {order.items[0].description}
-                      </div>
+                    <div className="max-w-[180px]">
+                      {(() => {
+                        // Compact display: the Type column already says what
+                        // kind of order this is, so the qualifier tail
+                        // ("… — Manual Renewal", "…(Cash reactivation)") is
+                        // noise here — show just the product name, keep the
+                        // full description in the hover title. Also collapses
+                        // the doubled word from old "<name> Membership" rows.
+                        const full = order.items[0].description || '';
+                        const short = full
+                          .replace(/\bMembership Membership\b/g, 'Membership')
+                          .split(' — ')[0]
+                          .split(' (')[0]
+                          .trim();
+                        return (
+                          <div className="text-sm text-gray-300 truncate" title={full}>
+                            {short || full}
+                          </div>
+                        );
+                      })()}
                       {order.items.length > 1 && (
                         <div className="text-xs text-gray-500">
                           +{order.items.length - 1} more item{order.items.length > 2 ? 's' : ''}
@@ -246,7 +266,7 @@ export function OrderTable({
                   )}
                 </td>
               )}
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="whitespace-nowrap px-3 py-3">
                 {(() => {
                   // Descriptive type label — distinguishes a brand-new
                   // membership purchase from a renewal, names shop and event
@@ -260,19 +280,20 @@ export function OrderTable({
                     || /renew/i.test(order.orderNumber || '');
                   let label: string;
                   let className = 'text-sm text-gray-300 font-medium';
+                  // Short labels — one word where possible (width diet).
                   if (otype === 'membership') {
-                    label = isRenewal ? 'Membership Renewal' : 'New Membership';
+                    label = isRenewal ? 'Renewal' : 'New Member';
                     className = isRenewal
                       ? 'text-sm text-cyan-300 font-medium'
                       : 'text-sm text-emerald-300 font-medium';
                   } else if (otype === 'event_registration') {
-                    label = 'Event Registration';
+                    label = 'Event Reg';
                     className = 'text-sm text-blue-300 font-medium';
                   } else if (otype === 'shop' || otype === 'meca_shop' || otype === 'merchandise') {
-                    label = 'Shop Purchase';
+                    label = 'Shop';
                     className = 'text-sm text-purple-300 font-medium';
                   } else if (otype === 'manual') {
-                    label = 'Manual Order';
+                    label = 'Manual';
                     className = 'text-sm text-amber-300 font-medium';
                   } else {
                     label = orderTypeLabels[order.orderType] || String(order.orderType || '—');
@@ -280,58 +301,51 @@ export function OrderTable({
                   return <span className={className}>{label}</span>;
                 })()}
               </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                {order.metadata?.subscription_id ? (
-                  <span className="font-mono text-xs text-blue-400">
-                    {String(order.metadata.subscription_id)}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-500">-</span>
-                )}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3">
+              <td className="whitespace-nowrap px-3 py-3">
                 <OrderStatusBadge status={order.status} size="sm" />
               </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                {(order as any).invoiceSummary ? (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/admin/billing/invoices/${(order as any).invoiceSummary.id}`);
-                    }}
-                    className="text-xs text-purple-300 hover:text-purple-200 hover:underline font-mono block text-left"
-                    title={`Invoice ${(order as any).invoiceSummary.status}`}
-                  >
-                    {(order as any).invoiceSummary.invoiceNumber}
-                  </button>
-                ) : (
-                  <span className="text-xs text-gray-600 block">no invoice</span>
-                )}
-                {(order as any).paymentSummary ? (
-                  <span
-                    className="text-xs text-gray-400 capitalize"
-                    title={(order as any).paymentSummary.transactionId ?? undefined}
-                  >
-                    {String((order as any).paymentSummary.method || '').replace(/_/g, ' ')}
-                    {' · '}
-                    <span className={
-                      (order as any).paymentSummary.status === 'paid' ? 'text-emerald-400'
-                        : (order as any).paymentSummary.status === 'failed' ? 'text-red-400'
-                          : (order as any).paymentSummary.status === 'refunded' ? 'text-purple-300' : 'text-gray-300'
-                    }>
-                      {(order as any).paymentSummary.status}
+              <td className="px-3 py-3">
+                <div className="max-w-[140px]">
+                  {(order as any).invoiceSummary ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/billing/invoices/${(order as any).invoiceSummary.id}`);
+                      }}
+                      className="block w-full truncate text-xs text-purple-300 hover:text-purple-200 hover:underline font-mono text-left"
+                      title={`${(order as any).invoiceSummary.invoiceNumber} (${(order as any).invoiceSummary.status})`}
+                    >
+                      {(order as any).invoiceSummary.invoiceNumber}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-600 block">no invoice</span>
+                  )}
+                  {(order as any).paymentSummary ? (
+                    <span
+                      className="block truncate text-xs text-gray-400 capitalize"
+                      title={(order as any).paymentSummary.transactionId ?? undefined}
+                    >
+                      {String((order as any).paymentSummary.method || '').replace(/_/g, ' ')}
+                      {' · '}
+                      <span className={
+                        (order as any).paymentSummary.status === 'paid' ? 'text-emerald-400'
+                          : (order as any).paymentSummary.status === 'failed' ? 'text-red-400'
+                            : (order as any).paymentSummary.status === 'refunded' ? 'text-purple-300' : 'text-gray-300'
+                      }>
+                        {(order as any).paymentSummary.status}
+                      </span>
                     </span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-600">no payment record</span>
-                )}
+                  ) : (
+                    <span className="text-xs text-gray-600">no payment</span>
+                  )}
+                </div>
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">
+              <td className="whitespace-nowrap px-3 py-3 text-right">
                 <span className="text-sm font-medium text-white">
                   {formatCurrency(order.total, order.currency)}
                 </span>
               </td>
-              <td className="relative whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+              <td className="relative whitespace-nowrap px-3 py-3 text-right text-sm font-medium">
                 <div className="relative">
                   <button
                     onClick={(e) => {
