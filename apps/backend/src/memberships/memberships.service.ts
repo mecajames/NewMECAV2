@@ -3269,7 +3269,7 @@ export class MembershipsService {
     const em = this.em.fork();
 
     const membership = await em.findOne(Membership, { id: membershipId }, {
-      populate: ['user', 'membershipTypeConfig'],
+      populate: ['user', 'membershipTypeConfig', 'masterMembership.user'] as any,
     });
     if (!membership) {
       throw new NotFoundException(`Membership ${membershipId} not found`);
@@ -3277,6 +3277,14 @@ export class MembershipsService {
 
     const user = membership.user;
     if (!user) throw new BadRequestException('Membership has no associated user');
+
+    // SECONDARY memberships: the payer/billing identity is the MASTER account
+    // owner (the secondary's own profile usually has a placeholder email and
+    // no payment method), and the FIRST payment must also activate the
+    // secondary — mint its own NEW MECA ID, like markSecondaryPaid.
+    const isSecondary = membership.accountType === MembershipAccountType.SECONDARY;
+    const masterOwner = isSecondary ? (membership.masterMembership?.user ?? null) : null;
+    let mintedMecaId = false;
 
     const mode = data.mode ?? 'reactivate';
     const now = new Date();
@@ -3376,17 +3384,25 @@ export class MembershipsService {
       // bad/format-invalid id, and a PI must be 'succeeded'); this confirms they
       // are the RIGHT member's, matched by the Stripe customer email or a stored
       // customer id on the profile.
-      const memberEmail = (user.email || '').trim().toLowerCase();
-      const memberCustomerId = ((user as any).stripeCustomerId as string | undefined)?.trim() || undefined;
+      // For a SECONDARY the master account owner is the payer, so their
+      // Stripe identity counts as a match too.
+      const ownEmails = [
+        (user.email || '').trim().toLowerCase(),
+        (masterOwner?.email || '').trim().toLowerCase(),
+      ].filter(Boolean);
+      const ownCustomerIds = [
+        ((user as any).stripeCustomerId as string | undefined)?.trim(),
+        ((masterOwner as any)?.stripeCustomerId as string | undefined)?.trim(),
+      ].filter(Boolean) as string[];
       const custEmail = (stripeCustomerEmail || '').trim().toLowerCase();
-      const emailMatches = !!custEmail && !!memberEmail && custEmail === memberEmail;
-      const idMatches = !!stripeCustomerId && !!memberCustomerId && stripeCustomerId === memberCustomerId;
+      const emailMatches = !!custEmail && ownEmails.includes(custEmail);
+      const idMatches = !!stripeCustomerId && ownCustomerIds.includes(stripeCustomerId);
       if (!emailMatches && !idMatches) {
         throw new BadRequestException(
           `That Stripe ${stripeSubscriptionId ? 'subscription' : 'payment'} is linked to ` +
             `${custEmail ? `"${custEmail}"` : 'a different Stripe customer'}` +
             `${stripeCustomerId ? ` (${stripeCustomerId})` : ''}, which does not match this member ` +
-            `(${memberEmail || 'no email on file'}). Enter the Stripe id that belongs to this member.`,
+            `(${ownEmails.join(' / ') || 'no email on file'}). Enter the Stripe id that belongs to this member.`,
         );
       }
     } else if (data.paymentMethod === 'paypal') {
@@ -3422,9 +3438,13 @@ export class MembershipsService {
         // mismatch is surfaced in the result message + audit rather than
         // hard-blocking the link. The admin explicitly typed this id.
         const payerEmail = (sub?.subscriber?.email_address || '').trim().toLowerCase();
-        const memberEmail = (user.email || '').trim().toLowerCase();
-        if (payerEmail && memberEmail && payerEmail !== memberEmail) {
-          paypalPayerNote = `Note: the PayPal subscription's payer email (${payerEmail}) differs from this member's email (${memberEmail}) — double-check it belongs to them.`;
+        // For a SECONDARY the master account owner's email also counts.
+        const knownEmails = [
+          (user.email || '').trim().toLowerCase(),
+          (masterOwner?.email || '').trim().toLowerCase(),
+        ].filter(Boolean);
+        if (payerEmail && knownEmails.length && !knownEmails.includes(payerEmail)) {
+          paypalPayerNote = `Note: the PayPal subscription's payer email (${payerEmail}) differs from this member's email (${knownEmails.join(' / ')}) — double-check it belongs to them.`;
         }
 
         membership.paypalSubscriptionId = subId;
@@ -3496,6 +3516,15 @@ export class MembershipsService {
         }
       }
 
+      // FIRST payment on a pending SECONDARY activates it — mint the
+      // secondary's own NEW MECA ID exactly like markSecondaryPaid does (the
+      // master's ID is never touched). Already-activated memberships keep
+      // their existing ID (below).
+      if (isSecondary && membership.mecaId == null) {
+        await this.mecaIdService.assignMecaIdToMembership(membership, undefined, em);
+        mintedMecaId = true;
+      }
+
       // KEEP THE MEMBER'S MECA ID: reactivation/renewal must never mint a new
       // ID. The membership row keeps its existing mecaId (we don't touch it);
       // make sure the profile points at that same ID too.
@@ -3541,10 +3570,21 @@ export class MembershipsService {
           : data.paymentMethod === 'paypal' ? 'PayPal'
             : data.paymentMethod === 'check' ? 'Check' : 'Cash';
       const modeLabel = mode === 'renew' ? 'renewal' : mode === 'payment_only' ? 'balance' : 'reactivation';
+      // Billing docs go to the person who actually pays: for a SECONDARY
+      // that's the MASTER account owner (same as the wizard's creation
+      // invoice). Every line names the competitor and their MECA ID so the
+      // billing history shows WHO each payment was for — not just the
+      // master's account.
+      const billTo = isSecondary && masterOwner ? masterOwner : user;
+      const lineDesc =
+        `${membership.membershipTypeConfig?.name ?? 'Membership'}` +
+        (isSecondary ? ` — Secondary: ${membership.competitorName || 'member'}` : '') +
+        (membership.mecaId != null ? ` — MECA ID ${membership.mecaId}` : '') +
+        ` (${methodLabel} ${modeLabel})`;
       const orderNumber = `ORD-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
       const order = em.create(Order, {
         orderNumber,
-        member: user,
+        member: billTo,
         status: OrderStatus.COMPLETED,
         orderType: OrderType.MEMBERSHIP,
         subtotal: amount.toFixed(2),
@@ -3556,7 +3596,7 @@ export class MembershipsService {
       });
       em.create(OrderItem, {
         order,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
+        description: lineDesc,
         quantity: 1,
         unitPrice: amount.toFixed(2),
         total: amount.toFixed(2),
@@ -3564,34 +3604,58 @@ export class MembershipsService {
         referenceId: membership.id,
       });
 
-      const invoiceNumber = `INV-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
-      const invoice = em.create(Invoice, {
-        invoiceNumber,
-        user,
-        order,
-        status: InvoiceStatus.PAID,
-        subtotal: amount.toFixed(2),
-        tax: '0.00',
-        discount: '0.00',
-        total: amount.toFixed(2),
-        currency: 'USD',
-        dueDate: new Date(),
-        paidAt,
-        notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
-        companyInfo: {
-          name: 'Mobile Electronics Competition Association',
-          email: 'billing@mecacaraudio.com',
-        },
-      } as any);
-      em.create(InvoiceItem, {
-        invoice,
-        description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (${methodLabel} ${modeLabel})`,
-        quantity: 1,
-        unitPrice: amount.toFixed(2),
-        total: amount.toFixed(2),
-        itemType: InvoiceItemType.MEMBERSHIP,
-        referenceId: membership.id,
-      });
+      // A pending SECONDARY already has an unpaid invoice from the Add
+      // Secondary wizard (INV-…-SEC, billed to the master). Settle THAT one —
+      // stamped with the freshly-minted MECA ID — instead of minting a second
+      // invoice for the same money and leaving the original dangling unpaid.
+      let invoice: any = null;
+      if (isSecondary) {
+        const creationItem = await em.findOne(
+          InvoiceItem,
+          { referenceId: membership.id, invoice: { status: InvoiceStatus.SENT } },
+          { populate: ['invoice'] },
+        );
+        if (creationItem) {
+          invoice = creationItem.invoice as any;
+          invoice.status = InvoiceStatus.PAID;
+          invoice.paidAt = paidAt;
+          invoice.order = order;
+          if (membership.mecaId != null && !creationItem.description.includes(`MECA ID ${membership.mecaId}`)) {
+            creationItem.description = `${creationItem.description} — MECA ID ${membership.mecaId}`;
+          }
+          invoice.notes = [invoice.notes, `Paid via ${methodLabel} (${transactionId})`].filter(Boolean).join(' — ');
+        }
+      }
+      if (!invoice) {
+        const invoiceNumber = `INV-${new Date().getFullYear()}-RECPAY-${Date.now().toString().slice(-6)}`;
+        invoice = em.create(Invoice, {
+          invoiceNumber,
+          user: billTo,
+          order,
+          status: InvoiceStatus.PAID,
+          subtotal: amount.toFixed(2),
+          tax: '0.00',
+          discount: '0.00',
+          total: amount.toFixed(2),
+          currency: 'USD',
+          dueDate: new Date(),
+          paidAt,
+          notes: data.notes ?? `Recorded ${methodLabel} payment (${modeLabel})`,
+          companyInfo: {
+            name: 'Mobile Electronics Competition Association',
+            email: 'billing@mecacaraudio.com',
+          },
+        } as any);
+        em.create(InvoiceItem, {
+          invoice,
+          description: lineDesc,
+          quantity: 1,
+          unitPrice: amount.toFixed(2),
+          total: amount.toFixed(2),
+          itemType: InvoiceItemType.MEMBERSHIP,
+          referenceId: membership.id,
+        });
+      }
 
       orderId = order.id;
       invoiceId = invoice.id;
@@ -3601,6 +3665,32 @@ export class MembershipsService {
 
     // Reactivate: recompute profile.membership_status from the now-paid row.
     await this.membershipSyncService.syncProfileMembershipStatus(user.id);
+
+    // A just-activated secondary gets the same welcome email/notification
+    // that markSecondaryPaid sends (their new MECA ID, type, master's name).
+    if (mintedMecaId) {
+      try {
+        if (user.email && !user.email.includes('@placeholder.meca.local')) {
+          await this.emailService.sendSecondaryMemberWelcomeEmail({
+            to: user.email,
+            secondaryMemberName: membership.competitorName || user.full_name || user.first_name || 'Member',
+            mecaId: membership.mecaId!,
+            membershipType: membership.membershipTypeConfig?.name || 'MECA Membership',
+            masterMemberName: masterOwner?.full_name || masterOwner?.first_name || 'Primary Member',
+            expiryDate: membership.endDate!,
+          });
+        }
+        await this.notificationsService.createForUser({
+          userId: user.id,
+          title: `Welcome to MECA — ${membership.membershipTypeConfig?.name || 'Membership'}`,
+          message: `Your secondary membership is active. Your MECA ID is ${membership.mecaId}.`,
+          type: 'info',
+          link: '/dashboard',
+        });
+      } catch (welcomeErr) {
+        this.logger.error(`Secondary welcome notification after record-payment failed (non-fatal): ${welcomeErr}`);
+      }
+    }
 
     // Reinstate any competition results earned while the membership was lapsed
     // (reactivate/renew only). Keeps the member's points/standings whole. Uses
@@ -3635,6 +3725,8 @@ export class MembershipsService {
         stripeSubscriptionId: stripeSubscriptionId ?? null,
         endDate: membership.endDate ?? null,
         reinstatedResults,
+        mecaId: membership.mecaId ?? null,
+        mintedMecaId,
       },
     });
 
@@ -3653,8 +3745,9 @@ export class MembershipsService {
         : undefined;
 
     const endStr = membership.endDate ? membership.endDate.toLocaleDateString('en-US') : null;
-    const outcome =
-      mode === 'renew'
+    const outcome = mintedMecaId
+      ? `Secondary membership activated — NEW MECA ID ${membership.mecaId}${endStr ? `, active through ${endStr}` : ''}.`
+      : mode === 'renew'
         ? `Membership renewed${endStr ? `, active through ${endStr}` : ''}.`
         : mode === 'payment_only'
           ? 'Payment recorded against the membership.'
