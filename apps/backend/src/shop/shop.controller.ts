@@ -407,13 +407,50 @@ export class ShopController {
     return this.shopService.getStats();
   }
 
+  /**
+   * Admin: refund a paid/processing order. By default this issues the REAL
+   * gateway refund (Stripe/PayPal) when the order has a payment reference;
+   * pass refundPayment=false to only mark the order refunded in the DB
+   * (e.g. test orders or refunds already done in the gateway dashboard).
+   */
   @Put('admin/orders/:id/refund')
   async refundOrder(
     @Headers('authorization') authHeader: string,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: { reason?: string; refundPayment?: boolean },
   ) {
     await this.requireAdmin(authHeader);
-    return this.shopService.processRefund(id, body.reason);
+    return this.shopService.processRefund(id, body.reason, {
+      refundPayment: body.refundPayment,
+    });
+  }
+
+  /**
+   * Admin: permanently delete a shop order (test-data cleanup). Only
+   * pending/cancelled/refunded orders — paid orders must be refunded or
+   * cancelled first.
+   */
+  @Delete('admin/orders/:id')
+  @HttpCode(HttpStatus.OK)
+  async adminDeleteOrder(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.deleteOrder(id);
+  }
+
+  /**
+   * Admin: bulk-delete shop orders. Returns per-id outcome so the UI can
+   * flag partial failures (e.g. a paid order in the selection).
+   */
+  @Post('admin/orders/bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  async adminBulkDeleteOrders(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { ids: string[] },
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.shopService.bulkDeleteOrders(body?.ids ?? []);
   }
 }

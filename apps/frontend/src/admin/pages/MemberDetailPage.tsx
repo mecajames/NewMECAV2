@@ -5068,7 +5068,9 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
           ? `MECA ID ${impact.mecaId} was returned to the available pool.`
           : outcome.mecaIdOutcome === 'retired_results'
             ? `MECA ID ${impact.mecaId} was retired — ${impact.resultsCount} competition result${impact.resultsCount === 1 ? '' : 's'} reference it, so it stays reserved for this member only.`
-            : '';
+            : outcome.mecaIdOutcome === 'kept_other_membership'
+              ? `MECA ID ${impact.mecaId} was NOT touched — it stays active on the member's other membership, and all attached results remain in place.`
+              : '';
       alert(
         `Membership deleted. ` +
           (financialAction === 'delete'
@@ -6636,7 +6638,16 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
 
                 {/* MECA ID fate */}
                 {deleteDialog.impact.mecaId && (
-                  deleteDialog.impact.mecaIdOutcome === 'retired_results' ? (
+                  deleteDialog.impact.mecaIdOutcome === 'kept_other_membership' ? (
+                    <div className="bg-emerald-900/30 border border-emerald-600/50 rounded-lg p-3 text-sm text-emerald-200">
+                      <span className="font-semibold">MECA ID {deleteDialog.impact.mecaId} will NOT be affected.</span>{' '}
+                      This member has {deleteDialog.impact.heldByOtherMemberships === 1 ? 'another membership' : `${deleteDialog.impact.heldByOtherMemberships} other memberships`} with
+                      the same number — only this duplicate row is removed. The ID
+                      {deleteDialog.impact.resultsCount > 0
+                        ? ` and its ${deleteDialog.impact.resultsCount} competition results stay`
+                        : ' stays'} attached to the membership being kept.
+                    </div>
+                  ) : deleteDialog.impact.mecaIdOutcome === 'retired_results' ? (
                     <div className="bg-amber-900/30 border border-amber-600/50 rounded-lg p-3 text-sm text-amber-200">
                       <span className="font-semibold">MECA ID {deleteDialog.impact.mecaId} will be retired.</span>{' '}
                       {deleteDialog.impact.resultsCount} competition result

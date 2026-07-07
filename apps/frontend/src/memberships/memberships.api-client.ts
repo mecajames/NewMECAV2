@@ -305,7 +305,9 @@ export interface MembershipDeleteImpact {
   membershipId: string;
   mecaId: number | null;
   resultsCount: number;
-  mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results';
+  /** Other membership rows that hold the SAME MECA ID (duplicate-entry case). */
+  heldByOtherMemberships: number;
+  mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' | 'kept_other_membership';
   payments: { count: number; paidTotal: number; refundedTotal: number };
   invoices: { count: number };
   secondaryInvoiceItems: number;
@@ -664,7 +666,7 @@ export const membershipsApi = {
   delete: async (
     id: string,
     financialAction: 'keep' | 'delete' = 'keep',
-  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results'; financialAction: 'keep' | 'delete' }> => {
+  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' | 'kept_other_membership'; financialAction: 'keep' | 'delete' }> => {
     const response = await axios.delete(`/api/memberships/${id}`, {
       params: { financial: financialAction },
     });

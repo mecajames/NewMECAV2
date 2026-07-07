@@ -73,7 +73,10 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException(`Event with ID ${idOrSlug} not found`);
     }
-    return event;
+    // Same ED + judges enrichment as the public list, so the detail page's
+    // info section can show who's running/judging (assignment-system aware).
+    const [enriched] = await this.attachDirectorsAndJudges(em, [event]);
+    return enriched as Event;
   }
 
   async findUpcoming(): Promise<Event[]> {
@@ -212,15 +215,28 @@ export class EventsService {
       // lists, so ANY(?) is a syntax error (see tickets.service).
       const evPlaceholders = eventIds.map(() => '?').join(',');
 
-      const [directorRows, judgeRows] = await Promise.all([
+      const [directorRows, edAssignmentRows, judgeRows] = await Promise.all([
         directorIds.length > 0
           ? conn.execute(
-              `SELECT id, first_name, last_name, email, phone
+              `SELECT id, first_name, last_name, email, phone, avatar_url
                  FROM public.profiles
                 WHERE id IN (${directorIds.map(() => '?').join(',')})`,
               directorIds,
             )
           : Promise.resolve([] as any[]),
+        // EDs assigned through the ASSIGNMENT system (Add Staff) — most events
+        // are staffed this way and never set events.event_director_id, which
+        // is why the calendar/detail showed no director for them.
+        conn.execute(
+          `SELECT a.event_id, p.first_name, p.last_name, p.email, p.phone, p.avatar_url
+             FROM public.event_director_assignments a
+             JOIN public.event_directors ed ON ed.id = a.event_director_id
+        LEFT JOIN public.profiles p ON p.id = ed.user_id
+            WHERE a.event_id IN (${evPlaceholders})
+              AND a.status IN ('accepted', 'confirmed', 'completed')
+            ORDER BY a.created_at ASC`,
+          eventIds,
+        ),
         conn.execute(
           `SELECT a.event_id, j.preferred_name, p.first_name, p.last_name
              FROM public.event_judge_assignments a
@@ -234,6 +250,11 @@ export class EventsService {
       ]);
 
       const directorMap = new Map<string, any>((directorRows as any[]).map((d) => [d.id, d]));
+      // First accepted/confirmed ED assignment per event.
+      const edAssignmentByEvent = new Map<string, any>();
+      for (const r of edAssignmentRows as any[]) {
+        if (!edAssignmentByEvent.has(r.event_id)) edAssignmentByEvent.set(r.event_id, r);
+      }
       const judgesByEvent = new Map<string, Array<{ name: string }>>();
       for (const j of judgeRows as any[]) {
         const name =
@@ -247,13 +268,17 @@ export class EventsService {
 
       return events.map((e) => {
         const json = typeof (e as any).toJSON === 'function' ? (e as any).toJSON() : { ...e };
+        // Prefer the assignment-system ED (the live staffing flow); fall back
+        // to the event's legacy event_director_id field.
+        const assigned = edAssignmentByEvent.get(e.id);
         const dirId = (e.eventDirector as any)?.id ?? e.eventDirector;
-        const d = dirId ? directorMap.get(dirId as string) : null;
+        const d = assigned ?? (dirId ? directorMap.get(dirId as string) : null);
         json.event_director = d
           ? {
               name: [d.first_name, d.last_name].filter(Boolean).join(' ').trim() || null,
               email: d.email ?? null,
               phone: d.phone ?? null,
+              avatar_url: d.avatar_url ?? null,
             }
           : null;
         json.judges = judgesByEvent.get(e.id) ?? [];
