@@ -403,6 +403,30 @@ export class MasterSecondaryService {
     // Assign MECA ID
     await this.mecaIdService.assignMecaIdToMembership(secondary, undefined, em);
 
+    // Settle the invoice the Add Secondary wizard issued (INV-…-SEC): mark it
+    // paid and stamp the freshly-minted MECA ID on its line item so the
+    // master's billing history shows WHICH member the money was for.
+    try {
+      const creationItem = await em.findOne(
+        InvoiceItem,
+        { referenceId: secondary.id, invoice: { status: InvoiceStatus.SENT } },
+        { populate: ['invoice'] },
+      );
+      if (creationItem) {
+        const inv = creationItem.invoice as any;
+        inv.status = InvoiceStatus.PAID;
+        inv.paidAt = new Date();
+        if (secondary.mecaId != null && !creationItem.description.includes(`MECA ID ${secondary.mecaId}`)) {
+          creationItem.description = `${creationItem.description} — MECA ID ${secondary.mecaId}`;
+        }
+        inv.notes = [inv.notes, `Paid${transactionId ? ` (${transactionId})` : ''} — MECA ID ${secondary.mecaId}`]
+          .filter(Boolean)
+          .join(' — ');
+      }
+    } catch (invErr) {
+      this.logger.error(`Could not settle creation invoice for secondary ${secondaryMembershipId} (non-fatal): ${invErr}`);
+    }
+
     await em.flush();
 
     this.logger.log(`Marked secondary membership ${secondaryMembershipId} as paid with MECA ID ${secondary.mecaId}`);
@@ -472,7 +496,9 @@ export class MasterSecondaryService {
           competitorName: secondary.competitorName || secondary.getCompetitorDisplayName(),
           relationshipToMaster: secondary.relationshipToMaster,
           hasOwnLogin: secondary.hasOwnLogin || false,
-          profileId: (secondary.hasOwnLogin && secondary.user) ? secondary.user.id : null,
+          // Every secondary has its own profile (login or not) — always expose
+          // it so admin UIs can deep-link to the secondary's full member page.
+          profileId: secondary.user ? secondary.user.id : null,
           membershipType: secondary.membershipTypeConfig ? {
             id: secondary.membershipTypeConfig.id,
             name: secondary.membershipTypeConfig.name,

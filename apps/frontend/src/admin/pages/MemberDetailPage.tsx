@@ -5017,36 +5017,37 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
   };
 
   /**
-   * Admin: record payment for a PENDING secondary membership. This marks it
-   * paid and mints its own NEW MECA ID (the master's ID is never touched).
-   * Needed because paying the secondary's invoice in the billing admin does
-   * not activate the secondary — only the online payment webhook or this
-   * endpoint do.
+   * Admin: record a payment on a secondary membership using the SAME full
+   * Record Payment modal as master memberships (cash/check/Stripe/PayPal,
+   * reactivate/renew/payment-only). The backend activates a pending
+   * secondary as part of it — mints its own NEW MECA ID (never the
+   * master's), settles the wizard's creation invoice, and stamps the MECA ID
+   * on the billing line items.
    */
-  const handleMarkSecondaryPaid = async (secondary: SecondaryMembershipInfo) => {
-    const defaultAmount = secondary.membershipType?.price != null ? String(secondary.membershipType.price) : '';
-    const amountStr = window.prompt(
-      `Mark "${secondary.competitorName}"'s secondary membership as PAID?\n\n` +
-      `This assigns them their own NEW MECA ID. Enter the amount paid ($):`,
-      defaultAmount,
+  const openRecordPaymentForSecondary = (secondary: SecondaryMembershipInfo) => {
+    const stub = {
+      id: secondary.id,
+      paymentStatus: secondary.paymentStatus,
+      endDate: secondary.endDate ?? undefined,
+      membershipTypeConfig: secondary.membershipType
+        ? {
+            name: `${secondary.membershipType.name} — Secondary: ${secondary.competitorName}`,
+            price: secondary.membershipType.price,
+          }
+        : undefined,
+    } as unknown as Membership;
+    setApplyPaymentMembership(stub);
+    const secondaryExpired = secondary.endDate ? isExpired(String(secondary.endDate)) : false;
+    setApplyPaymentMode(
+      String(secondary.paymentStatus) !== 'paid'
+        ? (secondaryExpired ? 'renew' : 'reactivate')
+        : (secondaryExpired ? 'renew' : 'payment_only'),
     );
-    if (amountStr === null) return; // cancelled
-    const amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount < 0) {
-      alert('Enter a valid payment amount.');
-      return;
-    }
-    const txn = window.prompt('Payment reference (optional — e.g. CASH-123, check #, Stripe id):');
-    if (txn === null) return; // cancelled
-    try {
-      const updated = await membershipsApi.markSecondaryPaid(secondary.id, amount, txn.trim() || undefined);
-      await fetchMemberships();
-      alert(
-        `"${secondary.competitorName}" is now PAID. New MECA ID: ${(updated as any).mecaId ?? '(pending)'}.`,
-      );
-    } catch (error: any) {
-      alert(error?.response?.data?.message || 'Failed to mark secondary as paid.');
-    }
+    setApplyPaymentMethod('cash');
+    setApplyPaymentReference(''); setApplyPaymentAmount(''); setApplyPaymentNotes('');
+    setApplyPaymentStripePi(''); setApplyPaymentStripeSub('');
+    setApplyPaymentPaypalSub(''); setPaypalSubLookup(null);
+    setApplyPaymentError(null);
   };
 
   const handleCancelAndRefund = async (m: Membership) => {
@@ -6163,45 +6164,93 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                             </div>
                           </div>
                           <div className="flex items-center gap-2 ml-2">
-                            {/* Record payment for a pending secondary — marks paid + mints its MECA ID */}
+                            {/* Quick action: full Record Payment modal (activates a pending secondary + mints its own NEW MECA ID) */}
                             {canEdit && String(secondary.paymentStatus) !== 'paid' && (
                               <button
-                                onClick={() => handleMarkSecondaryPaid(secondary)}
+                                onClick={() => openRecordPaymentForSecondary(secondary)}
                                 className="px-2 py-1 text-xs text-green-300 hover:text-green-200 bg-green-500/10 hover:bg-green-500/20 rounded transition-colors whitespace-nowrap"
-                                title="Record payment: mark this secondary paid and assign their own new MECA ID"
+                                title="Record payment (cash/check/Stripe/PayPal): marks this secondary paid and assigns their own new MECA ID"
                               >
-                                Mark Paid
+                                Record Payment
                               </button>
                             )}
-                            {/* View Profile Link - if they have their own login */}
-                            {secondary.hasOwnLogin && secondary.profileId && (
-                              <button
-                                onClick={() => navigate(`/admin/members/${secondary.profileId}`)}
-                                className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded transition-colors"
-                                title="View secondary's profile"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            {/* Edit Secondary */}
+                            {/* Manage — same lifecycle actions as a master membership card */}
                             {canEdit && (
-                              <button
-                                onClick={() => handleEditSecondary(secondary)}
-                                className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded transition-colors"
-                                title="Edit secondary member"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            {/* Split off into its own full account (admin escape hatch) */}
-                            {canEdit && (
-                              <button
-                                onClick={() => handleSplitOffSecondary(secondary)}
-                                className="px-2 py-1 text-xs text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 rounded transition-colors whitespace-nowrap"
-                                title="Split this secondary into its own full account"
-                              >
-                                Split off
-                              </button>
+                              <div className="relative">
+                                <button
+                                  onClick={() => setManageMenuId(manageMenuId === secondary.id ? null : secondary.id)}
+                                  className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors inline-flex items-center gap-1 whitespace-nowrap"
+                                  title="Manage this secondary membership"
+                                >
+                                  Manage
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+                                {manageMenuId === secondary.id && (
+                                  <div
+                                    className="absolute right-0 mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-30 py-1"
+                                    onMouseLeave={() => setManageMenuId(null)}
+                                  >
+                                    <button
+                                      onClick={() => { setManageMenuId(null); openRecordPaymentForSecondary(secondary); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                                    >
+                                      <DollarSign className="h-4 w-4 text-emerald-400" />
+                                      Record Payment
+                                    </button>
+                                    {canOverrideMecaId && (
+                                      <button
+                                        onClick={() => {
+                                          setManageMenuId(null);
+                                          handleOpenMecaIdOverride({ id: secondary.id, mecaId: secondary.mecaId ?? undefined } as unknown as Membership);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-purple-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                                      >
+                                        <Key className="h-4 w-4" />
+                                        Override MECA ID
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => { setManageMenuId(null); handleEditSecondary(secondary); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                                    >
+                                      <Pencil className="h-4 w-4 text-purple-400" />
+                                      Edit details
+                                    </button>
+                                    {secondary.profileId && (
+                                      <button
+                                        onClick={() => { setManageMenuId(null); navigate(`/admin/members/${secondary.profileId}`); }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-slate-700 inline-flex items-center gap-2"
+                                        title="Open the secondary's own member page — manual renewal, subscriptions, orders and the rest live there"
+                                      >
+                                        <ExternalLink className="h-4 w-4 text-blue-400" />
+                                        Open member page
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => { setManageMenuId(null); handleSplitOffSecondary(secondary); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-amber-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                                    >
+                                      <UsersIcon className="h-4 w-4" />
+                                      Split off account
+                                    </button>
+                                    <div className="border-t border-slate-700 my-1" />
+                                    <button
+                                      onClick={() => { setManageMenuId(null); handleCancelMembership({ id: secondary.id } as Membership); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-amber-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                                    >
+                                      <X className="h-4 w-4" />
+                                      Cancel membership
+                                    </button>
+                                    <button
+                                      onClick={() => { setManageMenuId(null); handleCancelAndRefund({ id: secondary.id } as Membership); }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-slate-700 inline-flex items-center gap-2"
+                                    >
+                                      <CreditCard className="h-4 w-4" />
+                                      Cancel &amp; Refund
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
