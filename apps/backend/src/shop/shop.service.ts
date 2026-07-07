@@ -9,6 +9,7 @@ import {
   OrderStatus,
   OrderType,
   OrderItemType,
+  RefundSourceType,
 } from '@newmeca/shared';
 import { ShopProduct } from './entities/shop-product.entity';
 import { ShopOrder } from './entities/shop-order.entity';
@@ -26,6 +27,8 @@ import { Order } from '../orders/orders.entity';
 import { InvoicesService } from '../invoices/invoices.service';
 import { Invoice } from '../invoices/invoices.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RefundService } from '../payments/refund.service';
+import { CouponUsage } from '../coupons/entities/coupon-usage.entity';
 
 interface CartItem {
   productId: string;
@@ -53,6 +56,7 @@ export class ShopService {
     private readonly ordersService: OrdersService,
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
+    private readonly refundService: RefundService,
   ) {}
 
   private getOrderUserId(order: ShopOrder): string | undefined {
@@ -630,10 +634,21 @@ export class ShopService {
   // =============================================================================
 
   /**
-   * Process a refund for a shop order
-   * Updates shop order status, restores inventory, and marks billing order as refunded
+   * Process a refund for a shop order.
+   *
+   * When `refundPayment` is true (the default) and the order carries a
+   * gateway reference (Stripe payment intent or PayPal capture), the money
+   * is actually refunded through the shared RefundService — which also
+   * writes the refunds ledger row and cascades the Payment/Order/Invoice.
+   * Orders with no gateway reference (or refundPayment=false) are marked
+   * refunded in the DB only. Either way inventory is restored and the shop
+   * order flips to REFUNDED.
    */
-  async processRefund(orderId: string, reason?: string): Promise<ShopOrder> {
+  async processRefund(
+    orderId: string,
+    reason?: string,
+    opts: { refundPayment?: boolean } = {},
+  ): Promise<{ order: ShopOrder; gatewayRefund: { gateway: string; amount: number } | null }> {
     const em = this.em.fork();
 
     // Get the shop order with items and products
@@ -657,11 +672,33 @@ export class ShopService {
       );
     }
 
+    // Issue the real gateway refund first — if Stripe/PayPal rejects it we
+    // bail out without touching the order, so status never lies about money.
+    const wantGatewayRefund = opts.refundPayment !== false;
+    const hasGatewayRef = Boolean(order.stripePaymentIntentId || order.paypalCaptureId);
+    let gatewayRefund: { gateway: string; amount: number } | null = null;
+    const refundReason = reason?.trim() || 'Refunded by admin from Shop Orders page';
+
+    if (wantGatewayRefund && hasGatewayRef) {
+      const result = await this.refundService.issueRefund({
+        sourceType: RefundSourceType.SHOP_ORDER,
+        sourceId: order.id,
+        totalAmountDollars: Number(order.totalAmount),
+        reason: refundReason,
+        stripePaymentIntentId: order.stripePaymentIntentId,
+        paypalCaptureId: order.paypalCaptureId,
+      });
+      gatewayRefund = { gateway: result.gateway, amount: result.amount };
+    }
+
     // Update shop order status
     order.status = ShopOrderStatus.REFUNDED;
-    if (reason) {
-      order.adminNotes = reason;
-    }
+    const stamp = `[${new Date().toISOString()}] ${
+      gatewayRefund
+        ? `Refunded $${gatewayRefund.amount.toFixed(2)} via ${gatewayRefund.gateway}`
+        : 'Marked refunded (no gateway refund issued)'
+    }: ${refundReason}`;
+    order.adminNotes = order.adminNotes ? `${order.adminNotes}\n${stamp}` : stamp;
 
     // Restore inventory for tracked products
     for (const item of order.items) {
@@ -702,7 +739,68 @@ export class ShopService {
 
     await em.flush();
 
-    return order;
+    return { order, gatewayRefund };
+  }
+
+  /**
+   * Permanently delete a shop order and its items (admin cleanup for test
+   * orders). Only pending/cancelled/refunded orders can be deleted — a paid
+   * or in-flight order must be refunded or cancelled first so the money
+   * trail is settled before the record disappears. Coupon-usage rows that
+   * reference the order are unlinked, not deleted. The linked billing
+   * Order/Invoice (if any) is left untouched and reported back to the
+   * caller.
+   */
+  async deleteOrder(id: string): Promise<{ deleted: true; orderNumber: string; billingOrderId?: string }> {
+    const em = this.em.fork();
+    const order = await em.findOne(ShopOrder, { id }, { populate: ['items'] });
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${id} not found`);
+    }
+
+    const deletableStatuses = [
+      ShopOrderStatus.PENDING,
+      ShopOrderStatus.CANCELLED,
+      ShopOrderStatus.REFUNDED,
+    ];
+    if (!deletableStatuses.includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot delete order with status "${order.status}". Cancel or refund it first — only pending, cancelled or refunded orders can be deleted.`,
+      );
+    }
+
+    const orderNumber = order.orderNumber;
+    const billingOrderId = order.billingOrderId;
+
+    await em.nativeUpdate(CouponUsage, { shopOrderId: id }, { shopOrderId: null as any });
+
+    for (const item of order.items.getItems()) {
+      em.remove(item);
+    }
+    em.remove(order);
+    await em.flush();
+
+    this.logger.log(`Shop order ${orderNumber} (${id}) permanently deleted by admin`);
+    return { deleted: true, orderNumber, billingOrderId };
+  }
+
+  /**
+   * Bulk-delete orders by id, mirroring bulkCancelOrders: per-id outcomes
+   * so the UI can surface partial failures (e.g. a paid order in the
+   * selection).
+   */
+  async bulkDeleteOrders(ids: string[]): Promise<Array<{ id: string; ok: boolean; error?: string }>> {
+    const out: Array<{ id: string; ok: boolean; error?: string }> = [];
+    for (const id of ids) {
+      try {
+        await this.deleteOrder(id);
+        out.push({ id, ok: true });
+      } catch (err: any) {
+        out.push({ id, ok: false, error: err?.message || 'failed' });
+      }
+    }
+    return out;
   }
 
   // =============================================================================

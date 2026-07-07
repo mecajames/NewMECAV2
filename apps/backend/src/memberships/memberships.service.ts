@@ -305,6 +305,13 @@ export class MembershipsService {
 
     const mecaId = membership.mecaId ?? null;
     const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
+    // Duplicate-membership case: the same MECA ID is also on ANOTHER
+    // membership row (e.g. a second membership entered by mistake instead of
+    // a secondary). Deleting this row then leaves the ID untouched on the
+    // surviving membership — it is neither reclaimed nor retired.
+    const heldByOtherMemberships = mecaId
+      ? await em.count(Membership, { mecaId, id: { $ne: id } })
+      : 0;
 
     const [payments, invoicesCount, secondaryInvoiceItems, comps, renewalTokens, registrations, teams, teamMembers, secondaries] =
       await Promise.all([
@@ -330,12 +337,21 @@ export class MembershipsService {
       membershipId: id,
       mecaId,
       resultsCount,
+      heldByOtherMemberships,
+      // 'kept_other_membership' → another membership row holds the same
+      //                     number; it stays active there, untouched.
       // 'reclaimed'       → no results reference the number; it returns to the
       //                     assignable pool.
       // 'retired_results' → results exist; the number stays reserved on the
       //                     profile and is only ever re-issued to this same
       //                     account (single-id rule on renewal).
-      mecaIdOutcome: !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed',
+      mecaIdOutcome: !mecaId
+        ? 'none'
+        : heldByOtherMemberships > 0
+          ? 'kept_other_membership'
+          : resultsCount > 0
+            ? 'retired_results'
+            : 'reclaimed',
       payments: { count: payments.length, paidTotal, refundedTotal },
       invoices: { count: invoicesCount },
       secondaryInvoiceItems,
@@ -376,7 +392,7 @@ export class MembershipsService {
   async delete(
     id: string,
     opts: { financialAction?: 'keep' | 'delete'; adminId?: string; adminEmail?: string } = {},
-  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results'; financialAction: 'keep' | 'delete' }> {
+  ): Promise<{ mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' | 'kept_other_membership'; financialAction: 'keep' | 'delete' }> {
     const financialAction: 'keep' | 'delete' = opts.financialAction === 'delete' ? 'delete' : 'keep';
     const em = this.em.fork();
     const membership = await em.findOne(Membership, { id }, { populate: ['user'] });
@@ -398,8 +414,20 @@ export class MembershipsService {
     const ownerId = (membership.user as any)?.id ?? (membership.user as any);
     const ownerEmail = (membership.user as any)?.email;
     const resultsCount = mecaId ? await this.countResultsForMecaId(em, mecaId) : 0;
-    const mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' =
-      !mecaId ? 'none' : resultsCount > 0 ? 'retired_results' : 'reclaimed';
+    // Duplicate-membership case: the same number is on ANOTHER membership row
+    // (mis-entered duplicate instead of a secondary). Deleting this row leaves
+    // the ID active on the survivor — never reclaim or retire it.
+    const heldByOtherMemberships = mecaId
+      ? await em.count(Membership, { mecaId, id: { $ne: id } })
+      : 0;
+    const mecaIdOutcome: 'none' | 'reclaimed' | 'retired_results' | 'kept_other_membership' =
+      !mecaId
+        ? 'none'
+        : heldByOtherMemberships > 0
+          ? 'kept_other_membership'
+          : resultsCount > 0
+            ? 'retired_results'
+            : 'reclaimed';
 
     await em.transactional(async (tem) => {
       // ---- Financial records: the admin's explicit choice ----
@@ -425,7 +453,17 @@ export class MembershipsService {
       // history, teams + team members. DELETE (meaningless without the
       // membership): comps, renewal tokens.
       await tem.nativeUpdate(EventRegistration, { membership: id }, { membership: null });
-      await tem.nativeUpdate(MecaIdHistory, { membership: id }, { membership: null });
+      // meca_id_history rows can't simply be detached: chk_meca_id_owner
+      // requires EXACTLY ONE owner (membership XOR profile), so nulling
+      // membership_id alone violates the CHECK (PG 23514 → opaque 400; hit
+      // on prod 2026-07-06 deleting a duplicate membership). Re-point the
+      // rows at the owner profile to keep the audit trail; if there's no
+      // surviving profile the rows have to go.
+      if (ownerId) {
+        await tem.nativeUpdate(MecaIdHistory, { membership: id }, { membership: null, profile: ownerId });
+      } else {
+        await tem.nativeDelete(MecaIdHistory, { membership: id });
+      }
       await tem.nativeUpdate(Team, { membership: id }, { membership: null });
       await tem.nativeUpdate(TeamMember, { membership: id }, { membership: null });
       await tem.nativeDelete(MembershipComp, { membership: id });
@@ -461,7 +499,12 @@ export class MembershipsService {
       description:
         `Deleted membership ${id} (MECA ID ${mecaId ?? 'none'}) for ${ownerEmail || ownerId || 'unknown user'} — ` +
         `financial records ${financialAction === 'delete' ? 'PERMANENTLY DELETED' : 'kept (detached)'}; ` +
-        `MECA ID ${mecaIdOutcome === 'reclaimed' ? 'returned to pool' : mecaIdOutcome === 'retired_results' ? `retired (${resultsCount} results attached)` : 'n/a'}`,
+        `MECA ID ${
+          mecaIdOutcome === 'reclaimed' ? 'returned to pool'
+          : mecaIdOutcome === 'retired_results' ? `retired (${resultsCount} results attached)`
+          : mecaIdOutcome === 'kept_other_membership' ? `kept — still held by ${heldByOtherMemberships} other membership(s)`
+          : 'n/a'
+        }`,
       oldValues: {
         mecaId,
         membershipTypeConfigId: (membership.membershipTypeConfig as any)?.id ?? membership.membershipTypeConfig,

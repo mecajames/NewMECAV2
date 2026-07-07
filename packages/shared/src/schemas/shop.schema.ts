@@ -147,6 +147,7 @@ export const ShopOrderSchema = z.object({
   totalAmount: z.number().nonnegative(),
   stripePaymentIntentId: z.string().nullable().optional(),
   stripeChargeId: z.string().nullable().optional(),
+  paypalCaptureId: z.string().nullable().optional(),
   shippingAddress: ShopAddressSchema.nullable().optional(),
   billingAddress: ShopAddressSchema.nullable().optional(),
   notes: z.string().nullable().optional(),

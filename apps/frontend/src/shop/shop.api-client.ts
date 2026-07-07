@@ -280,10 +280,37 @@ export const shopApi = {
   },
 
   /**
-   * Refund an order (admin)
+   * Refund an order (admin). refundPayment=true (default) issues the real
+   * Stripe/PayPal refund when the order has a payment reference; false only
+   * marks the order refunded in the DB.
    */
-  adminRefundOrder: async (id: string, reason?: string): Promise<ShopOrder> => {
-    const response = await axios.put(`/api/shop/admin/orders/${id}/refund`, { reason });
+  adminRefundOrder: async (
+    id: string,
+    reason?: string,
+    refundPayment?: boolean,
+  ): Promise<{ order: ShopOrder; gatewayRefund: { gateway: string; amount: number } | null }> => {
+    const response = await axios.put(`/api/shop/admin/orders/${id}/refund`, { reason, refundPayment });
+    return response.data;
+  },
+
+  /**
+   * Permanently delete a shop order (admin, test-data cleanup). Only
+   * pending/cancelled/refunded orders can be deleted.
+   */
+  adminDeleteOrder: async (
+    id: string,
+  ): Promise<{ deleted: true; orderNumber: string; billingOrderId?: string }> => {
+    const response = await axios.delete(`/api/shop/admin/orders/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Bulk-delete shop orders (admin). Returns per-id outcomes.
+   */
+  adminBulkDeleteOrders: async (
+    ids: string[],
+  ): Promise<Array<{ id: string; ok: boolean; error?: string }>> => {
+    const response = await axios.post(`/api/shop/admin/orders/bulk-delete`, { ids });
     return response.data;
   },
 

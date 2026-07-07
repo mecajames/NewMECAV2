@@ -604,6 +604,48 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
+              {/* Event Director — avatar + name only (no contact info here),
+                  sourced from the staff assignment (or legacy director field). */}
+              {event.event_director?.name && (
+                <div className="flex items-start gap-3">
+                  <User className="h-6 w-6 text-orange-500 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="text-gray-400 text-sm">Event Director</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {(event.event_director as any).avatar_url ? (
+                        <img
+                          src={(event.event_director as any).avatar_url}
+                          alt={event.event_director.name}
+                          className="h-8 w-8 rounded-full object-cover border border-slate-600"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-semibold">
+                          {event.event_director.name
+                            .split(/\s+/)
+                            .map((w: string) => w[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase()}
+                        </div>
+                      )}
+                      <p className="text-white font-semibold">{event.event_director.name}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(event.judges?.length ?? 0) > 0 && (
+                <div className="flex items-start gap-3">
+                  <User className="h-6 w-6 text-orange-500 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="text-gray-400 text-sm">Judge{event.judges!.length !== 1 ? 's' : ''}</p>
+                    <p className="text-white font-semibold">
+                      {event.judges!.map((j) => j.name).join(', ')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {event.registration_fee > 0 && (
                 <div className="flex items-start gap-3">
                   <DollarSign className="h-6 w-6 text-orange-500 flex-shrink-0 mt-1" />
@@ -654,20 +696,9 @@ export default function EventDetailPage() {
                 </div>
               )}
 
-              {/* Event Director */}
-              {event.event_director && (
-                <div className="bg-slate-700 rounded-lg p-6">
-                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                    <User className="h-5 w-5 text-orange-500" />
-                    Event Director
-                  </h3>
-                  <p className="text-white font-medium mb-2">{`${event.event_director.first_name || ''} ${event.event_director.last_name || ''}`.trim()}</p>
-                  <p className="text-gray-400 text-sm mb-1">{event.event_director.email}</p>
-                  {event.event_director.phone && (
-                    <p className="text-gray-400 text-sm">{event.event_director.phone}</p>
-                  )}
-                </div>
-              )}
+              {/* The Event Director now shows in the info section under
+                  Location (avatar + name, sourced from staff assignments) —
+                  the old standalone box here was removed (James 2026-07-06). */}
             </div>
           </div>
 

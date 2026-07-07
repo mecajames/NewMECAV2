@@ -68,18 +68,19 @@ export function AdminShopOrdersPage() {
 
   // Refund modal
   const [showRefundModal, setShowRefundModal] = useState(false);
-  const [refundOrderId, setRefundOrderId] = useState<string | null>(null);
+  const [refundOrder, setRefundOrder] = useState<ShopOrder | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [refundPayment, setRefundPayment] = useState(true);
   const [processingRefund, setProcessingRefund] = useState(false);
 
   // Invoice creation recovery
   const [creatingInvoiceForOrderId, setCreatingInvoiceForOrderId] = useState<string | null>(null);
 
-  // Bulk-cancel + abandoned-cleanup state. Selection is reset whenever the
-  // visible page changes so an admin can't accidentally act on rows they
+  // Bulk cancel/delete + abandoned-cleanup state. Selection is reset whenever
+  // the visible page changes so an admin can't accidentally act on rows they
   // can no longer see.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkRunning, setBulkRunning] = useState<null | 'cancel' | 'abandoned'>(null);
+  const [bulkRunning, setBulkRunning] = useState<null | 'cancel' | 'abandoned' | 'delete'>(null);
 
   const toggleSelect = (id: string, sel: boolean) => {
     setSelectedIds(prev => {
@@ -89,12 +90,17 @@ export function AdminShopOrdersPage() {
     });
   };
 
-  // Only PENDING orders are cancellable, so the "select all" header checkbox
-  // toggles only the pending visible rows — selecting a paid/shipped row
-  // would just produce a per-row failure on bulk-cancel.
-  const pendingVisible = orders.filter(o => o.status === 'pending');
-  const allPendingSelected = pendingVisible.length > 0 && pendingVisible.every(o => selectedIds.has(o.id));
-  const somePendingSelected = pendingVisible.some(o => selectedIds.has(o.id));
+  // PENDING orders can be cancelled; pending/cancelled/refunded can be
+  // deleted. Paid/in-flight orders are excluded from selection entirely —
+  // they must go through the refund flow before they can be removed.
+  const canDelete = (o: ShopOrder) =>
+    o.status === 'pending' || o.status === 'cancelled' || o.status === 'refunded';
+  const selectableVisible = orders.filter(canDelete);
+  const allSelectableSelected = selectableVisible.length > 0 && selectableVisible.every(o => selectedIds.has(o.id));
+  const someSelectableSelected = selectableVisible.some(o => selectedIds.has(o.id));
+  const selectedPendingIds = orders
+    .filter(o => selectedIds.has(o.id) && o.status === 'pending')
+    .map(o => o.id);
 
   useEffect(() => {
     loadData();
@@ -192,21 +198,29 @@ export function AdminShopOrdersPage() {
   };
 
   const openRefundModal = (order: ShopOrder) => {
-    setRefundOrderId(order.id);
+    setRefundOrder(order);
     setRefundReason('');
+    // Default to a real gateway refund when the order has a payment reference.
+    setRefundPayment(Boolean(order.stripePaymentIntentId || order.paypalCaptureId));
     setShowRefundModal(true);
   };
 
   const processRefund = async () => {
-    if (!refundOrderId) return;
+    if (!refundOrder) return;
     setProcessingRefund(true);
     try {
-      await shopApi.adminRefundOrder(refundOrderId, refundReason || undefined);
+      const result = await shopApi.adminRefundOrder(refundOrder.id, refundReason || undefined, refundPayment);
+      alert(
+        result.gatewayRefund
+          ? `Refunded $${result.gatewayRefund.amount.toFixed(2)} to the customer via ${result.gatewayRefund.gateway}.`
+          : 'Order marked as refunded. No payment refund was issued.',
+      );
       setShowRefundModal(false);
-      setRefundOrderId(null);
+      setRefundOrder(null);
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error processing refund:', err);
+      alert(err?.response?.data?.message || 'Failed to process refund');
     } finally {
       setProcessingRefund(false);
     }
@@ -232,8 +246,43 @@ export function AdminShopOrdersPage() {
     }
   };
 
-  const handleBulkCancel = async () => {
+  /**
+   * Permanently delete a single order (test-data cleanup). Paid/in-flight
+   * orders are blocked server-side — they must be refunded or cancelled
+   * first.
+   */
+  const handleDeleteOne = async (order: ShopOrder) => {
+    if (!window.confirm(`PERMANENTLY delete order ${order.orderNumber}? This cannot be undone.`)) return;
+    try {
+      await shopApi.adminDeleteOrder(order.id);
+      loadData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete order');
+    }
+  };
+
+  const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`PERMANENTLY delete ${ids.length} order(s)? This cannot be undone.`)) return;
+    setBulkRunning('delete');
+    try {
+      const results = await shopApi.adminBulkDeleteOrders(ids);
+      const ok = results.filter(r => r.ok).length;
+      const failed = results.length - ok;
+      const errors = results.filter(r => !r.ok && r.error).slice(0, 3).map(r => r.error).join('; ');
+      alert(failed > 0 ? `${ok} deleted, ${failed} failed${errors ? ` — ${errors}` : ''}` : `${ok} deleted`);
+      setSelectedIds(new Set());
+      loadData();
+    } finally {
+      setBulkRunning(null);
+    }
+  };
+
+  const handleBulkCancel = async () => {
+    // Selection can include cancelled/refunded rows (for delete) — cancel
+    // only applies to the pending ones.
+    const ids = selectedPendingIds;
     if (ids.length === 0) return;
     if (!window.confirm(`Cancel ${ids.length} pending order(s)?`)) return;
     const reason = window.prompt('Reason (optional):') || undefined;
@@ -368,13 +417,24 @@ export function AdminShopOrdersPage() {
               {selectedIds.size} selected
             </span>
             <div className="flex-1" />
+            {selectedPendingIds.length > 0 && (
+              <button
+                onClick={handleBulkCancel}
+                disabled={bulkRunning !== null}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium rounded-md border border-amber-500/30 disabled:opacity-50"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                {bulkRunning === 'cancel' ? 'Cancelling…' : `Cancel Selected (${selectedPendingIds.length})`}
+              </button>
+            )}
             <button
-              onClick={handleBulkCancel}
+              onClick={handleBulkDelete}
               disabled={bulkRunning !== null}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium rounded-md border border-red-500/30 disabled:opacity-50"
+              title="Permanently delete the selected orders. Cannot be undone."
             >
-              <XCircle className="h-3.5 w-3.5" />
-              {bulkRunning === 'cancel' ? 'Cancelling…' : 'Cancel Selected'}
+              <Trash2 className="h-3.5 w-3.5" />
+              {bulkRunning === 'delete' ? 'Deleting…' : 'Delete Selected'}
             </button>
             <button
               onClick={() => setSelectedIds(new Set())}
@@ -404,15 +464,16 @@ export function AdminShopOrdersPage() {
                     <th className="px-3 py-3 w-10">
                       <input
                         type="checkbox"
-                        checked={allPendingSelected}
-                        ref={(el) => { if (el) el.indeterminate = !allPendingSelected && somePendingSelected; }}
+                        checked={allSelectableSelected}
+                        ref={(el) => { if (el) el.indeterminate = !allSelectableSelected && someSelectableSelected; }}
                         onChange={(e) => {
                           const next = e.target.checked;
-                          // Toggle only PENDING rows — non-pending can't be cancelled.
-                          pendingVisible.forEach(o => toggleSelect(o.id, next));
+                          // Toggle only pending/cancelled/refunded rows — paid
+                          // and in-flight orders can't be bulk-acted on.
+                          selectableVisible.forEach(o => toggleSelect(o.id, next));
                         }}
                         className="h-4 w-4 rounded border-slate-500 bg-slate-800 text-orange-500 focus:ring-orange-500"
-                        title="Select all pending"
+                        title="Select all cancellable/deletable orders"
                       />
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -439,8 +500,8 @@ export function AdminShopOrdersPage() {
                   {orders.map((order) => (
                     <tr key={order.id} className={`hover:bg-slate-700/30 ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
                       <td className="px-3 py-4 w-10">
-                        {/* Only PENDING orders are selectable — others can't be cancelled. */}
-                        {order.status === 'pending' ? (
+                        {/* Pending (cancel/delete) and cancelled/refunded (delete) rows are selectable. */}
+                        {canDelete(order) ? (
                           <input
                             type="checkbox"
                             checked={selectedIds.has(order.id)}
@@ -526,10 +587,19 @@ export function AdminShopOrdersPage() {
                           {order.status === 'pending' && (
                             <button
                               onClick={() => handleCancelOne(order)}
-                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+                              className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 rounded-lg transition-colors"
                               title="Cancel Order"
                             >
                               <XCircle className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canDelete(order) && (
+                            <button
+                              onClick={() => handleDeleteOne(order)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+                              title="Delete Order (permanent)"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           )}
                           {order.billingOrderId ? (
@@ -796,13 +866,32 @@ export function AdminShopOrdersPage() {
         )}
 
         {/* Refund Modal */}
-        {showRefundModal && (
+        {showRefundModal && refundOrder && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold text-white mb-4">Refund Order</h3>
+              <h3 className="text-xl font-bold text-white mb-1">Refund Order</h3>
+              <p className="text-gray-500 text-sm mb-4">{refundOrder.orderNumber} — ${Number(refundOrder.totalAmount).toFixed(2)}</p>
               <p className="text-gray-400 mb-4">
-                This will mark the order as refunded and restore inventory. The refund in Stripe must be processed separately.
+                The order will be marked as refunded and inventory restored.
               </p>
+              {(refundOrder.stripePaymentIntentId || refundOrder.paypalCaptureId) ? (
+                <label className="flex items-start gap-2.5 mb-4 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={refundPayment}
+                    onChange={(e) => setRefundPayment(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-500 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span>
+                    Refund the payment via <span className="font-medium text-white">{refundOrder.stripePaymentIntentId ? 'Stripe' : 'PayPal'}</span> — ${Number(refundOrder.totalAmount).toFixed(2)} back to the customer.
+                    <span className="block text-gray-500 mt-1">Uncheck to only mark the order refunded (e.g. the money was already refunded in the gateway dashboard).</span>
+                  </span>
+                </label>
+              ) : (
+                <p className="text-yellow-400/90 text-sm mb-4">
+                  No Stripe/PayPal payment reference on this order — it will be marked refunded only, no money movement.
+                </p>
+              )}
               <textarea
                 value={refundReason}
                 onChange={(e) => setRefundReason(e.target.value)}
@@ -822,7 +911,11 @@ export function AdminShopOrdersPage() {
                   disabled={processingRefund}
                   className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {processingRefund ? 'Processing...' : 'Process Refund'}
+                  {processingRefund
+                    ? 'Processing...'
+                    : refundPayment && (refundOrder.stripePaymentIntentId || refundOrder.paypalCaptureId)
+                      ? `Refund $${Number(refundOrder.totalAmount).toFixed(2)}`
+                      : 'Mark Refunded'}
                 </button>
               </div>
             </div>

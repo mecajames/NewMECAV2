@@ -72,6 +72,7 @@ export interface Event {
     last_name?: string | null;
     email?: string | null;
     phone?: string | null;
+    avatar_url?: string | null;
   } | null;
   /** Public list enrichment: accepted/confirmed judges for the event. */
   judges?: Array<{ name: string }>;

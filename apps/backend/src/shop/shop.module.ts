@@ -6,6 +6,9 @@ import { ShopService } from './shop.service';
 import { ShopController } from './shop.controller';
 import { ShippingService } from './shipping.service';
 
+// RefundService comes from the @Global RefundsModule — do NOT add an explicit
+// RefundsModule import here: it closes a module cycle (shop → refunds →
+// stripe/paypal → shop).
 @Module({
   imports: [SiteSettingsModule, OrdersModule, InvoicesModule],
   controllers: [ShopController],
