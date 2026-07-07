@@ -5016,6 +5016,39 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
     }
   };
 
+  /**
+   * Admin: record payment for a PENDING secondary membership. This marks it
+   * paid and mints its own NEW MECA ID (the master's ID is never touched).
+   * Needed because paying the secondary's invoice in the billing admin does
+   * not activate the secondary — only the online payment webhook or this
+   * endpoint do.
+   */
+  const handleMarkSecondaryPaid = async (secondary: SecondaryMembershipInfo) => {
+    const defaultAmount = secondary.membershipType?.price != null ? String(secondary.membershipType.price) : '';
+    const amountStr = window.prompt(
+      `Mark "${secondary.competitorName}"'s secondary membership as PAID?\n\n` +
+      `This assigns them their own NEW MECA ID. Enter the amount paid ($):`,
+      defaultAmount,
+    );
+    if (amountStr === null) return; // cancelled
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount < 0) {
+      alert('Enter a valid payment amount.');
+      return;
+    }
+    const txn = window.prompt('Payment reference (optional — e.g. CASH-123, check #, Stripe id):');
+    if (txn === null) return; // cancelled
+    try {
+      const updated = await membershipsApi.markSecondaryPaid(secondary.id, amount, txn.trim() || undefined);
+      await fetchMemberships();
+      alert(
+        `"${secondary.competitorName}" is now PAID. New MECA ID: ${(updated as any).mecaId ?? '(pending)'}.`,
+      );
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to mark secondary as paid.');
+    }
+  };
+
   const handleCancelAndRefund = async (m: Membership) => {
     const amt = (m as any).amountPaid ? `$${(m as any).amountPaid}` : 'the payment';
     const reason = window.prompt(
@@ -6130,6 +6163,16 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
                             </div>
                           </div>
                           <div className="flex items-center gap-2 ml-2">
+                            {/* Record payment for a pending secondary — marks paid + mints its MECA ID */}
+                            {canEdit && String(secondary.paymentStatus) !== 'paid' && (
+                              <button
+                                onClick={() => handleMarkSecondaryPaid(secondary)}
+                                className="px-2 py-1 text-xs text-green-300 hover:text-green-200 bg-green-500/10 hover:bg-green-500/20 rounded transition-colors whitespace-nowrap"
+                                title="Record payment: mark this secondary paid and assign their own new MECA ID"
+                              >
+                                Mark Paid
+                              </button>
+                            )}
                             {/* View Profile Link - if they have their own login */}
                             {secondary.hasOwnLogin && secondary.profileId && (
                               <button

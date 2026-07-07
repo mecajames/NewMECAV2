@@ -330,6 +330,9 @@ export class CompetitionResultsController {
   @HttpCode(HttpStatus.OK)
   async recalculateEventPoints(@Param('eventId') eventId: string): Promise<{ message: string }> {
     try {
+      // Admin-triggered recalc must see membership fixes made seconds ago,
+      // not the 5-minute-old eligibility cache.
+      this.competitionResultsService.bustPointsEligibilityCache();
       await this.competitionResultsService.updateEventPoints(eventId);
       return { message: 'Points recalculated successfully' };
     } catch (error: any) {
