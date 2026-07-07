@@ -148,7 +148,10 @@ export class MasterSecondaryService {
     }
 
     if (masterMembership.paymentStatus !== PaymentStatus.PAID) {
-      throw new BadRequestException('Master membership must be paid to add secondaries');
+      throw new BadRequestException(
+        `Master membership must be paid before secondaries can be added — this one is currently "${masterMembership.paymentStatus}". ` +
+        `If it really was paid (e.g. the payment sits on a deleted duplicate membership), use Record Payment on the master membership first, then add the secondary.`,
+      );
     }
 
     // Check max secondaries limit
@@ -185,27 +188,72 @@ export class MasterSecondaryService {
     // - Individual member information
     // The hasOwnLogin flag only determines if they can log in, not if they have a profile
 
-    // Check if email already exists (if email provided)
-    if (dto.email) {
-      const existingProfile = await em.findOne(Profile, { email: dto.email });
+    // Check if email already exists (if email provided). Two profiles can
+    // never share an email, so a colliding address can't become the
+    // secondary's login.
+    let email = dto.email;
+    let createLogin = dto.createLogin;
+    if (email) {
+      const existingProfile = await em.findOne(Profile, { email });
       if (existingProfile) {
-        throw new BadRequestException('A profile with this email already exists');
+        const masterOwnerId = (masterMembership.user as any)?.id ?? masterMembership.user;
+        if (existingProfile.id === masterOwnerId) {
+          // The master owner's OWN email — a self-secondary or a shared
+          // household address. Don't reject: create the secondary without
+          // its own login (it's managed from the master account anyway) and
+          // let the profile get a placeholder address.
+          this.logger.log(
+            `Secondary email ${email} is the master owner's own address — creating secondary without its own login`,
+          );
+          email = undefined;
+          createLogin = false;
+        } else {
+          throw new BadRequestException(
+            `The email ${email} already belongs to another MECA account${existingProfile.full_name ? ` (${existingProfile.full_name})` : ''}. ` +
+            `Uncheck "give their own login" to add this secondary without a login, or use a different email address.`,
+          );
+        }
       }
     }
 
     // Generate a placeholder email if none provided (for non-login secondaries)
-    const secondaryEmail = dto.email || `secondary-${Date.now()}-${Math.random().toString(36).substring(7)}@placeholder.meca.local`;
+    const secondaryEmail = email || `secondary-${Date.now()}-${Math.random().toString(36).substring(7)}@placeholder.meca.local`;
+
+    const firstName = competitorName.split(' ')[0];
+    const lastName = competitorName.split(' ').slice(1).join(' ') || '';
+
+    // profiles.id → auth.users(id) FK: EVERY profile row needs a Supabase
+    // auth user behind it, so create the auth user FIRST and reuse its id
+    // (same reason fixSecondaryMembershipsWithoutProfiles does this).
+    // Inserting a bare Profile with a random uuid violates the FK on prod →
+    // "This references a users record that no longer exists." Non-login
+    // secondaries get an unguessable random password + can_login=false; the
+    // auth row exists purely to satisfy the FK.
+    const authResult = await this.supabaseAdminService.createUserWithPassword({
+      email: secondaryEmail,
+      password: this.supabaseAdminService.generatePassword(16),
+      firstName,
+      lastName,
+      // Real-login secondaries must set their own password on first sign-in.
+      forcePasswordChange: createLogin,
+    });
+    if (!authResult.success || !authResult.userId) {
+      throw new BadRequestException(
+        `Could not create the secondary member's account: ${authResult.error || 'auth user creation failed'}`,
+      );
+    }
 
     const secondaryProfile = new Profile();
+    secondaryProfile.id = authResult.userId;
     secondaryProfile.email = secondaryEmail;
-    secondaryProfile.first_name = competitorName.split(' ')[0];
-    secondaryProfile.last_name = competitorName.split(' ').slice(1).join(' ') || '';
+    secondaryProfile.first_name = firstName;
+    secondaryProfile.last_name = lastName;
     secondaryProfile.full_name = competitorName;
     secondaryProfile.is_secondary_account = true;
     secondaryProfile.master_profile = masterMembership.user;
-    secondaryProfile.can_login = dto.createLogin; // New field to track if they can log in
+    secondaryProfile.can_login = createLogin; // New field to track if they can log in
 
-    if (dto.createLogin) {
+    if (createLogin) {
       secondaryProfile.force_password_change = true; // They'll need to set their password
     }
 
@@ -218,7 +266,7 @@ export class MasterSecondaryService {
     secondary.competitorName = competitorName;
     secondary.accountType = MembershipAccountType.SECONDARY;
     secondary.masterMembership = masterMembership;
-    secondary.hasOwnLogin = dto.createLogin;
+    secondary.hasOwnLogin = createLogin;
     secondary.masterBillingProfile = masterMembership.user;
     secondary.linkedAt = new Date();
 
@@ -254,7 +302,14 @@ export class MasterSecondaryService {
     secondary.billingPhone = masterMembership.billingPhone;
 
     em.persist(secondary);
-    await em.flush();
+    try {
+      await em.flush();
+    } catch (err) {
+      // The auth user was created before the DB insert — don't leak it if
+      // the profile/membership insert failed.
+      await this.supabaseAdminService.deleteUser(authResult.userId);
+      throw err;
+    }
 
     // Create an invoice for the secondary membership
     // Invoice is billed to the master account owner

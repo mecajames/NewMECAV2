@@ -242,3 +242,4 @@ apps/backend/.env.example
 apps/frontend/.env.example
 apps/frontend/.env.example
 .gstack/
+AGENT-HANDOFF.md

@@ -191,7 +191,10 @@ export class CompetitionResultsService {
 
     // Recalculate points/placements for the affected events so the reinstated
     // rows are scored correctly (and so anyone they now share a class with is
-    // re-placed against them).
+    // re-placed against them). Bust the eligibility cache first — the
+    // membership that makes this member eligible again was typically fixed
+    // milliseconds ago, and a stale cache would immediately re-hold the rows.
+    this.bustPointsEligibilityCache();
     await this.recalcEventsForResults(affected.map((r) => r.id));
 
     this.logger.warn(
@@ -1433,6 +1436,17 @@ export class CompetitionResultsService {
    * Refresh the cache of points-eligible MECA IDs from the memberships table.
    * Only Competitor, Retailer, and Manufacturer memberships with active paid status are eligible.
    */
+  /**
+   * Force the next eligibility lookup to re-query the memberships table.
+   * Admin-triggered recalcs call this so a membership fixed seconds ago
+   * (e.g. Record Payment after a duplicate-membership cleanup) is seen
+   * immediately instead of after the 5-minute cache TTL — otherwise the
+   * recalc re-holds/zeroes the member's points from stale data.
+   */
+  bustPointsEligibilityCache(): void {
+    this.pointsEligibleCacheTimestamp = 0;
+  }
+
   private async refreshPointsEligibleCache(): Promise<void> {
     const now = Date.now();
     if (now - this.pointsEligibleCacheTimestamp < this.CACHE_TTL_MS) {
@@ -1601,6 +1615,7 @@ export class CompetitionResultsService {
    * This is used to fix existing data after the placement calculation bug fix
    */
   async recalculateAllPlacements(): Promise<{ processed: number; errors: number }> {
+    this.bustPointsEligibilityCache();
     const em = this.em.fork();
     const connection = em.getConnection();
 
@@ -1912,6 +1927,17 @@ export class CompetitionResultsService {
                 format,
                 pointsConfig
               );
+              // Self-heal previously-held rows: if this row was stamped
+              // "held" while the member was lapsed (e.g. their only paid
+              // membership row got deleted in a duplicate cleanup) and the
+              // member is eligible again, release it — otherwise the held
+              // flag keeps masking the row (ID hidden, 0 points shown) even
+              // though points were just recomputed.
+              if (result.pointsHeldForRenewal) {
+                result.pointsHeldForRenewal = false;
+                result.releasedAt = new Date();
+                result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: membership active at recalculation';
+              }
             } else {
               // Check if this member is in grace period — hold results for potential renewal
               const inGracePeriod = await this.isInGracePeriod(mecaId);
@@ -2003,6 +2029,7 @@ export class CompetitionResultsService {
    * Used when points configuration is changed
    */
   async recalculateSeasonPoints(seasonId: string): Promise<{ events_processed: number; results_updated: number; duration_ms: number }> {
+    this.bustPointsEligibilityCache();
     const startTime = Date.now();
     const em = this.em.fork();
 
