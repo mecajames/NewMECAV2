@@ -243,8 +243,18 @@ export class MasterSecondaryService {
       );
     }
 
-    const secondaryProfile = new Profile();
-    secondaryProfile.id = authResult.userId;
+    // On prod a DB trigger on auth.users auto-provisions a skeleton profiles
+    // row the moment the auth user is inserted, so a blind INSERT here dies on
+    // profiles_pkey with 409 "A record with that id already exists" (same
+    // trigger that 500'd the Create User wizard on 2026-06-11 — see
+    // ProfilesService.createWithPassword). Adopt the row if it exists; local
+    // dev has no trigger, so the insert path still runs there.
+    let secondaryProfile = await em.findOne(Profile, { id: authResult.userId });
+    if (!secondaryProfile) {
+      secondaryProfile = new Profile();
+      secondaryProfile.id = authResult.userId;
+      em.persist(secondaryProfile);
+    }
     secondaryProfile.email = secondaryEmail;
     secondaryProfile.first_name = firstName;
     secondaryProfile.last_name = lastName;
@@ -256,8 +266,6 @@ export class MasterSecondaryService {
     if (createLogin) {
       secondaryProfile.force_password_change = true; // They'll need to set their password
     }
-
-    em.persist(secondaryProfile);
 
     // Create the secondary membership
     const secondary = new Membership();
