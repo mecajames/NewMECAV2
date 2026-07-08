@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Invoice } from '../invoices.entity';
 import { InvoiceStatus, CompanyInfo, BillingAddress, PaymentStatus } from '@newmeca/shared';
 import { Membership } from '../../memberships/memberships.entity';
+import { SiteSettingsService } from '../../site-settings/site-settings.service';
 
 /**
  * Service for generating invoice PDFs
@@ -10,8 +11,35 @@ import { Membership } from '../../memberships/memberships.entity';
  */
 @Injectable()
 export class InvoicePdfService {
+  constructor(
+    @Optional() @Inject(SiteSettingsService)
+    private readonly siteSettingsService?: SiteSettingsService,
+  ) {}
+
+  // Admin-configurable site logo (site_settings `site_logo_url`) — same
+  // sync-getter + background-refresh pattern as EmailService.logoUrl.
+  private siteLogoCache: { url: string | null; fetchedAt: number } = { url: null, fetchedAt: 0 };
+
+  private refreshSiteLogoCache(): void {
+    const TTL = 5 * 60 * 1000;
+    if (!this.siteSettingsService || Date.now() - this.siteLogoCache.fetchedAt < TTL) return;
+    this.siteLogoCache.fetchedAt = Date.now();
+    this.siteSettingsService
+      .findByKey('site_logo_url')
+      .then((setting) => {
+        this.siteLogoCache.url = (setting?.setting_value || '').trim() || null;
+      })
+      .catch(() => {});
+  }
+
   private get logoUrl(): string {
-    return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/meca-logo-transparent.png`;
+    this.refreshSiteLogoCache();
+    const base = process.env.FRONTEND_URL || 'https://www.mecacaraudio.com';
+    const custom = this.siteLogoCache.url;
+    if (custom) {
+      return custom.startsWith('http') ? custom : `${base}${custom.startsWith('/') ? '' : '/'}${custom}`;
+    }
+    return `${base}/meca-logo-transparent.png`;
   }
   /**
    * Generate PDF content for an invoice

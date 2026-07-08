@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
 import { useFormatOrder, compareFormatNames } from '@/competition-formats';
-import { useSiteSettings } from '@/shared/contexts';
+import { useSiteSettings, useSiteLogo } from '@/shared/contexts';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
 import type { VotingPublicStatus } from '@newmeca/shared';
 import { getAllSponsors, RetailerListing, ManufacturerListing } from '@/business-listings';
@@ -16,6 +16,7 @@ import { BannerPosition } from '@newmeca/shared';
 export default function HomePage() {
   const navigate = useNavigate();
   const { getSetting } = useSiteSettings();
+  const siteLogo = useSiteLogo();
   const formatOrder = useFormatOrder();
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -339,12 +340,12 @@ export default function HomePage() {
                                 className="absolute inset-0 w-full h-48 bg-slate-700 items-center justify-center"
                                 style={{ display: 'none' }}
                               >
-                                <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-28 w-auto opacity-50" />
+                                <img src={siteLogo} alt="MECA Logo" className="h-28 w-auto opacity-50" />
                               </div>
                             </div>
                           ) : (
                             <div className="w-full h-48 bg-slate-700 flex items-center justify-center">
-                              <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-28 w-auto opacity-50" />
+                              <img src={siteLogo} alt="MECA Logo" className="h-28 w-auto opacity-50" />
                             </div>
                           )}
                           <div className="p-6">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield, Database } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield, Database, Upload } from 'lucide-react';
 
 interface HeroSlide {
   url: string;
@@ -13,6 +13,8 @@ import { siteSettingsApi, SiteSetting } from '@/site-settings';
 import { competitionResultsApi } from '@/competition-results';
 import { mediaFilesApi, MediaFile } from '@/media-files';
 import { getStorageUrl } from '@/lib/storage';
+import { uploadFile } from '@/api-client/uploads.api-client';
+import { DEFAULT_SITE_LOGO } from '@/shared/siteLogo';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
@@ -35,6 +37,10 @@ export default function SiteSettings() {
   const [saving, setSaving] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState<number | null>(null);
+  // Site Logo section state: when true, the media picker selects the site
+  // logo instead of a hero slide; uploadingLogo tracks the file upload.
+  const [logoPickerMode, setLogoPickerMode] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [triggeringMembershipEmails, setTriggeringMembershipEmails] = useState(false);
   const [triggeringEventReminders, setTriggeringEventReminders] = useState(false);
   const [updatingEventStatuses, setUpdatingEventStatuses] = useState(false);
@@ -50,6 +56,9 @@ export default function SiteSettings() {
   const [dataMaintResult, setDataMaintResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
+    // Site logo (header + emails). Empty = built-in default logo.
+    site_logo_url: '',
+    site_logo_library: [] as string[],
     hero_image_urls: [] as HeroSlide[],
     hero_title: '',
     hero_subtitle: '',
@@ -158,6 +167,8 @@ export default function SiteSettings() {
       };
 
       setFormData({
+        site_logo_url: settingsMap['site_logo_url'] || '',
+        site_logo_library: parseJsonArray(settingsMap['site_logo_library']),
         hero_image_urls: heroSlides,
         hero_title: settingsMap['hero_title'] || 'MECACARAUDIO.COM',
         hero_subtitle: settingsMap['hero_subtitle'] || 'The Premier Platform for Car Audio Competition Management',
@@ -240,6 +251,8 @@ export default function SiteSettings() {
 
     try {
       const settings = [
+        { key: 'site_logo_url', value: formData.site_logo_url, type: 'text', description: 'Site logo URL used in the header and emails (empty = built-in default)' },
+        { key: 'site_logo_library', value: JSON.stringify(formData.site_logo_library), type: 'json', description: 'Previously uploaded site logos (JSON array of URLs)' },
         { key: 'hero_image_urls', value: JSON.stringify(formData.hero_image_urls), type: 'json', description: 'Homepage hero carousel images (JSON array)' },
         { key: 'hero_title', value: formData.hero_title, type: 'text', description: 'Homepage hero title' },
         { key: 'hero_subtitle', value: formData.hero_subtitle, type: 'text', description: 'Homepage hero subtitle' },
@@ -368,7 +381,13 @@ export default function SiteSettings() {
   };
 
   const selectMedia = (url: string) => {
-    if (currentImageIndex !== null) {
+    if (logoPickerMode) {
+      setFormData((prev) => ({
+        ...prev,
+        site_logo_url: url,
+        site_logo_library: prev.site_logo_library.includes(url) ? prev.site_logo_library : [...prev.site_logo_library, url],
+      }));
+    } else if (currentImageIndex !== null) {
       updateImageUrl(currentImageIndex, url);
     } else {
       setFormData({
@@ -378,6 +397,40 @@ export default function SiteSettings() {
     }
     setShowMediaPicker(false);
     setCurrentImageIndex(null);
+    setLogoPickerMode(false);
+  };
+
+  /**
+   * Upload a new site logo file (transparent PNG / JPEG / GIF, max 2MB) to
+   * the Media Library (subfolder "logos"), select it as the site logo, and
+   * remember it in the available-logos gallery.
+   */
+  const handleLogoUpload = async (file: File) => {
+    const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      alert('Logo must be a PNG (transparent recommended), JPEG, GIF, or WebP image.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Logo file is too large — maximum size is 2MB.');
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const result = await uploadFile(file, 'media-library', undefined, 'logos');
+      setFormData((prev) => ({
+        ...prev,
+        site_logo_url: result.publicUrl,
+        site_logo_library: prev.site_logo_library.includes(result.publicUrl)
+          ? prev.site_logo_library
+          : [...prev.site_logo_library, result.publicUrl],
+      }));
+      fetchMediaImages(); // keep the media picker in sync
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to upload logo.');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   // Convert YouTube URL to embed URL
@@ -462,6 +515,7 @@ export default function SiteSettings() {
     if (index !== undefined) {
       setCurrentImageIndex(index);
     }
+    setLogoPickerMode(false); // hero-slide mode
     setShowMediaPicker(true);
   };
 
@@ -656,6 +710,135 @@ export default function SiteSettings() {
       {/* ==================== APPEARANCE TAB ==================== */}
       {activeTab === 'appearance' && (
         <>
+      {/* ── Site Logo (header + emails) ─────────────────────────────────── */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6 mb-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Site Logo
+        </h3>
+
+        <p className="text-sm text-gray-400 -mt-2">
+          The logo shown in the top navigation bar, on the login page, and in the header of every
+          email the site sends. Changing it here updates it everywhere (emails pick up the change
+          within about 5 minutes).
+        </p>
+
+        {/* Requirements / guidance */}
+        <div className="bg-slate-700/40 border border-slate-600/50 rounded-lg p-4 text-xs text-gray-300 space-y-1">
+          <p className="font-semibold text-gray-200">Logo requirements</p>
+          <ul className="list-disc list-inside space-y-0.5 text-gray-400">
+            <li><span className="text-gray-300">Format:</span> transparent PNG strongly recommended (JPEG, GIF, or WebP also accepted). Max file size 2MB.</li>
+            <li><span className="text-gray-300">Shape:</span> the current logo is <span className="font-mono text-orange-300">2048 × 512 px</span> — a wide 4:1 ratio. A similar wide shape fits the existing spaces best; a square or tall logo will render much smaller-looking.</li>
+            <li><span className="text-gray-300">Display sizes (width scales automatically to keep the image&apos;s proportions):</span> header/navigation bar <span className="font-mono text-orange-300">48px tall</span> (a 4:1 logo shows ~192px wide) · login page 40–48px tall · email banner <span className="font-mono text-orange-300">280px wide</span> (a 4:1 logo shows ~70px tall).</li>
+            <li><span className="text-gray-300">Upload resolution:</span> at least 2× the display size for sharp retina rendering — minimum ~560px wide / ~96px tall; matching the current 2048 × 512 is ideal.</li>
+            <li><span className="text-gray-300">Backgrounds it sits on:</span> header/navigation <span className="font-mono text-orange-300">#0f172a</span> · email banner <span className="font-mono text-orange-300">#1e293b</span> — both dark, so the logo must be legible on dark backgrounds (add these hex colors to the artwork if it needs its own background baked in).</li>
+          </ul>
+        </div>
+
+        {/* Current logo preview on both real background colors */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Current Logo</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-lg border border-slate-600/50 overflow-hidden">
+              <div className="flex items-center justify-center p-5" style={{ backgroundColor: '#0f172a' }}>
+                <img src={formData.site_logo_url || DEFAULT_SITE_LOGO} alt="Site logo (header preview)" className="h-12 w-auto" />
+              </div>
+              <div className="px-3 py-1.5 bg-slate-700/50 text-xs text-gray-400">Header / navigation bar <span className="font-mono">#0f172a</span></div>
+            </div>
+            <div className="rounded-lg border border-slate-600/50 overflow-hidden">
+              <div className="flex items-center justify-center p-5" style={{ backgroundColor: '#1e293b' }}>
+                <img src={formData.site_logo_url || DEFAULT_SITE_LOGO} alt="Site logo (email preview)" className="h-12 w-auto" />
+              </div>
+              <div className="px-3 py-1.5 bg-slate-700/50 text-xs text-gray-400">Email banner <span className="font-mono">#1e293b</span></div>
+            </div>
+          </div>
+          <p className="text-xs mt-2">
+            {formData.site_logo_url
+              ? <span className="text-orange-400">Custom logo selected. Click &ldquo;Save Changes&rdquo; below to apply it site-wide.</span>
+              : <span className="text-gray-500">Using the built-in default logo.</span>}
+          </p>
+        </div>
+
+        {/* Actions: upload / pick from media library / reset */}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className={`flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer ${uploadingLogo ? 'opacity-60 pointer-events-none' : ''}`}>
+            <Upload className="h-4 w-4" />
+            {uploadingLogo ? 'Uploading…' : 'Upload New Logo'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleLogoUpload(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <button
+            onClick={() => { setLogoPickerMode(true); setShowMediaPicker(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            <ImageIcon className="h-4 w-4" />
+            Choose from Media Library
+          </button>
+          {formData.site_logo_url && (
+            <button
+              onClick={() => setFormData({ ...formData, site_logo_url: '' })}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Use Default Logo
+            </button>
+          )}
+        </div>
+
+        {/* Available logos gallery */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Available Logos</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {/* Built-in default */}
+            <button
+              onClick={() => setFormData({ ...formData, site_logo_url: '' })}
+              className={`rounded-lg overflow-hidden border transition-all ${!formData.site_logo_url ? 'border-orange-500 ring-2 ring-orange-500' : 'border-slate-600/50 hover:border-slate-400'}`}
+              title="Built-in default logo"
+            >
+              <div className="flex items-center justify-center p-4 h-24" style={{ backgroundColor: '#0f172a' }}>
+                <img src={DEFAULT_SITE_LOGO} alt="Default logo" className="max-h-14 w-auto" />
+              </div>
+              <div className="px-2 py-1 bg-slate-700/50 text-xs text-gray-400 truncate">Default</div>
+            </button>
+            {formData.site_logo_library.map((url) => (
+              <div
+                key={url}
+                className={`relative rounded-lg overflow-hidden border transition-all ${formData.site_logo_url === url ? 'border-orange-500 ring-2 ring-orange-500' : 'border-slate-600/50 hover:border-slate-400'}`}
+              >
+                <button
+                  onClick={() => setFormData({ ...formData, site_logo_url: url })}
+                  className="w-full"
+                  title="Use this logo"
+                >
+                  <div className="flex items-center justify-center p-4 h-24" style={{ backgroundColor: '#0f172a' }}>
+                    <img src={url} alt="Uploaded logo" className="max-h-14 w-auto" />
+                  </div>
+                  <div className="px-2 py-1 bg-slate-700/50 text-xs text-gray-400 truncate">{url.split('/').pop()}</div>
+                </button>
+                <button
+                  onClick={() => setFormData({
+                    ...formData,
+                    site_logo_library: formData.site_logo_library.filter((u) => u !== url),
+                    site_logo_url: formData.site_logo_url === url ? '' : formData.site_logo_url,
+                  })}
+                  className="absolute top-1 right-1 p-1 bg-red-600/80 hover:bg-red-600 text-white rounded"
+                  title="Remove from this list (the file stays in the Media Library)"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-slate-800 rounded-xl p-6 space-y-6">
         <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
           Homepage Hero Section
@@ -2317,9 +2500,9 @@ export default function SiteSettings() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Choose Image</h3>
+              <h3 className="text-xl font-bold text-white">{logoPickerMode ? 'Choose Logo' : 'Choose Image'}</h3>
               <button
-                onClick={() => setShowMediaPicker(false)}
+                onClick={() => { setShowMediaPicker(false); setLogoPickerMode(false); }}
                 className="text-gray-400 hover:text-white"
               >
                 ×

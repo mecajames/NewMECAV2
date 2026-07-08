@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { siteSettingsApi, SiteSetting } from '@/site-settings/site-settings.api-client';
+import { setSiteLogo, DEFAULT_SITE_LOGO } from '@/shared/siteLogo';
 
 interface SiteSettingsContextType {
   settings: SiteSetting[];
@@ -23,6 +24,9 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
       setError(null);
       const data = await siteSettingsApi.getAll();
       setSettings(data);
+      // Prime the module-level logo singleton for non-React consumers
+      // (receipt HTML builders, map markers, api-clients).
+      setSiteLogo(data.find((s) => s.setting_key === 'site_logo_url')?.setting_value);
     } catch (err) {
       console.error('Error fetching site settings:', err);
       setError('Failed to load site settings');
@@ -70,4 +74,14 @@ export function useSiteSettings() {
     throw new Error('useSiteSettings must be used within a SiteSettingsProvider');
   }
   return context;
+}
+
+/**
+ * Reactive site logo URL — the admin-configured logo (Site Settings →
+ * Appearance) or the built-in default. Use for every place the site logo
+ * renders (header, login, watermarks) so a logo change applies everywhere.
+ */
+export function useSiteLogo(): string {
+  const { getSetting } = useSiteSettings();
+  return (getSetting('site_logo_url') || '').trim() || DEFAULT_SITE_LOGO;
 }

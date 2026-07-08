@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { requestLoginRecovery } from '../auth.api-client';
 import { REDIRECT_STORAGE_KEY } from '../idle-timeout.constants';
+import { useSiteLogo } from '@/shared/contexts';
 
 // Google OAuth icon
 const GoogleIcon = () => (
@@ -17,6 +18,7 @@ const GoogleIcon = () => (
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const siteLogo = useSiteLogo();
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get('redirect');
   const timeoutReason = searchParams.get('reason') === 'timeout';
@@ -158,7 +160,7 @@ export default function LoginPage() {
         <div className="bg-slate-800 rounded-2xl shadow-2xl p-8">
           <div className="text-center mb-6 sm:mb-8">
             <img
-              src="/meca-logo-transparent.png"
+              src={siteLogo}
               alt="MECA"
               className="mx-auto h-10 sm:h-12 w-auto mb-4"
             />

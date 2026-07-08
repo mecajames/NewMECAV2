@@ -11,11 +11,13 @@ import { getAllActiveBanners } from '@/api-client/banners.api-client';
 import { BannerPosition, type PublicBanner } from '@newmeca/shared';
 import { SEOHead, useEventsListSEO } from '@/shared/seo';
 import { Pagination } from '@/shared/components';
+import { useSiteLogo } from '@/shared/contexts';
 
 type EventStatus = 'upcoming' | 'completed';
 
 export default function EventsPage() {
   const navigate = useNavigate();
+  const siteLogo = useSiteLogo();
   const formatOrder = useFormatOrder();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -621,12 +623,12 @@ export default function EventsPage() {
                       className="absolute inset-0 bg-slate-700 items-center justify-center"
                       style={{ display: 'none' }}
                     >
-                      <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-32 w-auto opacity-50" />
+                      <img src={siteLogo} alt="MECA Logo" className="h-32 w-auto opacity-50" />
                     </div>
                   </div>
                 ) : (
                   <div className="h-40 sm:h-48 bg-slate-700 flex items-center justify-center">
-                    <img src="/meca-logo-transparent.png" alt="MECA Logo" className="h-32 w-auto opacity-50" />
+                    <img src={siteLogo} alt="MECA Logo" className="h-32 w-auto opacity-50" />
                   </div>
                 )}
 

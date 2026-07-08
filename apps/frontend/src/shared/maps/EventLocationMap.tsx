@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { GoogleMap, MarkerF, InfoWindowF, StreetViewPanorama } from '@react-google-maps/api';
 import { Navigation, Eye, EyeOff, MapPin } from 'lucide-react';
 import { useGoogleMaps } from './GoogleMapsProvider';
+import { getSiteLogo } from '@/shared/siteLogo';
 
 interface EventLocationMapProps {
   latitude?: number | null;
@@ -49,7 +50,7 @@ function loadLogoBase64(): Promise<string | null> {
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => resolve(null);
-    img.src = '/meca-logo-transparent.png';
+    img.src = getSiteLogo();
   });
 }
 
@@ -186,7 +187,7 @@ export default function EventLocationMap({
               >
                 ✕
               </button>
-              <img src="/meca-logo-transparent.png" alt="MECA" style={{ height: '32px', marginBottom: '4px' }} />
+              <img src={getSiteLogo()} alt="MECA" style={{ height: '32px', marginBottom: '4px' }} />
               <p style={{ fontWeight: 600, fontSize: '14px', margin: 0, color: '#111' }}>{venueName}</p>
               <p style={{ fontSize: '12px', margin: '2px 0 0', color: '#555' }}>{fullAddress}</p>
             </div>

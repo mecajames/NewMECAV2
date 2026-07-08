@@ -1,2 +1,2 @@
-export { SiteSettingsProvider, useSiteSettings } from './SiteSettingsContext';
+export { SiteSettingsProvider, useSiteSettings, useSiteLogo } from './SiteSettingsContext';
 export { SeasonsProvider, useSeasons } from './SeasonsContext';
