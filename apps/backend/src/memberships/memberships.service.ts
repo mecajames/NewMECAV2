@@ -2,6 +2,8 @@ import { Injectable, Inject, NotFoundException, BadRequestException, ConflictExc
 import { EntityManager } from '@mikro-orm/core';
 import {
   PaymentStatus,
+  PaymentMethod,
+  PaymentType,
   MembershipCategory,
   MembershipAccountType,
   AdminPaymentMethod,
@@ -1750,6 +1752,29 @@ export class MembershipsService {
       throw new BadRequestException(canPurchase.reason);
     }
 
+    // ONE PRIMARY PER ACCOUNT: an account may only ever hold ONE live primary
+    // membership of a category — a second concurrent primary corrupts the
+    // account (duplicate masters sharing a MECA ID). Extensions go through
+    // Manual Renewal; extra vehicles/people go through Add Secondary.
+    const existingPrimary = await em.findOne(Membership, {
+      user: data.userId,
+      accountType: { $ne: MembershipAccountType.SECONDARY },
+      paymentStatus: PaymentStatus.PAID,
+      cancelledAt: null,
+      membershipTypeConfig: { category: membershipConfig.category },
+      $or: [{ endDate: { $gte: new Date() } }, { endDate: null }],
+    });
+    if (existingPrimary) {
+      const throughDate = existingPrimary.endDate
+        ? ` (active through ${existingPrimary.endDate.toISOString().slice(0, 10)})`
+        : '';
+      throw new BadRequestException(
+        `This member already has an active ${membershipConfig.category} membership${throughDate}. ` +
+        `A second primary membership is never added to the same account — use Manage → Manual Renewal to extend the existing one, ` +
+        `or Add Secondary for another vehicle or family member.`,
+      );
+    }
+
     // Validate required fields based on category
     if (membershipConfig.category === MembershipCategory.COMPETITOR) {
       if (!data.vehicleMake || !data.vehicleModel || !data.vehicleColor || !data.vehicleLicensePlate) {
@@ -3186,6 +3211,25 @@ export class MembershipsService {
       referenceId: membership.id,
     });
 
+    // Payment ledger row so the member's "Payments & Refunds" tab shows the
+    // money (orders/invoices alone don't appear there).
+    em.create(Payment, {
+      user,
+      membership,
+      order,
+      paymentType: PaymentType.MEMBERSHIP,
+      paymentMethod:
+        data.paymentMethod === 'paypal' ? PaymentMethod.PAYPAL
+          : data.paymentMethod === 'check' ? PaymentMethod.CHECK
+            : PaymentMethod.CASH,
+      paymentStatus: PaymentStatus.PAID,
+      amount: totalAmount,
+      currency: 'USD',
+      transactionId: membership.transactionId,
+      description: `${membership.membershipTypeConfig?.name ?? 'Membership'} (manual payment)`,
+      paidAt: new Date(),
+    } as any);
+
     await em.flush();
 
     // Profile membership_status / expiry sync — keeps the member's account
@@ -3655,6 +3699,30 @@ export class MembershipsService {
           itemType: InvoiceItemType.MEMBERSHIP,
           referenceId: membership.id,
         });
+      }
+
+      // Write the Payment ledger row for manual (cash/check/PayPal) payments
+      // so the member's "Payments & Refunds" tab shows the money — orders and
+      // invoices alone don't appear there. Stripe payments get their ledger
+      // row from recordSubscriptionPayment in the controller (real Stripe
+      // data), so skip them here.
+      if (data.paymentMethod !== 'stripe') {
+        em.create(Payment, {
+          user: billTo,
+          membership,
+          order,
+          paymentType: PaymentType.MEMBERSHIP,
+          paymentMethod:
+            data.paymentMethod === 'paypal' ? PaymentMethod.PAYPAL
+              : data.paymentMethod === 'check' ? PaymentMethod.CHECK
+                : PaymentMethod.CASH,
+          paymentStatus: PaymentStatus.PAID,
+          amount,
+          currency: 'USD',
+          transactionId,
+          description: lineDesc,
+          paidAt,
+        } as any);
       }
 
       orderId = order.id;
