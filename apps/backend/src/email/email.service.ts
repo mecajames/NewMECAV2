@@ -2186,8 +2186,34 @@ Need help? Visit our Support Desk: ${this.supportDeskUrl}
     return this.getEmailButton(text, url, bgColor);
   }
 
+  // Site logo is admin-configurable (site_settings key `site_logo_url`,
+  // managed in Site Settings → Appearance). The getter must stay SYNC (every
+  // template builds header HTML synchronously), so it serves a cached value
+  // and refreshes it in the background — after a change, emails pick up the
+  // new logo within ~5 minutes (first send after boot uses the default).
+  private siteLogoCache: { url: string | null; fetchedAt: number } = { url: null, fetchedAt: 0 };
+
+  private refreshSiteLogoCache(): void {
+    const TTL = 5 * 60 * 1000;
+    if (!this.siteSettingsService || Date.now() - this.siteLogoCache.fetchedAt < TTL) return;
+    this.siteLogoCache.fetchedAt = Date.now(); // claim the slot so concurrent sends don't stampede
+    this.siteSettingsService
+      .findByKey('site_logo_url')
+      .then((setting) => {
+        this.siteLogoCache.url = (setting?.setting_value || '').trim() || null;
+      })
+      .catch(() => {});
+  }
+
   private get logoUrl(): string {
-    return `${process.env.FRONTEND_URL || 'https://www.mecacaraudio.com'}/meca-logo-transparent.png`;
+    this.refreshSiteLogoCache();
+    const base = process.env.FRONTEND_URL || 'https://www.mecacaraudio.com';
+    const custom = this.siteLogoCache.url;
+    if (custom) {
+      // Emails need an ABSOLUTE url; a relative path is resolved against the site.
+      return custom.startsWith('http') ? custom : `${base}${custom.startsWith('/') ? '' : '/'}${custom}`;
+    }
+    return `${base}/meca-logo-transparent.png`;
   }
 
   private get supportDeskUrl(): string {

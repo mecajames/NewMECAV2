@@ -63,8 +63,25 @@ export class MembershipSyncService {
       });
 
       if (activeMembership) {
+        let changed = false;
         if (profile.membership_status !== MembershipStatus.ACTIVE) {
           profile.membership_status = MembershipStatus.ACTIVE;
+          changed = true;
+        }
+        // Heal a stale invalidation: a profile with a LIVE paid membership can
+        // never have an invalidated MECA ID. The stamp gets set during a lapse
+        // (45+ days expired) — if an admin later fixes the lapse (e.g. Record
+        // Payment on a row whose payment was lost), the stamp must come off or
+        // the member's dashboard shows their ID struck through "Invalidated".
+        if (profile.meca_id_invalidated_at) {
+          (profile as any).meca_id_invalidated_at = null;
+          if (!profile.meca_id && activeMembership.mecaId != null) {
+            profile.meca_id = String(activeMembership.mecaId);
+          }
+          changed = true;
+          this.logger.warn(`Cleared stale MECA ID invalidation for profile ${userId} (live paid membership exists)`);
+        }
+        if (changed) {
           await em.flush();
           this.logger.log(`Synced profile ${userId} to ACTIVE`);
         }
@@ -140,6 +157,27 @@ export class MembershipSyncService {
           SELECT 1 FROM memberships m WHERE m.user_id = p.id
         )
     `);
+
+    // Heal stale invalidations: anyone holding a LIVE paid membership must
+    // not carry an invalidated-MECA-ID stamp (set during a lapse that an
+    // admin has since fixed — e.g. Record Payment restoring a lost payment).
+    const healResult = await connection.execute(`
+      UPDATE profiles p
+      SET
+        meca_id_invalidated_at = NULL,
+        updated_at = NOW()
+      WHERE p.meca_id_invalidated_at IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM memberships m
+          WHERE m.user_id = p.id
+            AND m.payment_status = 'paid'
+            AND (m.end_date >= CURRENT_DATE OR m.end_date IS NULL)
+        )
+    `);
+    const healed = healResult.affectedRows || 0;
+    if (healed > 0) {
+      this.logger.warn(`MECA ID INVALIDATION HEALED: cleared stale invalidation on ${healed} profile(s) with live paid memberships`);
+    }
 
     // Invalidate MECA IDs for memberships expired > 45 days (hard cutoff)
     // The MECA ID stays on the profile for historical reference but is marked as invalidated

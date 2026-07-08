@@ -4,9 +4,7 @@
 // admin-assigned memberships that have no formal Invoice record.
 
 import type { Membership } from '@/memberships';
-
-const FRONTEND_URL = (typeof window !== 'undefined' && window.location.origin) || 'https://www.mecacaraudio.com';
-const LOGO_URL = `${FRONTEND_URL}/meca-logo-transparent.png`;
+import { getAbsoluteSiteLogo } from '@/shared/siteLogo';
 
 function escapeHtml(str: unknown): string {
   if (str === null || str === undefined) return '';
@@ -140,7 +138,7 @@ export function renderMembershipReceiptHtml(membership: Membership): string {
   <div class="invoice-container">
     <div class="header">
       <div class="company-info">
-        <img src="${LOGO_URL}" alt="MECA Logo" class="company-logo" onerror="this.style.display='none'" />
+        <img src="${getAbsoluteSiteLogo()}" alt="MECA Logo" class="company-logo" onerror="this.style.display='none'" />
         <div class="company-details">
           <h1>Mobile Electronics Competition Association</h1>
           <p>billing@mecacaraudio.com</p>

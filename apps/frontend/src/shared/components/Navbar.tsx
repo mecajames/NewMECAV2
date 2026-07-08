@@ -6,10 +6,12 @@ import { canViewMemberContent } from '@/auth/permissions';
 import { rulebooksApi, Rulebook } from '@/rulebooks';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead, Notification } from '@/notifications';
 import { CartIcon } from '@/shop/components/CartIcon';
+import { useSiteLogo } from '@/shared/contexts';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const siteLogo = useSiteLogo();
   const [mobileMenuOpen, setMobileMenuOpenState] = useState(false);
   const setMobileMenuOpen = (open: boolean) => {
     setMobileMenuOpenState(open);
@@ -122,7 +124,7 @@ export default function Navbar() {
             onClick={() => navigate('/')}
           >
             <img
-              src="/meca-logo-transparent.png"
+              src={siteLogo}
               alt="MECA - Mobile Electronics Competition Association"
               className="h-12 w-auto"
             />

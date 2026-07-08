@@ -185,6 +185,10 @@ export default function MemberDetailPage() {
     userId: string;
   } | null>(null);
 
+  // Master account identity for a no-login secondary (their own "email" is an
+  // internal placeholder — the header shows who manages them instead).
+  const [masterProfile, setMasterProfile] = useState<{ id: string; name: string; email?: string } | null>(null);
+
   useEffect(() => {
     // Fetch available roles from permissions system
     permissionsApi.getRoles().then(setAvailableRoles).catch(() => {});
@@ -223,6 +227,19 @@ export default function MemberDetailPage() {
 
       setMember(data);
       setLoading(false);
+
+      // A no-login secondary has an internal placeholder email — the header
+      // shows "managed by <primary>" instead, so load the master's identity.
+      setMasterProfile(null);
+      if (data.is_secondary_account && data.master_profile_id) {
+        profilesApi.getById(data.master_profile_id).then((mp: any) => {
+          setMasterProfile({
+            id: mp.id,
+            name: `${mp.first_name || ''} ${mp.last_name || ''}`.trim() || mp.email || 'Primary member',
+            email: mp.email,
+          });
+        }).catch(() => setMasterProfile(null));
+      }
 
       // Check whether this member qualifies for the one-click MECA ID restore
       // (renewed in the 31–45 day window → got a new ID). Non-blocking.
@@ -1002,10 +1019,34 @@ export default function MemberDetailPage() {
                   {member.first_name} {member.last_name}
                 </h1>
                 <div className="mt-2 space-y-1">
-                  <div className="flex items-center gap-2 text-gray-300 min-w-0">
-                    <Mail className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{member.email}</span>
-                  </div>
+                  {/* A no-login secondary's stored email is an internal
+                      placeholder (secondary-…@placeholder.meca.local) — never
+                      show it. They are managed from the primary account, so
+                      show that instead, with a link to the primary member. */}
+                  {member.email?.includes('@placeholder.meca.local') ? (
+                    <div className="flex items-center gap-2 text-gray-300 min-w-0">
+                      <Mail className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate text-gray-400">
+                        No own login — managed by{' '}
+                        {masterProfile ? (
+                          <button
+                            onClick={() => navigate(`/admin/members/${masterProfile.id}`)}
+                            className="text-blue-400 hover:text-blue-300 hover:underline"
+                            title={masterProfile.email ? `Open primary member (${masterProfile.email})` : 'Open primary member'}
+                          >
+                            {masterProfile.name}
+                          </button>
+                        ) : (
+                          'the primary account'
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-gray-300 min-w-0">
+                      <Mail className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{member.email}</span>
+                    </div>
+                  )}
                   {member.phone && (
                     <div className="flex items-center gap-2 text-gray-300">
                       <Phone className="h-4 w-4" />
@@ -1040,6 +1081,12 @@ export default function MemberDetailPage() {
                   ) : (
                     <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
                       No Membership
+                    </span>
+                  )}
+                  {/* Secondary Member Badge — managed from the primary account */}
+                  {(member as any).is_secondary_account && (
+                    <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                      Secondary Member
                     </span>
                   )}
                   {/* Staff Badge */}
@@ -2885,7 +2932,11 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
           )}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
-            <div className="px-4 py-2 bg-slate-700 rounded-lg text-gray-400">{member.email}</div>
+            <div className="px-4 py-2 bg-slate-700 rounded-lg text-gray-400">
+              {member.email?.includes('@placeholder.meca.local')
+                ? 'No own login — managed by the primary account'
+                : member.email}
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">MECA ID</label>

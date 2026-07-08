@@ -366,80 +366,31 @@ export default function BillingPage() {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 sm:gap-4 mb-6">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'overview'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('memberships')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'memberships'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Memberships ({membershipTxs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('shop_orders')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'shop_orders'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Shop Orders ({shopTxs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('event_registrations')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'event_registrations'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Event Registrations ({eventTxs.length})
-          </button>
-          {worldFinalsTxs.length > 0 && (
+        {/* Tabs — compact pills sized to fit on a single row on desktop */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-6">
+          {([
+            { key: 'overview', label: 'Overview' },
+            { key: 'memberships', label: `Memberships (${membershipTxs.length})` },
+            { key: 'shop_orders', label: `Shop Orders (${shopTxs.length})` },
+            { key: 'event_registrations', label: `Event Registrations (${eventTxs.length})` },
+            ...(worldFinalsTxs.length > 0
+              ? [{ key: 'world_finals', label: `World Finals (${worldFinalsTxs.length})` }]
+              : []),
+            { key: 'payments', label: `Payments & Refunds (${payments.length})` },
+            { key: 'invoices', label: `Invoices (${invoices.length})` },
+          ] as Array<{ key: BillingTab; label: string }>).map((tab) => (
             <button
-              onClick={() => setActiveTab('world_finals')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeTab === 'world_finals'
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                activeTab === tab.key
                   ? 'bg-orange-600 text-white'
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              World Finals ({worldFinalsTxs.length})
+              {tab.label}
             </button>
-          )}
-          <button
-            onClick={() => setActiveTab('payments')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'payments'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Payments &amp; Refunds ({payments.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('invoices')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'invoices'
-                ? 'bg-orange-600 text-white'
-                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-            }`}
-          >
-            Invoices ({invoices.length})
-          </button>
+          ))}
         </div>
 
         {/* Loading State */}

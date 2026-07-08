@@ -536,7 +536,20 @@ export class MembershipsController {
     const em = this.em.fork();
     const profile = await em.findOne(Profile, { id: user.id });
     if (!isAdminUser(profile) && membership.user?.id !== user.id) {
-      throw new ForbiddenException('You can only access your own membership data');
+      // A master account owner may view their own secondaries' memberships —
+      // a secondary lives under its OWN profile but is managed from the
+      // master's login (the MECA ID switcher loads it this way).
+      const ownsAsMaster = await em.count(Membership, {
+        id,
+        accountType: MembershipAccountType.SECONDARY,
+        $or: [
+          { masterBillingProfile: user.id },
+          { masterMembership: { user: user.id } },
+        ],
+      } as any);
+      if (!ownsAsMaster) {
+        throw new ForbiddenException('You can only access your own membership data');
+      }
     }
     return membership;
   }

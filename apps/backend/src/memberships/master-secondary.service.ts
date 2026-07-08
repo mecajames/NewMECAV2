@@ -772,6 +772,27 @@ export class MasterSecondaryService {
       populate: ['user'],
     });
 
+    // A member accumulates MULTIPLE rows for the SAME MECA ID over time
+    // (previous terms, renewals). The switcher must list each ID exactly
+    // once, backed by its CURRENT row — never one entry per term (this
+    // showed "Primary (You)" twice for a member with an old expired row).
+    const now = new Date();
+    const isLive = (m: Membership) =>
+      m.paymentStatus === PaymentStatus.PAID && !m.cancelledAt && (!m.endDate || m.endDate >= now);
+    const bestByMecaId = new Map<number, Membership>();
+    for (const m of ownMemberships) {
+      if (!m.mecaId) continue;
+      const current = bestByMecaId.get(m.mecaId);
+      if (
+        !current ||
+        (isLive(m) !== isLive(current)
+          ? isLive(m)
+          : (m.endDate?.getTime() ?? 0) > (current.endDate?.getTime() ?? 0))
+      ) {
+        bestByMecaId.set(m.mecaId, m);
+      }
+    }
+
     const result: Array<{
       mecaId: number;
       membershipId: string;
@@ -785,7 +806,8 @@ export class MasterSecondaryService {
       vehicleLicensePlate?: string;
     }> = [];
 
-    for (const membership of ownMemberships) {
+    const seenSecondaryIds = new Set<number>();
+    for (const membership of bestByMecaId.values()) {
       if (membership.mecaId) {
         result.push({
           mecaId: membership.mecaId,
@@ -810,7 +832,8 @@ export class MasterSecondaryService {
           });
 
           for (const secondary of secondaries) {
-            if (secondary.mecaId) {
+            if (secondary.mecaId && !seenSecondaryIds.has(secondary.mecaId)) {
+              seenSecondaryIds.add(secondary.mecaId);
               result.push({
                 mecaId: secondary.mecaId,
                 membershipId: secondary.id,
