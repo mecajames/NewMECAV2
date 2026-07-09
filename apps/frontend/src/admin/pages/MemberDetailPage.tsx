@@ -7487,6 +7487,30 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
     }
   };
 
+  // Apply a manual payment to a due invoice right from the member's billing
+  // tab (same endpoint as the billing admin's Mark Paid). NOTE: this only
+  // settles the INVOICE — for a pending membership/secondary use Record
+  // Payment on the membership instead, which also activates it, mints the
+  // MECA ID, and writes the order + payment ledger rows.
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const handleMarkInvoicePaid = async (invoice: any) => {
+    if (!confirm(
+      `Mark invoice ${invoice.invoiceNumber || ''} ($${Number(invoice.total || 0).toFixed(2)}) as PAID?\n\n` +
+      `Use this when the money was received outside the site (cash/check) or was already recorded elsewhere. ` +
+      `If this invoice is for a PENDING membership or secondary, use Record Payment on the membership instead — that also activates it.`,
+    )) return;
+    setMarkingPaidId(invoice.id);
+    try {
+      await axios.post(`/api/invoices/${invoice.id}/paid`);
+      setReloadKey((k) => k + 1);
+      alert(`Invoice ${invoice.invoiceNumber || ''} marked as paid.`);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to mark the invoice as paid.');
+    } finally {
+      setMarkingPaidId(null);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -7777,6 +7801,16 @@ function OrdersInvoicesTab({ member }: { member: Profile }) {
                         >
                           {resendingId === invoice.id ? 'Sending…' : 'Resend'}
                         </button>
+                        {['sent', 'overdue', 'draft'].includes(String(invoice.status)) && (
+                          <button
+                            onClick={() => handleMarkInvoicePaid(invoice)}
+                            disabled={markingPaidId === invoice.id}
+                            className="ml-3 text-green-400 hover:text-green-300 disabled:opacity-50"
+                            title="Apply a manual payment: mark this invoice as paid (cash/check/recorded elsewhere)"
+                          >
+                            {markingPaidId === invoice.id ? 'Saving…' : 'Mark Paid'}
+                          </button>
+                        )}
                         {invoice.status !== 'refunded' && (
                           <button
                             onClick={() => handleRefundRow('invoice', invoice.id)}

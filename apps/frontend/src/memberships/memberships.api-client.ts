@@ -805,6 +805,16 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: run the membership status sync now (same job as the 1AM cron) —
+   * activates/expires profile statuses from membership end dates and heals
+   * stale MECA ID invalidation stamps for members with live paid memberships.
+   */
+  adminSyncMembershipStatuses: async (): Promise<{ activated: number; expired: number; invalidated?: number; heldResultsExpired?: number }> => {
+    const response = await axios.post('/api/memberships/admin/sync-membership-statuses');
+    return response.data;
+  },
+
+  /**
    * Mark a secondary membership as paid and assign MECA ID
    */
   markSecondaryPaid: async (
