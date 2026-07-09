@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield, Database, Upload } from 'lucide-react';
+import { Save, Image as ImageIcon, Plus, X, Mail, Calendar, AlertTriangle, CheckCircle, Clock, Server, RefreshCw, Palette, Link2, Settings2, XCircle, ShoppingCart, CreditCard, ChevronDown, ChevronUp, Shield, Database, Upload, Users } from 'lucide-react';
 
 interface HeroSlide {
   url: string;
@@ -15,6 +15,7 @@ import { mediaFilesApi, MediaFile } from '@/media-files';
 import { getStorageUrl } from '@/lib/storage';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { DEFAULT_SITE_LOGO } from '@/shared/siteLogo';
+import { membershipsApi } from '@/memberships/memberships.api-client';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
@@ -46,6 +47,7 @@ export default function SiteSettings() {
   const [updatingEventStatuses, setUpdatingEventStatuses] = useState(false);
   const [triggeringMarkOverdue, setTriggeringMarkOverdue] = useState(false);
   const [triggeringAutoCancel, setTriggeringAutoCancel] = useState(false);
+  const [syncingMembershipStatuses, setSyncingMembershipStatuses] = useState(false);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailTemplate, setTestEmailTemplate] = useState('');
@@ -535,6 +537,27 @@ export default function SiteSettings() {
       });
     } finally {
       setTriggeringMembershipEmails(false);
+    }
+  };
+
+  const handleSyncMembershipStatuses = async () => {
+    setSyncingMembershipStatuses(true);
+    setTaskResult(null);
+    try {
+      const result = await membershipsApi.adminSyncMembershipStatuses();
+      setTaskResult({
+        type: 'success',
+        message: `Membership status sync complete: ${result.activated} activated, ${result.expired} expired` +
+          (result.invalidated != null ? `, ${result.invalidated} MECA IDs invalidated` : '') +
+          '. Stale "Invalidated" stamps on members with live paid memberships were healed.',
+      });
+    } catch (error: any) {
+      setTaskResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to sync membership statuses',
+      });
+    } finally {
+      setSyncingMembershipStatuses(false);
     }
   };
 
@@ -1981,6 +2004,37 @@ export default function SiteSettings() {
                 <>
                   <XCircle className="h-4 w-4" />
                   Trigger Now
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Membership Status Sync — same job as the 1AM cron. Also heals
+              stale "Invalidated" MECA ID stamps on members who actually hold
+              a live paid membership (e.g. after an admin fixes a lapse). */}
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-green-500" />
+              <h4 className="font-semibold text-white">Membership Status Sync</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Syncs member active/expired statuses from membership end dates and clears stale
+              &ldquo;Invalidated&rdquo; MECA ID stamps for members with a live paid membership. Runs nightly at 1AM.
+            </p>
+            <button
+              onClick={handleSyncMembershipStatuses}
+              disabled={syncingMembershipStatuses}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {syncingMembershipStatuses ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Sync Now
                 </>
               )}
             </button>
