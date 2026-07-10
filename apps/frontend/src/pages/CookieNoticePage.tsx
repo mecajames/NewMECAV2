@@ -68,13 +68,13 @@ export default function CookieNoticePage() {
               <table className="min-w-[640px] w-full">
                 {tableHead}
                 <tbody>
-                  {row('sb-*-auth-token', 'MECA (Supabase)', 'Keeps you signed in to your member account.', 'Session / persistent')}
+                  {row('sb-*-auth-token', 'MECA', 'Keeps you signed in to your member account.', 'Session / persistent')}
                   {row('meca_cookie_consent_v1', 'MECA', 'Remembers your cookie choices so we don’t ask again.', '12 months')}
                   {row('meca_visitor_id', 'MECA', 'Anonymous random id used only to record your consent choice.', 'Persistent')}
                   {row('Cart & preferences storage', 'MECA', 'Shopping cart contents and interface preferences (browser localStorage).', 'Persistent')}
                   {row('__stripe_mid / __stripe_sid', 'Stripe', 'Payment processing and fraud prevention during checkout.', '1 year / 30 min')}
                   {row('PayPal cookies', 'PayPal', 'Payment processing when you pay with PayPal.', 'Varies')}
-                  {row('__cf_bm / cf_clearance', 'Cloudflare', 'Security — bot detection and site protection.', '30 min / varies')}
+                  {row('__cf_bm / cf_clearance', 'Security provider (CDN)', 'Security — bot detection and site protection.', '30 min / varies')}
                   {row('_GRECAPTCHA', 'Google reCAPTCHA', 'Spam and abuse prevention on forms (login, contact, applications). Loads only on pages with protected forms.', '6 months')}
                 </tbody>
               </table>
