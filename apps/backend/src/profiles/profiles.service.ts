@@ -1142,6 +1142,155 @@ export class ProfilesService {
   }
 
   /**
+   * Privacy "right to delete" request handler (admin Members page → Data
+   * Deletion panel). Wraps deleteUserCompletelyById with:
+   *   1. a pre-delete snapshot of what exists (memberships, activity records,
+   *      financial records, competition results),
+   *   2. the actual transactional delete (clear error if FK-blocked),
+   *   3. a written confirmation report — displayed to the admin and, when
+   *      requested, emailed to the (former) account email as proof the
+   *      request was honored (GDPR/CCPA audit trail).
+   * Financial rows are dissociated (member_id/user_id → NULL), not deleted —
+   * retained for tax/fraud/legal obligations per the privacy policy.
+   */
+  async processDataDeletionRequest(
+    userId: string,
+    opts: { sendEmail?: boolean; adminId?: string } = {},
+  ): Promise<{
+    success: boolean;
+    emailSent: boolean;
+    report: {
+      name: string;
+      email: string | null;
+      mecaId: string | null;
+      deletedAt: string;
+      deleted: { memberships: number; activityRecords: number; account: boolean };
+      retained: { orders: number; invoices: number; payments: number; competitionResults: number };
+      summaryText: string;
+    };
+  }> {
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: userId });
+    if (!profile) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+    if (isProtectedAccount(profile)) {
+      throw new BadRequestException('This account is protected and cannot be deleted.');
+    }
+
+    const name =
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim() ||
+      profile.full_name ||
+      profile.email ||
+      'Member';
+    const email = profile.email || null;
+    const mecaId = profile.meca_id ? String(profile.meca_id) : null;
+    const isPlaceholderEmail = !!email?.includes('@placeholder.meca.local');
+
+    // Pre-delete snapshot (raw SQL keeps this module decoupled from the
+    // billing/analytics entities).
+    const conn = em.getConnection();
+    const countOf = async (sql: string, params: any[]): Promise<number> => {
+      try {
+        const [row] = await conn.execute(sql, params);
+        return Number(row?.count ?? 0);
+      } catch {
+        return 0;
+      }
+    };
+    const membershipsCount = await em.count(Membership, { user: userId });
+    const activityCount = await countOf(`SELECT COUNT(*)::int AS count FROM member_page_views WHERE user_id = ?`, [userId]);
+    const ordersCount = await countOf(`SELECT COUNT(*)::int AS count FROM orders WHERE member_id = ?`, [userId]);
+    const invoicesCount = await countOf(`SELECT COUNT(*)::int AS count FROM invoices WHERE user_id = ?`, [userId]);
+    const paymentsCount = await countOf(`SELECT COUNT(*)::int AS count FROM payments WHERE user_id = ?`, [userId]);
+    const resultsCount = mecaId
+      ? await countOf(`SELECT COUNT(*)::int AS count FROM competition_results WHERE meca_id::text = ?`, [mecaId])
+      : 0;
+
+    // The actual delete — transactional; throws an actionable message if a
+    // RESTRICT FK (finals votes, judge/ED applications, …) blocks it.
+    const deletion = await this.deleteUserCompletelyById(userId);
+
+    const deletedAt = new Date();
+    const deletedMemberships = deletion.deletedMemberships ?? membershipsCount;
+    const summaryText = [
+      'MECA — Data Deletion Confirmation',
+      `Date: ${deletedAt.toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}`,
+      `Account: ${name}${mecaId ? ` (MECA ID ${mecaId})` : ''}${email ? ` — ${email}` : ''}`,
+      '',
+      'The following personal data has been permanently deleted:',
+      '• Login account and member profile (name, contact details, preferences)',
+      `• ${deletedMemberships} membership record(s) and the associated MECA ID history`,
+      `• ${activityCount} platform activity record(s) (pages visited while signed in)`,
+      '• Notifications and personal settings associated with the account',
+      '',
+      'Retained, dissociated from the deleted account, as permitted or required by law:',
+      `• ${ordersCount} order(s), ${invoicesCount} invoice(s), and ${paymentsCount} payment record(s) — kept to meet tax, accounting, and fraud-prevention obligations`,
+      ...(resultsCount > 0
+        ? [`• ${resultsCount} public competition result(s) — historical competition records; the retired MECA ID will never be reissued`]
+        : []),
+      '',
+      'This deletion is permanent and cannot be undone. Records held by payment processors (Stripe / PayPal) are retained by those processors as required by law.',
+    ].join('\n');
+
+    const report = {
+      name,
+      email,
+      mecaId,
+      deletedAt: deletedAt.toISOString(),
+      deleted: { memberships: deletedMemberships, activityRecords: activityCount, account: true },
+      retained: { orders: ordersCount, invoices: invoicesCount, payments: paymentsCount, competitionResults: resultsCount },
+      summaryText,
+    };
+
+    // Email the confirmation to the FORMER account address (captured before
+    // the delete). Failure is non-fatal — the admin still gets the on-screen
+    // report to send manually.
+    let emailSent = false;
+    if (opts.sendEmail && email && !isPlaceholderEmail) {
+      try {
+        const htmlBody =
+          `<p>Hi ${name},</p>` +
+          `<p>As requested, your MECA account and associated personal data have been deleted. This email is your written confirmation.</p>` +
+          `<pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-size:12px;white-space:pre-wrap;">${summaryText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')}</pre>` +
+          `<p style="font-size:13px;color:#64748b;">If you did not request this deletion, contact us immediately using the contact details on our website.</p>`;
+        const html = this.emailService.buildBrandedHtml('Your Data Deletion Request Is Complete', htmlBody, {
+          preheader: 'Written confirmation of your MECA data deletion request',
+        });
+        const sendResult = await this.emailService.sendEmail({
+          to: email,
+          subject: 'MECA — Data Deletion Confirmation',
+          html,
+          text: summaryText,
+        });
+        emailSent = !!sendResult.success;
+      } catch (emailErr) {
+        this.logger.error(`Data-deletion confirmation email to ${email} failed (non-fatal): ${emailErr}`);
+      }
+    }
+
+    this.adminAuditService.logAction({
+      adminUserId: opts.adminId || 'unknown',
+      action: 'user_data_deletion_request',
+      resourceType: 'profile',
+      resourceId: userId,
+      description: `Privacy data-deletion request completed for ${email || name}${mecaId ? ` (MECA ID ${mecaId})` : ''} — confirmation ${emailSent ? 'emailed to the member' : 'displayed to admin only'}`,
+      newValues: {
+        deletedMemberships,
+        activityRecords: activityCount,
+        retainedFinancialRecords: ordersCount + invoicesCount + paymentsCount,
+        retainedCompetitionResults: resultsCount,
+        emailSent,
+      },
+    });
+
+    return { success: true, emailSent, report };
+  }
+
+  /**
    * Turn a Postgres constraint error raised while deleting a user into a clear,
    * actionable admin message with the right status — instead of the opaque
    * global "A value didn't pass a validation rule." or a bare 500. Always throws.

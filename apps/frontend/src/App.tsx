@@ -7,6 +7,7 @@ import { ReCaptchaProvider } from '@/shared/recaptcha';
 import { SiteSettingsProvider, SeasonsProvider } from '@/shared/contexts';
 import { Navbar, Footer, ScrollToTop, AppUpdateGuard, AppErrorBoundary, ImpersonationBanner, StagingNoIndex } from '@/shared/components';
 import AnnouncementBanner from '@/announcements/AnnouncementBanner';
+import ConsentBanner from '@/shared/consent/ConsentBanner';
 import { usePageTracking } from '@/shared/hooks/usePageTracking';
 import { useMemberPageTracking } from '@/shared/hooks/useMemberPageTracking';
 // Static pages — kept static for first-paint critical routes only.
@@ -25,6 +26,7 @@ import { ShopPage } from '@/shop/pages/ShopPage';
 const ContactPage = lazy(() => import('@/pages/ContactPage'));
 const MemberSupportPage = lazy(() => import('@/pages/MemberSupportPage'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicyPage'));
+const CookieNoticePage = lazy(() => import('@/pages/CookieNoticePage'));
 const TermsAndConditionsPage = lazy(() => import('@/pages/TermsAndConditionsPage'));
 const CompetitionGuidesPage = lazy(() => import('@/pages/CompetitionGuidesPage'));
 const MECAQuickStartGuidePage = lazy(() => import('@/pages/MECAQuickStartGuidePage'));
@@ -253,6 +255,7 @@ function App() {
                   <PageTracker />
           <ImpersonationBanner />
           <AnnouncementBanner />
+          <ConsentBanner />
           <div className="min-h-screen bg-slate-900 flex flex-col">
             <Navbar />
             <IdleTimeoutGuard>
@@ -292,6 +295,7 @@ function App() {
               <Route path="/championship-archives/:year" element={<L><ChampionshipArchiveYearPage /></L>} />
               <Route path="/member-support" element={<L><MemberSupportPage /></L>} />
               <Route path="/privacy-policy" element={<L><PrivacyPolicyPage /></L>} />
+              <Route path="/cookie-notice" element={<L><CookieNoticePage /></L>} />
               <Route path="/terms-and-conditions" element={<L><TermsAndConditionsPage /></L>} />
               <Route path="/knowledge-base" element={<Navigate to="/member-support" replace />} />
               <Route path="/competition-guides" element={<L><CompetitionGuidesPage /></L>} />

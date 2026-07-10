@@ -16,14 +16,16 @@ import { getStorageUrl } from '@/lib/storage';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import { DEFAULT_SITE_LOGO } from '@/shared/siteLogo';
 import { membershipsApi } from '@/memberships/memberships.api-client';
+import axios from '@/lib/axios';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
 // Tab definitions
-type SettingsTab = 'appearance' | 'integrations' | 'system' | 'shop';
+type SettingsTab = 'appearance' | 'privacy' | 'integrations' | 'system' | 'shop';
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'appearance', label: 'Appearance', icon: <Palette className="h-5 w-5" />, description: 'Homepage, media, and social settings' },
+  { id: 'privacy', label: 'Privacy & Consent', icon: <Shield className="h-5 w-5" />, description: 'Cookie consent banner and stats' },
   { id: 'integrations', label: 'Integrations', icon: <Link2 className="h-5 w-5" />, description: 'Third-party service connections' },
   { id: 'system', label: 'System', icon: <Settings2 className="h-5 w-5" />, description: 'Staging mode, tasks, and environment' },
   { id: 'shop', label: 'Shop Configuration', icon: <ShoppingCart className="h-5 w-5" />, description: 'Tax, shipping, and store settings' },
@@ -48,6 +50,11 @@ export default function SiteSettings() {
   const [triggeringMarkOverdue, setTriggeringMarkOverdue] = useState(false);
   const [triggeringAutoCancel, setTriggeringAutoCancel] = useState(false);
   const [syncingMembershipStatuses, setSyncingMembershipStatuses] = useState(false);
+  // Privacy & Consent tab: consent-choice stats from the audit log
+  const [consentStats, setConsentStats] = useState<{
+    days: number; total: number; acceptedAll: number; necessaryOnly: number;
+    custom: number; analyticsGranted: number; allTimeTotal: number;
+  } | null>(null);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailTemplate, setTestEmailTemplate] = useState('');
@@ -58,6 +65,10 @@ export default function SiteSettings() {
   const [dataMaintResult, setDataMaintResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
+    // Cookie consent banner (CMP)
+    consent_banner_enabled: true,
+    consent_banner_title: '',
+    consent_banner_message: '',
     // Site logo (header + emails). Empty = built-in default logo.
     site_logo_url: '',
     site_logo_library: [] as string[],
@@ -128,6 +139,14 @@ export default function SiteSettings() {
     fetchMediaImages();
   }, []);
 
+  // Consent stats load when the Privacy & Consent tab opens
+  useEffect(() => {
+    if (activeTab !== 'privacy') return;
+    axios.get('/api/consent-log/stats')
+      .then((res) => setConsentStats(res.data))
+      .catch(() => setConsentStats(null));
+  }, [activeTab]);
+
   const fetchSettings = async () => {
     try {
       const data = await siteSettingsApi.getAll();
@@ -169,6 +188,9 @@ export default function SiteSettings() {
       };
 
       setFormData({
+        consent_banner_enabled: settingsMap['consent_banner_enabled'] !== 'false',
+        consent_banner_title: settingsMap['consent_banner_title'] || '',
+        consent_banner_message: settingsMap['consent_banner_message'] || '',
         site_logo_url: settingsMap['site_logo_url'] || '',
         site_logo_library: parseJsonArray(settingsMap['site_logo_library']),
         hero_image_urls: heroSlides,
@@ -253,6 +275,9 @@ export default function SiteSettings() {
 
     try {
       const settings = [
+        { key: 'consent_banner_enabled', value: formData.consent_banner_enabled.toString(), type: 'boolean', description: 'Show the cookie consent banner (CMP); disabled = analytics runs for all visitors without asking' },
+        { key: 'consent_banner_title', value: formData.consent_banner_title, type: 'text', description: 'Cookie consent banner title (empty = default)' },
+        { key: 'consent_banner_message', value: formData.consent_banner_message, type: 'text', description: 'Cookie consent banner message (empty = default)' },
         { key: 'site_logo_url', value: formData.site_logo_url, type: 'text', description: 'Site logo URL used in the header and emails (empty = built-in default)' },
         { key: 'site_logo_library', value: JSON.stringify(formData.site_logo_library), type: 'json', description: 'Previously uploaded site logos (JSON array of URLs)' },
         { key: 'hero_image_urls', value: JSON.stringify(formData.hero_image_urls), type: 'json', description: 'Homepage hero carousel images (JSON array)' },
@@ -1529,6 +1554,123 @@ export default function SiteSettings() {
           {saving ? 'Saving...' : 'Save All Settings'}
         </button>
       </div>
+        </>
+      )}
+
+      {/* ==================== PRIVACY & CONSENT TAB ==================== */}
+      {activeTab === 'privacy' && (
+        <>
+      <div className="bg-slate-800 rounded-xl p-6 space-y-6 mb-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Cookie Consent Banner
+        </h3>
+        <p className="text-sm text-gray-400 -mt-2">
+          The consent banner (CMP) shown to every visitor on their first visit. Analytics runs in
+          Google Consent Mode: until a visitor accepts, Google Analytics sets <span className="text-gray-300">no cookies</span> and
+          collects only anonymous, cookieless statistics — accepting upgrades them to full tracking.
+          Members and visitors can reopen their choices any time via the &ldquo;Cookie Preferences&rdquo; footer link.
+        </p>
+
+        <div className="flex items-center justify-between bg-slate-700/40 border border-slate-600/50 rounded-lg p-4">
+          <div>
+            <p className="text-white text-sm font-medium">Show the consent banner</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              When OFF, no banner is shown and analytics cookies run for all visitors without asking —
+              this removes the CIPA/GDPR protection the banner provides.
+            </p>
+          </div>
+          <button
+            onClick={() => setFormData({ ...formData, consent_banner_enabled: !formData.consent_banner_enabled })}
+            className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${formData.consent_banner_enabled ? 'bg-orange-600' : 'bg-slate-600'}`}
+            role="switch"
+            aria-checked={formData.consent_banner_enabled}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full transition-all ${formData.consent_banner_enabled ? 'left-[26px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+        {!formData.consent_banner_enabled && (
+          <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-300">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>Banner disabled: analytics cookies will be set for every visitor without consent. Only do this deliberately.</span>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Banner Title</label>
+          <input
+            type="text"
+            value={formData.consent_banner_title}
+            onChange={(e) => setFormData({ ...formData, consent_banner_title: e.target.value })}
+            placeholder="We value your privacy"
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Banner Message</label>
+          <textarea
+            value={formData.consent_banner_message}
+            onChange={(e) => setFormData({ ...formData, consent_banner_message: e.target.value })}
+            rows={3}
+            placeholder="We use cookies to keep you signed in, process payments, and understand how the site is used. Analytics cookies are only set if you allow them — declining still lets you use everything on the site."
+            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 resize-y"
+          />
+          <p className="text-xs text-gray-500 mt-1">Leave title/message empty to use the defaults shown as placeholders. The banner always links to the Cookie Notice and Privacy Policy.</p>
+        </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-4 mb-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3">
+          Consent Statistics (last {consentStats?.days ?? 30} days)
+        </h3>
+        {consentStats ? (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-white">{consentStats.total}</p>
+              <p className="text-xs text-gray-400 mt-1">Choices recorded</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-green-400">{consentStats.acceptedAll}</p>
+              <p className="text-xs text-gray-400 mt-1">Accepted all</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-amber-400">{consentStats.necessaryOnly}</p>
+              <p className="text-xs text-gray-400 mt-1">Necessary only</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-blue-400">{consentStats.custom}</p>
+              <p className="text-xs text-gray-400 mt-1">Custom</p>
+            </div>
+            <div className="bg-slate-700/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-orange-400">{consentStats.total > 0 ? Math.round((consentStats.analyticsGranted / consentStats.total) * 100) : 0}%</p>
+              <p className="text-xs text-gray-400 mt-1">Allowed analytics</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No consent data yet — statistics appear once visitors start making choices in the banner.</p>
+        )}
+        {consentStats && (
+          <p className="text-xs text-gray-500">All-time choices recorded: {consentStats.allTimeTotal}. Every choice is stored in the consent audit log (anonymous visitor id — no IP addresses) as proof of consent.</p>
+        )}
+      </div>
+
+      <div className="bg-slate-800 rounded-xl p-6 space-y-2 mb-6">
+        <h3 className="text-xl font-semibold text-white border-b border-slate-700 pb-3 mb-3">
+          Related Pages
+        </h3>
+        <ul className="text-sm text-gray-400 list-disc list-inside space-y-1">
+          <li><a href="/cookie-notice" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 underline">Cookie Notice</a> — lists every cookie the site uses, linked from the banner and footer.</li>
+          <li><a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:text-orange-300 underline">Privacy Policy</a> — the full privacy notice.</li>
+        </ul>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+      >
+        <Save className="h-5 w-5" />
+        {saving ? 'Saving...' : 'Save All Settings'}
+      </button>
         </>
       )}
 

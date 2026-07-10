@@ -516,6 +516,25 @@ export class ProfilesController {
   }
 
   /**
+   * Privacy "right to delete" request: deletes the user completely AND
+   * returns a written confirmation report (optionally emailed to the former
+   * account address). Used by the Members page Data Deletion panel.
+   */
+  @Post('admin/data-deletion/:id')
+  @HttpCode(HttpStatus.OK)
+  async processDataDeletion(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body() body: { sendEmail?: boolean },
+  ) {
+    const { user } = await this.requireAdmin(authHeader);
+    return this.profilesService.processDataDeletionRequest(id, {
+      sendEmail: !!body?.sendEmail,
+      adminId: user.id,
+    });
+  }
+
+  /**
    * Fully deletes a user by ID from profiles, memberships, and Supabase Auth
    * Admin only - comprehensive delete
    */

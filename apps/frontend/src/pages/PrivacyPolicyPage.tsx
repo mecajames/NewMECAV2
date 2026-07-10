@@ -11,7 +11,7 @@ export default function PrivacyPolicyPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-12">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Privacy Policy</h1>
-          <p className="text-gray-400">Last updated: November 16, 2025</p>
+          <p className="text-gray-400">Last updated: July 9, 2026</p>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-8 space-y-8">
@@ -116,7 +116,7 @@ export default function PrivacyPolicyPage() {
             </ul>
 
             <h3 className="text-xl font-semibold text-white mb-3 mt-6">Member Activity Tracking (signed-in members only)</h3>
-            <p className="text-gray-300 mb-3"><em>In Short: While you are signed in to your member account, we record the pages you visit on the platform, how long you spend on each, your device and browser type, and your approximate (country-level) location. This is in addition to the anonymous analytics described above. You can turn this off at any time from your account Privacy settings.</em></p>
+            <p className="text-gray-300 mb-3"><em>In Short: While you are signed in to your member account, we record the pages you visit on the platform, how long you spend on each, your device and browser type, and your approximate (country-level) location. This is in addition to the anonymous analytics described above, and is part of providing and securing the membership service.</em></p>
             <p className="text-gray-300 mb-3">
               When you are signed in to a MECA member account, we collect and retain the following information about your use of the platform:
             </p>
@@ -133,10 +133,10 @@ export default function PrivacyPolicyPage() {
               <strong>Why we collect this:</strong> to operate and improve the platform, to provide informed support when you contact us, and to identify which parts of the platform are most useful to members. This data is not sold and is not used for cross-site advertising.
             </p>
             <p className="text-gray-300 mb-3">
-              <strong>How to opt out:</strong> sign in to your account, open your <strong>Profile → Privacy</strong> panel, and turn off "Activity tracking for logged-in members." Once disabled, no further per-page activity records are created for your account. Existing records remain until purged or until your account is deleted; you can request deletion at any time using the contact information at the end of this policy.
+              <strong>Legal basis and your choices:</strong> this activity data is processed as part of performing the membership agreement — operating, securing, and supporting the platform for signed-in members — and cannot be switched off while holding an active account, for the same reason a bank cannot switch off its transaction records. It is retained no longer than your account exists; you can request deletion of your data at any time using the contact information at the end of this policy, and deleting your account removes the associated activity records.
             </p>
             <p className="text-gray-300 mb-3">
-              <strong>Anonymous (non-member) traffic:</strong> the tracking described in this section does not apply to visitors who are not signed in. Anonymous traffic is handled by the third-party analytics service described above and does not include any member identifier.
+              <strong>Anonymous (non-member) traffic:</strong> the tracking described in this section does not apply to visitors who are not signed in. Anonymous traffic is measured with Google Analytics under the consent choices you make in our cookie banner — unless you accept analytics cookies, only anonymous, cookieless statistics are collected. You can change your choice at any time via the "Cookie Preferences" link in the site footer.
             </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
@@ -248,7 +248,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-bold text-white mb-4">5. DO WE USE COOKIES AND OTHER TRACKING TECHNOLOGIES?</h2>
             <p className="text-gray-300"><em>In Short: We may use cookies and other tracking technologies to collect and store your information.</em></p>
             <p className="text-gray-300 mt-3">
-              We may use cookies and similar tracking technologies (like web beacons and pixels) to access or store information. Specific information about how we use such technologies and how you can refuse certain cookies is set out in our Cookie Notice.
+              We may use cookies and similar tracking technologies (like web beacons and pixels) to access or store information. Specific information about how we use such technologies and how you can refuse certain cookies is set out in our <a href="/cookie-notice" className="text-orange-500 hover:text-orange-400 underline">Cookie Notice</a>. Analytics cookies are only set with your consent, and you can review or change your cookie choices at any time via the "Cookie Preferences" link in the site footer. When you make a choice in our cookie banner, we keep a record of that choice (associated with an anonymous browser identifier, not your IP address) as proof of consent.
 </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
@@ -321,7 +321,7 @@ export default function PrivacyPolicyPage() {
               Upon your request to terminate your account, we will deactivate or delete your account and information from our active databases. However, we may retain some information in our files to prevent fraud, troubleshoot problems, assist with any investigations, enforce our legal terms and/or comply with applicable legal requirements.
             </p>
             <p className="text-gray-300 mb-3">
-              <strong>Cookies and similar technologies:</strong> Most Web browsers are set to accept cookies by default. If you prefer, you can usually choose to set your browser to remove cookies and to reject cookies. If you choose to remove cookies or reject cookies, this could affect certain features or services of our Services. To opt out of interest-based advertising by advertisers on our Services visit <a href="http://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:text-orange-400">http://www.aboutads.info/choices/</a>.
+              <strong>Cookies and similar technologies:</strong> Analytics cookies are only set with your consent — you can accept, decline, or change your choice at any time using the "Cookie Preferences" link in the site footer. Most Web browsers are also set to accept cookies by default; if you prefer, you can usually choose to set your browser to remove cookies and to reject cookies. If you choose to remove cookies or reject cookies, this could affect certain features or services of our Services (strictly necessary cookies, such as sign-in and checkout, cannot function when blocked). We do not serve interest-based advertising on our Services. See our <a href="/cookie-notice" className="text-orange-500 hover:text-orange-400 underline">Cookie Notice</a> for the full list of cookies we use.
             </p>
             <p className="text-gray-300">
               If you have questions or comments about your privacy rights, you may email us at <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>.
@@ -333,7 +333,7 @@ export default function PrivacyPolicyPage() {
           <div id="section-10">
             <h2 className="text-2xl font-bold text-white mb-4">10. CONTROLS FOR DO-NOT-TRACK FEATURES</h2>
             <p className="text-gray-300">
-              Most web browsers and some mobile operating systems and mobile applications include a Do-Not-Track ("DNT") feature or setting you can activate to signal your privacy preference not to have data about your online browsing activities monitored and collected. At this stage no uniform technology standard for recognizing and implementing DNT signals has been finalized. As such, we do not currently respond to DNT browser signals or any other mechanism that automatically communicates your choice not to be tracked online. If a standard for online tracking is adopted that we must follow in the future, we will inform you about that practice in a revised version of this privacy notice.
+              Most web browsers and some mobile operating systems and mobile applications include a Do-Not-Track ("DNT") feature or setting you can activate to signal your privacy preference not to have data about your online browsing activities monitored and collected. At this stage no uniform technology standard for recognizing and implementing DNT signals has been finalized. As such, we do not currently respond to DNT browser signals or any other mechanism that automatically communicates your choice not to be tracked online. If a standard for online tracking is adopted that we must follow in the future, we will inform you about that practice in a revised version of this privacy notice. Note, however, that regardless of DNT signals, analytics cookies on our Services are OFF by default and are only set if you accept them in our cookie consent banner; we do not sell personal information or serve interest-based advertising.
 </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
@@ -435,13 +435,12 @@ export default function PrivacyPolicyPage() {
             </ul>
 
             <h4 className="text-lg font-semibold text-white mb-3 mt-4">How do we use and share your personal information?</h4>
-            <p className="text-gray-300 mb-3">MECA Inc. collects and shares your personal information through:</p>
+            <p className="text-gray-300 mb-3">MECA Inc. collects personal information through:</p>
             <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4 mb-4">
-              <li>Targeting cookies/Marketing cookies</li>
-              <li>Social media cookies</li>
-              <li>Beacons/Pixels/Tags</li>
+              <li>Strictly necessary cookies (sign-in sessions, shopping cart, payment processing, security)</li>
+              <li>Analytics cookies (Google Analytics) — set only with your consent via our cookie banner</li>
             </ul>
-            <p className="text-gray-300 mb-3">More information about our data collection and sharing practices can be found in this privacy notice.</p>
+            <p className="text-gray-300 mb-3">We do not use targeting, marketing, or social media cookies. A full list of the cookies we use is in our <a href="/cookie-notice" className="text-orange-500 hover:text-orange-400 underline">Cookie Notice</a>. More information about our data collection and sharing practices can be found in this privacy notice.</p>
             <p className="text-gray-300 mb-3">You may contact us by visiting <Link to="/contact" className="text-orange-500 hover:text-orange-400">our contact page</Link>, or by referring to the contact details at the bottom of this document.</p>
             <p className="text-gray-300 mb-3">If you are using an authorized agent to exercise your right to opt out we may deny a request if the authorized agent does not submit proof that they have been validly authorized to act on your behalf.</p>
 

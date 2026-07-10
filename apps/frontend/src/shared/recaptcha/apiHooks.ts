@@ -29,9 +29,15 @@ declare global {
  * @param action - The action name for this reCAPTCHA execution
  */
 export function useRecaptcha(action: string) {
-  const { isReady, siteKey } = useContext(ReCaptchaContext);
+  const { isReady, siteKey, requestLoad } = useContext(ReCaptchaContext);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The Google script loads lazily — a page using this hook needs it, so
+  // request it now (the execute path below waits for it to arrive).
+  useEffect(() => {
+    requestLoad();
+  }, [requestLoad]);
 
   // Clear error when reCAPTCHA becomes ready
   useEffect(() => {

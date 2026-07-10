@@ -18,6 +18,7 @@ import { CompetitionResultsModule } from './competition-results/competition-resu
 import { NotificationsModule } from './notifications/notifications.module';
 import { MediaFilesModule } from './media-files/media-files.module';
 import { SiteSettingsModule } from './site-settings/site-settings.module';
+import { ConsentModule } from './consent/consent.module';
 import { SeasonsModule } from './seasons/seasons.module';
 import { CompetitionClassesModule } from './competition-classes/competition-classes.module';
 import { CompetitionFormatsModule } from './competition-formats/competition-formats.module';
@@ -110,6 +111,7 @@ import { SecurityModule } from './security/security.module';
     NotificationsModule,
     MediaFilesModule,
     SiteSettingsModule,
+    ConsentModule,
     SeasonsModule,
     CompetitionClassesModule,
     CompetitionFormatsModule,
