@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Youtube, Twitter } from 'lucide-react';
 import { useSiteSettings } from '@/shared/contexts';
+import { OPEN_CONSENT_PREFERENCES_EVENT } from '@/shared/consent/ConsentBanner';
 
 export default function Footer() {
   const { getSetting } = useSiteSettings();
@@ -85,6 +86,22 @@ export default function Footer() {
                 >
                   Terms and Conditions
                 </Link>
+              </li>
+              <li>
+                <Link
+                  to="/cookie-notice"
+                  className="text-gray-400 hover:text-orange-500 transition-colors"
+                >
+                  Cookie Notice
+                </Link>
+              </li>
+              <li>
+                <button
+                  onClick={() => window.dispatchEvent(new Event(OPEN_CONSENT_PREFERENCES_EVENT))}
+                  className="text-gray-400 hover:text-orange-500 transition-colors"
+                >
+                  Cookie Preferences
+                </button>
               </li>
             </ul>
           </div>

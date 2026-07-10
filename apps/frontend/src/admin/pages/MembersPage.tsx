@@ -85,6 +85,58 @@ export default function MembersPage() {
   const [memberToDelete, setMemberToDelete] = useState<MemberWithMembership | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Data Deletion (privacy request) panel — bottom of the page. Search for
+  // an account, delete it via the privacy endpoint, and get a written
+  // confirmation report to show/send to the requester.
+  const [ddOpen, setDdOpen] = useState(false);
+  const [ddSearch, setDdSearch] = useState('');
+  const [ddSelected, setDdSelected] = useState<MemberWithMembership | null>(null);
+  const [ddSendEmail, setDdSendEmail] = useState(true);
+  const [ddBusy, setDdBusy] = useState(false);
+  const [ddError, setDdError] = useState<string | null>(null);
+  const [ddResult, setDdResult] = useState<{ emailSent: boolean; report: { name: string; email: string | null; mecaId: string | null; summaryText: string } } | null>(null);
+  const [ddCopied, setDdCopied] = useState(false);
+
+  const ddMatches = useMemo(() => {
+    const q = ddSearch.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return members
+      .filter((m) => {
+        const name = `${m.first_name || ''} ${m.last_name || ''}`.trim().toLowerCase();
+        return (
+          name.includes(q) ||
+          (m.email || '').toLowerCase().includes(q) ||
+          String(m.meca_id || '').includes(q)
+        );
+      })
+      .slice(0, 8);
+  }, [ddSearch, members]);
+
+  const handleDataDeletion = async () => {
+    if (!ddSelected) return;
+    const label = `${ddSelected.first_name || ''} ${ddSelected.last_name || ''}`.trim() || ddSelected.email || 'this user';
+    const typed = window.prompt(
+      `PERMANENT DATA DELETION\n\nThis deletes ${label}'s login, profile, memberships, MECA ID history, and activity records. ` +
+      `Financial records are retained (dissociated) for legal compliance. This cannot be undone.\n\nType DELETE to confirm:`,
+    );
+    if (typed !== 'DELETE') return;
+    setDdBusy(true);
+    setDdError(null);
+    setDdResult(null);
+    setDdCopied(false);
+    try {
+      const res = await axios.post(`/api/profiles/admin/data-deletion/${ddSelected.id}`, { sendEmail: ddSendEmail });
+      setDdResult(res.data);
+      setDdSelected(null);
+      setDdSearch('');
+      fetchMembers();
+    } catch (err: any) {
+      setDdError(err?.response?.data?.message || 'Data deletion failed.');
+    } finally {
+      setDdBusy(false);
+    }
+  };
+
   // Impersonation state
   const [impersonateLoading, setImpersonateLoading] = useState<string | null>(null);
 
@@ -1872,6 +1924,175 @@ export default function MembersPage() {
                   {sendingMessage ? 'Sending...' : 'Send Message'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Data Deletion (privacy request) ───────────────────────────────
+          GDPR/CCPA "right to delete" tool. A quiet footer link on the page
+          (destructive, rarely used — it must not compete with the members
+          table) that opens a proper modal, matching every other workflow on
+          this page. */}
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end">
+        <button
+          onClick={() => { setDdOpen(true); setDdError(null); }}
+          className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Data Deletion (Privacy Request)
+        </button>
+      </div>
+
+      {ddOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-red-400" />
+                Data Deletion (Privacy Request)
+              </h3>
+              <button
+                onClick={() => { setDdOpen(false); setDdSearch(''); setDdSelected(null); setDdError(null); }}
+                className="text-gray-400 hover:text-white text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-400">
+                Honors a member&apos;s &ldquo;right to delete&rdquo; request: permanently removes their account,
+                profile, memberships, MECA ID history, and signed-in activity records, then produces a written
+                confirmation. Financial records are retained (dissociated) for tax and fraud-prevention
+                compliance; public competition results remain with the retired MECA ID.
+              </p>
+
+              {/* Step 1: find the account */}
+              {!ddResult && (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                    <input
+                      type="text"
+                      value={ddSearch}
+                      onChange={(e) => { setDdSearch(e.target.value); setDdSelected(null); }}
+                      placeholder="Search by name, email, or MECA ID…"
+                      autoFocus
+                      className="w-full pl-9 pr-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {!ddSelected && ddMatches.length > 0 && (
+                    <div className="bg-slate-700/60 border border-slate-600 rounded-lg divide-y divide-slate-600/60 overflow-hidden">
+                      {ddMatches.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => { setDdSelected(m); setDdSendEmail(!(m.email || '').includes('@placeholder.meca.local')); }}
+                          className="w-full flex items-center justify-between gap-3 text-left px-4 py-2.5 hover:bg-slate-600/60 transition-colors"
+                        >
+                          <span className="min-w-0">
+                            <span className="text-white text-sm">{`${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email}</span>
+                            <span className="text-gray-400 text-xs ml-2 truncate">{m.email}</span>
+                          </span>
+                          {m.meca_id && <span className="text-orange-400 text-xs font-mono flex-shrink-0">#{String(m.meca_id)}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!ddSelected && ddSearch.trim().length >= 2 && ddMatches.length === 0 && (
+                    <p className="text-sm text-gray-500">No matching accounts.</p>
+                  )}
+
+                  {/* Step 2: confirm the target */}
+                  {ddSelected && (
+                    <div className="bg-slate-900/50 border border-red-900/40 rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-white font-medium truncate">
+                            {`${ddSelected.first_name || ''} ${ddSelected.last_name || ''}`.trim() || ddSelected.email}
+                            {ddSelected.meca_id && <span className="text-orange-400 font-mono text-sm ml-2">#{String(ddSelected.meca_id)}</span>}
+                          </p>
+                          <p className="text-gray-400 text-sm truncate">{ddSelected.email}</p>
+                        </div>
+                        <button
+                          onClick={() => setDdSelected(null)}
+                          className="text-xs text-gray-400 hover:text-white bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded-md transition-colors flex-shrink-0"
+                        >
+                          Change
+                        </button>
+                      </div>
+                      <label className={`flex items-center gap-2 text-sm ${(ddSelected.email || '').includes('@placeholder.meca.local') ? 'text-gray-500' : 'text-gray-300'}`}>
+                        <input
+                          type="checkbox"
+                          checked={ddSendEmail}
+                          disabled={(ddSelected.email || '').includes('@placeholder.meca.local')}
+                          onChange={(e) => setDdSendEmail(e.target.checked)}
+                          className="rounded border-slate-500 bg-slate-700"
+                        />
+                        <Mail className="h-4 w-4 flex-shrink-0" />
+                        <span className="min-w-0 truncate">
+                          Email the confirmation to {ddSelected.email}
+                          {(ddSelected.email || '').includes('@placeholder.meca.local') && ' (no real email on this account)'}
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  {ddError && (
+                    <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-300">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <span>{ddError}</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Step 3: confirmation report */}
+              {ddResult && (
+                <div className="bg-slate-900/60 border border-green-700/40 rounded-lg p-4">
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <p className="text-green-400 text-sm font-semibold">
+                      ✓ Deletion complete — {ddResult.emailSent
+                        ? `confirmation emailed to ${ddResult.report.email}`
+                        : 'copy the confirmation below and send it to the requester'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(ddResult.report.summaryText)
+                          .then(() => { setDdCopied(true); setTimeout(() => setDdCopied(false), 3000); })
+                          .catch(() => alert('Copy failed — select the text manually.'));
+                      }}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      {ddCopied ? 'Copied ✓' : 'Copy Confirmation'}
+                    </button>
+                  </div>
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono bg-slate-950/50 rounded-lg p-3 overflow-x-auto">{ddResult.report.summaryText}</pre>
+                </div>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700">
+              <button
+                onClick={() => { setDdOpen(false); setDdSearch(''); setDdSelected(null); setDdError(null); setDdResult(null); }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+              >
+                {ddResult ? 'Done' : 'Cancel'}
+              </button>
+              {!ddResult && (
+                <button
+                  onClick={handleDataDeletion}
+                  disabled={!ddSelected || ddBusy}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {ddBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {ddBusy ? 'Deleting…' : 'Permanently Delete'}
+                </button>
+              )}
             </div>
           </div>
         </div>

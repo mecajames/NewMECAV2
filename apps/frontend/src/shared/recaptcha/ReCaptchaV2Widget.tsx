@@ -1,4 +1,5 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle, useContext } from 'react';
+import { ReCaptchaContext } from './ReCaptchaContext';
 
 // Window.grecaptcha type is already declared in apiHooks.ts
 // No need to redeclare here
@@ -25,6 +26,13 @@ export const ReCaptchaV2Widget = forwardRef<ReCaptchaV2Ref, ReCaptchaV2WidgetPro
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetIdRef = useRef<number | null>(null);
     const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    const { requestLoad } = useContext(ReCaptchaContext);
+
+    // The Google script loads lazily — trigger it now that a page actually
+    // rendered a captcha widget (the polling below waits for it to arrive).
+    useEffect(() => {
+      requestLoad();
+    }, [requestLoad]);
 
     useImperativeHandle(ref, () => ({
       getToken: () => {

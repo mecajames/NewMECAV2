@@ -7,16 +7,21 @@ declare global {
 
 const GA_MEASUREMENT_ID = import.meta.env.VITE_GA4_MEASUREMENT_ID as string | undefined;
 
+// Google Consent Mode v2 ("advanced" implementation): gtag.js ALWAYS loads,
+// but until the visitor accepts analytics cookies in the consent banner it
+// runs with all storage DENIED — no cookies are set and only anonymous,
+// cookieless pings are sent (GA4 fills the gaps with behavioral modeling).
+// Accepting the banner upgrades consent live via updateAnalyticsConsent().
+// This keeps ~full analytics visibility while defusing the CIPA/GDPR
+// "tracking before consent" problem. The stored choice is read directly from
+// localStorage here because this runs BEFORE React mounts.
+import { getStoredConsent } from '@/shared/consent/consentStorage';
+
 export function initializeGA4(): void {
   if (!GA_MEASUREMENT_ID) return;
 
-  // Load gtag.js script
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
-  document.head.appendChild(script);
-
-  // Initialize dataLayer and gtag
+  // Initialize dataLayer and gtag FIRST — the consent default must be queued
+  // before the config call and before the script processes anything.
   window.dataLayer = window.dataLayer || [];
   // gtag.js only processes `arguments` objects pushed onto dataLayer — a
   // plain array is silently ignored, so this must stay a regular function
@@ -25,9 +30,36 @@ export function initializeGA4(): void {
     // eslint-disable-next-line prefer-rest-params
     window.dataLayer.push(arguments);
   };
+
+  const stored = getStoredConsent();
+  const analyticsGranted = stored?.analytics === true;
+  window.gtag('consent', 'default', {
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: analyticsGranted ? 'granted' : 'denied',
+  });
+
   window.gtag('js', new Date());
   window.gtag('config', GA_MEASUREMENT_ID, {
     send_page_view: false, // We handle SPA page views manually
+  });
+
+  // Load gtag.js script (after the consent default is queued on dataLayer)
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
+  document.head.appendChild(script);
+}
+
+/**
+ * Flip analytics consent live (called by the consent banner). Granting mid-
+ * session lets GA4 start setting cookies immediately; revoking stops them.
+ */
+export function updateAnalyticsConsent(granted: boolean): void {
+  if (!GA_MEASUREMENT_ID || !window.gtag) return;
+  window.gtag('consent', 'update', {
+    analytics_storage: granted ? 'granted' : 'denied',
   });
 }
 
