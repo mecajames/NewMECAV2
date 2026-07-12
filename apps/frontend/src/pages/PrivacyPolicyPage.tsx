@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
               <li>Engage with us in other related ways, including any sales, marketing, or events</li>
             </ul>
             <p className="text-gray-300 mt-4">
-              <strong>Questions or concerns?</strong> Reading this privacy notice will help you understand your privacy rights and choices. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>.
+              <strong>Questions or concerns?</strong> Reading this privacy notice will help you understand your privacy rights and choices. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us through our <a href="/contact" className="text-orange-500 hover:text-orange-400 underline">contact form</a>.
             </p>
           </div>
 
@@ -281,7 +281,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-bold text-white mb-4">8. DO WE COLLECT INFORMATION FROM MINORS?</h2>
             <p className="text-gray-300 mb-3"><em>In Short: We do not knowingly collect data from or market to children under 18 years of age.</em></p>
             <p className="text-gray-300">
-              We do not knowingly solicit data from or market to children under 18 years of age. By using the Services, you represent that you are at least 18 or that you are the parent or guardian of such a minor and consent to such minor dependent's use of the Services. If we learn that personal information from users less than 18 years of age has been collected, we will deactivate the account and take reasonable measures to promptly delete such data from our records. If you become aware of any data we may have collected from children under age 18, please contact us at <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>.
+              We do not knowingly solicit data from or market to children under 18 years of age. By using the Services, you represent that you are at least 18 or that you are the parent or guardian of such a minor and consent to such minor dependent's use of the Services. If we learn that personal information from users less than 18 years of age has been collected, we will deactivate the account and take reasonable measures to promptly delete such data from our records. If you become aware of any data we may have collected from children under age 18, please contact us through our <a href="/contact" className="text-orange-500 hover:text-orange-400 underline">contact form</a>.
 </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
@@ -324,7 +324,7 @@ export default function PrivacyPolicyPage() {
               <strong>Cookies and similar technologies:</strong> Analytics cookies are only set with your consent — you can accept, decline, or change your choice at any time using the "Cookie Preferences" link in the site footer. Most Web browsers are also set to accept cookies by default; if you prefer, you can usually choose to set your browser to remove cookies and to reject cookies. If you choose to remove cookies or reject cookies, this could affect certain features or services of our Services (strictly necessary cookies, such as sign-in and checkout, cannot function when blocked). We do not serve interest-based advertising on our Services. See our <a href="/cookie-notice" className="text-orange-500 hover:text-orange-400 underline">Cookie Notice</a> for the full list of cookies we use.
             </p>
             <p className="text-gray-300">
-              If you have questions or comments about your privacy rights, you may email us at <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>.
+              If you have questions or comments about your privacy rights, you may contact us through our <a href="/contact" className="text-orange-500 hover:text-orange-400 underline">contact form</a>.
             </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
           </div>
@@ -498,7 +498,7 @@ export default function PrivacyPolicyPage() {
           {/* 13. Contact Us */}
           <div id="section-13">
             <h2 className="text-2xl font-bold text-white mb-4">13. HOW CAN YOU CONTACT US ABOUT THIS NOTICE?</h2>
-            <p className="text-gray-300 mb-3">If you have questions or comments about this notice, you may email us at <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span> or by post to:</p>
+            <p className="text-gray-300 mb-3">If you have questions or comments about this notice, you may contact us through our <a href="/contact" className="text-orange-500 hover:text-orange-400 underline">contact form</a> or by post to:</p>
             <p className="text-gray-300">
               MECA Inc.<br />
               235 Flamingo Dr.<br />

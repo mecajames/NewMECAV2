@@ -125,6 +125,12 @@ export interface CreateMembershipDto {
   amountPaid: number;
   stripePaymentIntentId?: string;
   transactionId?: string;
+  // Private member details captured at checkout (stored on the PROFILE, not
+  // the membership): birthday (fill-if-empty), merch/award sizes (overwrite —
+  // sizes change). Admin-visible + member-editable only; never public.
+  birthday?: string; // YYYY-MM-DD
+  tshirtSize?: string;
+  ringSize?: string;
   // Competitor info
   competitorName?: string;
   vehicleLicensePlate?: string;
@@ -1015,6 +1021,24 @@ export class MembershipsService {
       });
     } catch (err) {
       this.logger.error(`Profile back-fill from billing failed for ${data.userId}:`, err);
+    }
+
+    // Private member details captured at checkout → PROFILE. Sizes always
+    // update to the freshest value (people's sizes change between renewals);
+    // birthday only fills if empty (it doesn't change — don't let a typo at
+    // checkout clobber a correct value).
+    if (data.birthday || data.tshirtSize || data.ringSize) {
+      try {
+        const buyer = await em.findOne(Profile, { id: data.userId });
+        if (buyer) {
+          if (data.birthday && !buyer.birthday) buyer.birthday = data.birthday;
+          if (data.tshirtSize) buyer.tshirt_size = data.tshirtSize;
+          if (data.ringSize) buyer.ring_size = data.ringSize;
+          await em.flush();
+        }
+      } catch (err) {
+        this.logger.error(`Profile sizes/birthday save from checkout failed for ${data.userId}:`, err);
+      }
     }
 
     // Sync profile membership status to ACTIVE

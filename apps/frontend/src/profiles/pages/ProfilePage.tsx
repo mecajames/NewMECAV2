@@ -6,6 +6,7 @@ import ChangePassword from '@/profiles/components/ChangePassword';
 import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
 import { CountrySelect, StateProvinceSelect, PhoneInput } from '@/shared/fields';
 import { MecaIdSwitcher } from '@/shared/components/MecaIdSwitcher';
+import { TSHIRT_SIZES, RING_SIZES } from '@/shared/memberSizes';
 import { profilesApi, Profile as ProfileType } from '../profiles.api-client';
 import { resolveMemberSince } from '../profile-dates';
 import { membershipsApi, ControlledMecaId, Membership } from '@/memberships';
@@ -31,6 +32,10 @@ interface AddressFormData {
   // Private birthday (YYYY-MM-DD) — drives the automated birthday email
   // only; never shown publicly.
   birthday: string;
+  // Private merch/award sizes — event merchandise planning + World Finals
+  // championship rings; visible to the member and MECA staff only.
+  tshirt_size: string;
+  ring_size: string;
   address: string;
   city: string;
   state: string;
@@ -81,6 +86,8 @@ export default function ProfilePage() {
   const [formData, setFormData] = useState<AddressFormData>({
     phone: '',
     birthday: '',
+    tshirt_size: '',
+    ring_size: '',
     address: '',
     city: '',
     state: '',
@@ -145,6 +152,8 @@ export default function ProfilePage() {
       setFormData({
         phone: profile.phone || '',
         birthday: (profile as any).birthday ? String((profile as any).birthday).slice(0, 10) : '',
+        tshirt_size: (profile as any).tshirt_size || '',
+        ring_size: (profile as any).ring_size || '',
         address: profile.address || '',
         city: profile.city || '',
         state: profile.state || '',
@@ -304,6 +313,8 @@ export default function ProfilePage() {
       setFormData({
         phone: profile.phone || '',
         birthday: (profile as any).birthday ? String((profile as any).birthday).slice(0, 10) : '',
+        tshirt_size: (profile as any).tshirt_size || '',
+        ring_size: (profile as any).ring_size || '',
         address: profile.address || '',
         city: profile.city || '',
         state: profile.state || '',
@@ -1069,6 +1080,74 @@ export default function ProfilePage() {
                           {(profile as any).birthday
                             ? new Date(String((profile as any).birthday).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                             : 'Not set'}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* T-Shirt size — PRIVATE. Event merch planning + World
+                      Finals packages; never shown on any public page. */}
+                  <div>
+                    {isEditing ? (
+                      <>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          T-Shirt Size <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <select
+                          value={formData.tshirt_size}
+                          onChange={(e) => setFormData(prev => ({ ...prev, tshirt_size: e.target.value }))}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Not set</option>
+                          {TSHIRT_SIZES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Helps us stock the right merchandise sizes at events. Visible only to you and MECA staff.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                          T-Shirt Size <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
+                          {(profile as any).tshirt_size || 'Not set'}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Ring size — PRIVATE. World Finals championship rings for
+                      qualifiers; never shown on any public page. */}
+                  <div>
+                    {isEditing ? (
+                      <>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Ring Size <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <select
+                          value={formData.ring_size}
+                          onChange={(e) => setFormData(prev => ({ ...prev, ring_size: e.target.value }))}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Not set</option>
+                          {RING_SIZES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          So your championship ring fits if you qualify for a World Finals award. Visible only to you and MECA staff.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                          Ring Size <span className="text-gray-500 font-normal">(private)</span>
+                        </label>
+                        <div className="bg-slate-700 px-4 py-3 rounded-lg text-white">
+                          {(profile as any).ring_size || 'Not set'}
                         </div>
                       </>
                     )}

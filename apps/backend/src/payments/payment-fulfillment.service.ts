@@ -174,6 +174,11 @@ export class PaymentFulfillmentService {
         billingState: metadata.billingState,
         billingPostalCode: metadata.billingPostalCode,
         billingCountry: metadata.billingCountry || 'USA',
+        // Private member details captured at checkout → saved to the PROFILE
+        // by createMembership (birthday fill-if-empty; sizes overwrite).
+        birthday: metadata.birthday,
+        tshirtSize: metadata.tshirtSize,
+        ringSize: metadata.ringSize,
         // Vehicle info is never collected at the membership checkout (see the
         // payment-intent DTO) — don't let the interactive-only validation block
         // a paid fulfillment.

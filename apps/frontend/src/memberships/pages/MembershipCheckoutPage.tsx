@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { useTaxRate } from '@/hooks/useTaxRate';
+import { TSHIRT_SIZES, RING_SIZES } from '@/shared/memberSizes';
 import { CouponInput } from '@/shared/components/CouponInput';
 import { newsletterApi } from '@/newsletter';
 import {
@@ -125,6 +126,10 @@ interface FormData {
   firstName: string;
   lastName: string;
   phone: string;
+  // Private member details (stored on the profile; admin + member visible only)
+  birthday: string; // YYYY-MM-DD
+  tshirtSize: string;
+  ringSize: string;
   // Address
   address: string;
   city: string;
@@ -214,6 +219,9 @@ export default function MembershipCheckoutPage() {
     firstName: '',
     lastName: '',
     phone: '',
+    birthday: '',
+    tshirtSize: '',
+    ringSize: '',
     address: '',
     city: '',
     state: '',
@@ -290,6 +298,9 @@ export default function MembershipCheckoutPage() {
             firstName: profile.first_name || '',
             lastName: profile.last_name || '',
             phone: profile.phone || '',
+            birthday: (profile as any).birthday ? String((profile as any).birthday).slice(0, 10) : '',
+            tshirtSize: (profile as any).tshirt_size || '',
+            ringSize: (profile as any).ring_size || '',
             address: profile.address || '',
             city: profile.city || '',
             state: profile.state || '',
@@ -462,6 +473,9 @@ export default function MembershipCheckoutPage() {
             cancelUrl,
             billingFirstName: formData.firstName,
             billingLastName: formData.lastName,
+            birthday: formData.birthday || undefined,
+            tshirtSize: formData.tshirtSize || undefined,
+            ringSize: formData.ringSize || undefined,
         });
 
         const { checkoutUrl } = response.data;
@@ -489,6 +503,9 @@ export default function MembershipCheckoutPage() {
           businessName: formData.businessName || undefined,
           businessWebsite: formData.businessWebsite || undefined,
           couponCode: couponCode || undefined,
+          birthday: formData.birthday || undefined,
+          tshirtSize: formData.tshirtSize || undefined,
+          ringSize: formData.ringSize || undefined,
       });
 
       const { clientSecret: secret, stagingMode, message } = response.data;
@@ -587,6 +604,9 @@ export default function MembershipCheckoutPage() {
           billingState: formData.state,
           billingPostalCode: formData.postalCode,
           billingCountry: formData.country || 'USA',
+          birthday: formData.birthday || undefined,
+          tshirtSize: formData.tshirtSize || undefined,
+          ringSize: formData.ringSize || undefined,
         });
       } catch (err) {
         // Webhook may have already created the membership — log but don't block
@@ -1085,6 +1105,69 @@ export default function MembershipCheckoutPage() {
                             placeholder="(555) 123-4567"
                           />
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Member Details — private (admin + member visible only).
+                      Birthday drives the birthday greeting; shirt/ring sizes
+                      drive event merch planning and World Finals awards. */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-white mb-1 flex items-center">
+                      <User className="h-5 w-5 mr-2 text-orange-500" />
+                      Member Details
+                    </h3>
+                    <p className="text-xs text-gray-400 mb-4">
+                      Optional, and never shown publicly — visible only to you and MECA staff. Your shirt size
+                      helps us stock the right merchandise sizes at events, and your ring size means your
+                      championship ring fits if you qualify for a World Finals award. You can update these
+                      any time in your profile.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Birthday
+                        </label>
+                        <input
+                          type="date"
+                          name="birthday"
+                          value={formData.birthday}
+                          onChange={handleInputChange}
+                          max={new Date().toISOString().slice(0, 10)}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          T-Shirt Size
+                        </label>
+                        <select
+                          name="tshirtSize"
+                          value={formData.tshirtSize}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Select…</option>
+                          {TSHIRT_SIZES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Ring Size
+                        </label>
+                        <select
+                          name="ringSize"
+                          value={formData.ringSize}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Select…</option>
+                          {RING_SIZES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>

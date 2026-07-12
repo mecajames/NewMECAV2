@@ -71,6 +71,11 @@ interface CreateMembershipPaymentIntentDto {
   userId?: string;
   // Coupon
   couponCode?: string;
+  // Private member details (stored on the PROFILE at fulfillment — birthday
+  // fill-if-empty; sizes overwrite). Never public.
+  birthday?: string; // YYYY-MM-DD
+  tshirtSize?: string;
+  ringSize?: string;
 }
 
 interface CreateEventRegistrationPaymentIntentDto {
@@ -295,6 +300,9 @@ export class StripeController {
     if (data.teamDescription) metadata.teamDescription = data.teamDescription;
     if (data.businessName) metadata.businessName = data.businessName;
     if (data.businessWebsite) metadata.businessWebsite = data.businessWebsite;
+    if (data.birthday) metadata.birthday = data.birthday;
+    if (data.tshirtSize) metadata.tshirtSize = data.tshirtSize;
+    if (data.ringSize) metadata.ringSize = data.ringSize;
 
     // Create the payment intent
     return this.stripeService.createPaymentIntent({
@@ -762,6 +770,10 @@ export class StripeController {
       cancelUrl: string;
       billingFirstName?: string;
       billingLastName?: string;
+      // Private member details (stored on the PROFILE at fulfillment)
+      birthday?: string; // YYYY-MM-DD
+      tshirtSize?: string;
+      ringSize?: string;
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     // Override client-sent userId with JWT-verified userId to prevent spoofing
@@ -844,6 +856,9 @@ export class StripeController {
     if (data.userId) metadata.userId = data.userId;
     if (data.billingFirstName) metadata.billingFirstName = data.billingFirstName;
     if (data.billingLastName) metadata.billingLastName = data.billingLastName;
+    if (data.birthday) metadata.birthday = data.birthday;
+    if (data.tshirtSize) metadata.tshirtSize = data.tshirtSize;
+    if (data.ringSize) metadata.ringSize = data.ringSize;
 
     // Create checkout session
     const session = await this.stripeService.createSubscriptionCheckoutSession({

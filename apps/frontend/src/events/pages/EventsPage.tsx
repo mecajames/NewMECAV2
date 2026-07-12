@@ -726,27 +726,18 @@ export default function EventsPage() {
                             <span className="text-gray-400">Event Director:</span>{' '}
                             {(event as any).event_director.name}
                           </div>
-                          {((event as any).event_director.email || (event as any).event_director.phone) && (
+                          {/* No email addresses on public pages (anti-scrape
+                              policy) — the ED's phone is shown; email contact
+                              goes through the site's contact/support forms. */}
+                          {(event as any).event_director.phone && (
                             <div className="text-xs sm:text-sm text-gray-400 break-all">
-                              {(event as any).event_director.email && (
-                                <a
-                                  href={`mailto:${(event as any).event_director.email}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="hover:text-orange-400"
-                                >
-                                  {(event as any).event_director.email}
-                                </a>
-                              )}
-                              {(event as any).event_director.email && (event as any).event_director.phone && ' · '}
-                              {(event as any).event_director.phone && (
-                                <a
-                                  href={`tel:${(event as any).event_director.phone}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="hover:text-orange-400 whitespace-nowrap"
-                                >
-                                  {(event as any).event_director.phone}
-                                </a>
-                              )}
+                              <a
+                                href={`tel:${(event as any).event_director.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="hover:text-orange-400 whitespace-nowrap"
+                              >
+                                {(event as any).event_director.phone}
+                              </a>
                             </div>
                           )}
                         </div>

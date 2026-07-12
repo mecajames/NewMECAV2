@@ -316,7 +316,7 @@ export class InvoicePdfService {
             ${this.escapeHtml(companyInfo.address.country || 'US')}
           </p>
           ` : ''}
-          ${companyInfo?.email ? `<p><!--email_off-->${this.escapeHtml(companyInfo.email)}<!--/email_off--></p>` : ''}
+          <p>mecacaraudio.com/member-support</p>
           ${companyInfo?.phone ? `<p>${this.escapeHtml(companyInfo.phone)}</p>` : ''}
         </div>
       </div>

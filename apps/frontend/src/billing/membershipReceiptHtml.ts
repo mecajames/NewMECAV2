@@ -141,7 +141,7 @@ export function renderMembershipReceiptHtml(membership: Membership): string {
         <img src="${getAbsoluteSiteLogo()}" alt="MECA Logo" class="company-logo" onerror="this.style.display='none'" />
         <div class="company-details">
           <h1>Mobile Electronics Competition Association</h1>
-          <p>billing@mecacaraudio.com</p>
+          <p>mecacaraudio.com/member-support</p>
         </div>
       </div>
       <div class="invoice-title">

@@ -371,7 +371,7 @@ export default function TermsAndConditionsPage() {
               235 Flamingo Dr.<br />
               Louisville, KY 40218<br />
               United States<br />
-              <span className="text-gray-300">mecacaraudio [at] gmail [dot] com</span>
+              <a href="/contact" className="text-orange-500 hover:text-orange-400 underline">mecacaraudio.com/contact</a>
             </p>
             <a href="#table-of-contents" className="text-orange-500 hover:text-orange-400 text-sm">↑ Back to Top</a>
             </div>

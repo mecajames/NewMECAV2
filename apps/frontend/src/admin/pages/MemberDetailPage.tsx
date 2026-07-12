@@ -53,6 +53,7 @@ import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+import { TSHIRT_SIZES, RING_SIZES } from '@/shared/memberSizes';
 import {
   adminGetRetailerByUserId,
   adminGetManufacturerByUserId,
@@ -2762,6 +2763,8 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
     last_name: member.last_name,
     phone: member.phone || '',
     birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
+    tshirt_size: (member as any).tshirt_size || '',
+    ring_size: (member as any).ring_size || '',
     meca_id: member.meca_id ? String(member.meca_id) : '',
     role: member.role,
     membership_status: member.membership_status,
@@ -2825,6 +2828,8 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
       last_name: member.last_name,
       phone: member.phone || '',
       birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
+      tshirt_size: (member as any).tshirt_size || '',
+      ring_size: (member as any).ring_size || '',
       meca_id: member.meca_id ? String(member.meca_id) : '',
       role: member.role,
       membership_status: member.membership_status,
@@ -2982,6 +2987,44 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
                   ? new Date(String((member as any).birthday).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                   : 'Not set'}
               </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              T-Shirt Size <span className="text-gray-500 text-xs">(private — event merch / World Finals)</span>
+            </label>
+            {isEditing ? (
+              <select
+                value={formData.tshirt_size}
+                onChange={(e) => setFormData({ ...formData, tshirt_size: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Not set</option>
+                {TSHIRT_SIZES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{(member as any).tshirt_size || 'Not set'}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Ring Size <span className="text-gray-500 text-xs">(private — World Finals rings)</span>
+            </label>
+            {isEditing ? (
+              <select
+                value={formData.ring_size}
+                onChange={(e) => setFormData({ ...formData, ring_size: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Not set</option>
+                {RING_SIZES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{(member as any).ring_size || 'Not set'}</div>
             )}
           </div>
           <div>

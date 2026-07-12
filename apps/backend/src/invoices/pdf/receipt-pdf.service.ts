@@ -64,10 +64,12 @@ export class ReceiptPdfService {
     };
     // Company contact (left)
     let cy = y;
+    // No company email on member-facing documents (anti-scrape policy) —
+    // support goes through the site's Support Desk.
     const companyLines = [
       company.address?.street,
       [company.address?.city, company.address?.state, company.address?.postalCode].filter(Boolean).join(', '),
-      company.email,
+      'mecacaraudio.com/member-support',
       company.phone,
     ].filter(Boolean) as string[];
     for (const l of companyLines) {
