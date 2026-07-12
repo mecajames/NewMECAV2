@@ -43,6 +43,13 @@ export class EventDirector {
   @Property({ type: 'boolean', fieldName: 'is_active' })
   isActive: boolean = true;
 
+  // ED opt-in: show their email on their events on the public calendar.
+  // Default false — site policy is NO email addresses on public pages, so
+  // exposure is strictly the director's own choice (toggled in their ED
+  // dashboard).
+  @Property({ type: 'boolean', fieldName: 'show_email_publicly' })
+  showEmailPublicly: boolean = false;
+
   // Approval info
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'approved_date' })
   approvedDate?: Date;

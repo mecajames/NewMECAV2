@@ -239,6 +239,21 @@ export class EventDirectorsService {
     return this.em.findOne(EventDirector, { user: userId });
   }
 
+  /**
+   * ED self-service settings: the public-email opt-in. Own record only —
+   * looked up by the caller's user id, never by an arbitrary ED id.
+   */
+  async updateMySettings(userId: string, settings: { showEmailPublicly: boolean }): Promise<EventDirector> {
+    const em = this.em.fork();
+    const ed = await em.findOne(EventDirector, { user: userId }, { populate: ['user'] });
+    if (!ed) {
+      throw new NotFoundException('You do not have an event director profile');
+    }
+    ed.showEmailPublicly = settings.showEmailPublicly;
+    await em.flush();
+    return ed;
+  }
+
   // =============================================================================
   // Admin: Applications
   // =============================================================================

@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, ClipboardList, FileText, ChevronRight, Calendar, MapPin,
-  Clock, AlertCircle, User
+  Clock, AlertCircle, User, Mail,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
-import { getMyEventDirectorProfile, EventDirector } from '@/event-directors';
+import { getMyEventDirectorProfile, updateMyEventDirectorSettings, EventDirector } from '@/event-directors';
 import {
   eventHostingRequestsApi,
   EventHostingRequest,
@@ -53,6 +53,23 @@ export default function EventDirectorAssignmentsPage() {
       console.error('Error fetching ED profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Public-email opt-in toggle ("show my email on my events"). Site policy is
+  // no emails on public pages — showing theirs is each ED's own choice.
+  const [savingEmailToggle, setSavingEmailToggle] = useState(false);
+  const handleToggleShowEmail = async () => {
+    if (!edProfile || savingEmailToggle) return;
+    const next = !edProfile.show_email_publicly;
+    setSavingEmailToggle(true);
+    try {
+      const updated = await updateMyEventDirectorSettings({ show_email_publicly: next });
+      setEdProfile(updated);
+    } catch (error: any) {
+      alert(error?.message || 'Failed to update your settings.');
+    } finally {
+      setSavingEmailToggle(false);
     }
   };
 
@@ -225,6 +242,38 @@ export default function EventDirectorAssignmentsPage() {
             seasonEndDate={selectedSeason?.end_date}
           />
         </div>
+
+        {/* My Settings — public-email opt-in */}
+        {edProfile && (
+          <div className="bg-slate-800 rounded-xl p-6 mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-5 w-5 text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold text-white">Show my email on my events</h2>
+                  <p className="text-gray-400 text-sm mt-0.5">
+                    When on, your email address is displayed with your name on your events in the public
+                    events calendar so competitors can contact you directly. When off (the default), only
+                    your name and phone number are shown — MECA never publishes email addresses without
+                    your permission.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleToggleShowEmail}
+                disabled={savingEmailToggle}
+                className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${edProfile.show_email_publicly ? 'bg-orange-600' : 'bg-slate-600'} ${savingEmailToggle ? 'opacity-60' : ''}`}
+                role="switch"
+                aria-checked={!!edProfile.show_email_publicly}
+                title={edProfile.show_email_publicly ? 'Your email IS shown on your events — click to hide it' : 'Your email is hidden — click to show it on your events'}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 bg-white rounded-full transition-all ${edProfile.show_email_publicly ? 'left-[26px]' : 'left-0.5'}`} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pending Events Section */}
         {pendingRequests.length > 0 && (

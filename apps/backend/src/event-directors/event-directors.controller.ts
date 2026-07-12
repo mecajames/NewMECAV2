@@ -53,6 +53,7 @@ function serializeEventDirector(ed: EventDirector) {
     city: ed.city,
     specialized_formats: ed.specializedFormats,
     is_active: ed.isActive,
+    show_email_publicly: ed.showEmailPublicly ?? false,
     approved_date: ed.approvedDate,
     total_events_directed: ed.totalEventsDirected,
     average_rating: ed.averageRating,
@@ -275,6 +276,26 @@ export class EventDirectorsController {
     const profile = await this.eventDirectorsService.getMyProfile(user.id);
     // Return explicit object to ensure valid JSON response (not empty body)
     return { data: profile ? serializeEventDirector(profile) : null };
+  }
+
+  /**
+   * ED self-service settings — currently just the public-email opt-in
+   * ("show my email on my events on the public calendar"). ED-only, own
+   * record only; everything else on the ED record stays admin-managed.
+   */
+  @Put('me/settings')
+  async updateMySettings(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { show_email_publicly?: boolean },
+  ) {
+    const user = await this.getCurrentUser(authHeader);
+    if (!user) {
+      throw new UnauthorizedException('Authentication required');
+    }
+    const updated = await this.eventDirectorsService.updateMySettings(user.id, {
+      showEmailPublicly: !!body?.show_email_publicly,
+    });
+    return { data: serializeEventDirector(updated) };
   }
 
   // =============================================================================

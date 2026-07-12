@@ -218,9 +218,14 @@ export class EventsService {
       const [directorRows, edAssignmentRows, judgeRows] = await Promise.all([
         directorIds.length > 0
           ? conn.execute(
-              `SELECT id, first_name, last_name, email, phone, avatar_url
-                 FROM public.profiles
-                WHERE id IN (${directorIds.map(() => '?').join(',')})`,
+              // show_email_publicly: the ED's own opt-in (default false) —
+              // site policy is no emails on public pages unless the director
+              // chose to show theirs.
+              `SELECT p.id, p.first_name, p.last_name, p.email, p.phone, p.avatar_url,
+                      COALESCE(ed.show_email_publicly, false) AS show_email_publicly
+                 FROM public.profiles p
+            LEFT JOIN public.event_directors ed ON ed.user_id = p.id
+                WHERE p.id IN (${directorIds.map(() => '?').join(',')})`,
               directorIds,
             )
           : Promise.resolve([] as any[]),
@@ -228,7 +233,8 @@ export class EventsService {
         // are staffed this way and never set events.event_director_id, which
         // is why the calendar/detail showed no director for them.
         conn.execute(
-          `SELECT a.event_id, p.first_name, p.last_name, p.email, p.phone, p.avatar_url
+          `SELECT a.event_id, p.first_name, p.last_name, p.email, p.phone, p.avatar_url,
+                  COALESCE(ed.show_email_publicly, false) AS show_email_publicly
              FROM public.event_director_assignments a
              JOIN public.event_directors ed ON ed.id = a.event_director_id
         LEFT JOIN public.profiles p ON p.id = ed.user_id
@@ -276,7 +282,10 @@ export class EventsService {
         json.event_director = d
           ? {
               name: [d.first_name, d.last_name].filter(Boolean).join(' ').trim() || null,
-              email: d.email ?? null,
+              // Email only with the ED's explicit opt-in (show_email_publicly
+              // on their event_directors record) — no emails on public pages
+              // otherwise.
+              email: d.show_email_publicly ? (d.email ?? null) : null,
               phone: d.phone ?? null,
               avatar_url: d.avatar_url ?? null,
             }
