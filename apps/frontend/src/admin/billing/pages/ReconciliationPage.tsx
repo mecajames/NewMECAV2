@@ -74,6 +74,44 @@ export default function ReconciliationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Bulk remediation: run the same per-row Fix over every fixable row in a
+  // check (sequentially — each back-fill is audited individually). The list
+  // shows up to 25 rows per pass, so large sets may need a re-run.
+  const [fixingAll, setFixingAll] = useState<string | null>(null);
+  const [fixAllProgress, setFixAllProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
+
+  const handleFixAll = async (check: ReconCheck) => {
+    const fixable = check.sample.filter((r) => !r.note);
+    if (fixable.length === 0) return;
+    const label = remediable[check.key] || 'Apply this fix?';
+    if (!window.confirm(
+      `${label}\n\nApply this fix to ALL ${fixable.length} listed rows? Each one back-fills or syncs a record — no money is moved. ` +
+      `(The list shows up to 25 rows per pass — re-run afterwards if more remain.)`,
+    )) {
+      return;
+    }
+    setFixingAll(check.key);
+    setActionMsg(null);
+    let ok = 0;
+    let failed = 0;
+    for (const row of fixable) {
+      try {
+        const res = await billingApi.remediateReconciliation(check.key, row);
+        if (res.success) ok++; else failed++;
+      } catch {
+        failed++;
+      }
+      setFixAllProgress({ done: ok + failed, total: fixable.length, failed });
+    }
+    setFixingAll(null);
+    setFixAllProgress(null);
+    setActionMsg({
+      ok: failed === 0,
+      text: `Fix all complete: ${ok} fixed, ${failed} failed${failed > 0 ? ' — use the per-row Fix buttons on the remaining rows to see each error' : ''}.`,
+    });
+    await load(mode);
+  };
+
   const handleFix = async (checkKey: string, row: Record<string, any>, rowKey: string) => {
     const label = remediable[checkKey] || 'Apply this fix?';
     if (!window.confirm(`${label}\n\nThis records the confirmed truth in the database (no money is moved). Continue?`)) {
@@ -273,6 +311,24 @@ export default function ReconciliationPage() {
 
                     {isOpen && check.sample.length > 0 && (
                       <div className="border-t border-slate-700 overflow-x-auto">
+                        {/* Bulk fix bar — remediable checks with 2+ fixable rows */}
+                        {!!remediable[check.key] && check.sample.filter((r) => !r.note).length > 1 && (
+                          <div className="px-4 py-2 border-b border-slate-700/60 flex items-center justify-between gap-3">
+                            <span className="text-xs text-gray-500">
+                              {fixingAll === check.key && fixAllProgress
+                                ? `Fixing ${fixAllProgress.done}/${fixAllProgress.total}${fixAllProgress.failed > 0 ? ` (${fixAllProgress.failed} failed)` : ''}…`
+                                : `${check.sample.filter((r) => !r.note).length} fixable rows listed`}
+                            </span>
+                            <button
+                              onClick={() => handleFixAll(check)}
+                              disabled={fixingAll !== null || fixingRow !== null}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white text-xs font-semibold rounded-md transition-colors"
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                              {fixingAll === check.key ? 'Fixing…' : `Fix All (${check.sample.filter((r) => !r.note).length})`}
+                            </button>
+                          </div>
+                        )}
                         {(() => {
                           const canFix = !!remediable[check.key];
                           return (

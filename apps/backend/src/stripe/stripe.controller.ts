@@ -1081,10 +1081,36 @@ export class StripeController {
         await this.handleWorldFinalsRegistrationPayment(paymentIntent);
         break;
       case StripePaymentType.MEMBERSHIP:
-      default:
-        // Default to membership payment (for backwards compatibility)
         await this.handleMembershipPayment(paymentIntent);
         break;
+      default: {
+        // No recognized paymentType in metadata. Do NOT blind-default to
+        // membership fulfillment — that was throwing "missing
+        // membershipTypeConfigId" on every SUBSCRIPTION billing charge:
+        // Stripe mints subscription-invoice payment intents itself with
+        // EMPTY metadata, and their money is recorded by the invoice.paid /
+        // checkout.session.completed handlers, not here. Those errors
+        // flooded the reconciliation dashboard as webhook failures.
+        if (paymentIntent.invoice) {
+          console.log(
+            `Payment intent ${paymentIntent.id} belongs to invoice ${typeof paymentIntent.invoice === 'string' ? paymentIntent.invoice : paymentIntent.invoice.id} ` +
+            `(subscription/invoice billing) — recorded by the invoice webhook; skipping intent-level fulfillment`,
+          );
+          break;
+        }
+        if (metadata.membershipTypeConfigId) {
+          // Legacy one-time membership intents created before paymentType
+          // metadata existed — still fulfillable.
+          await this.handleMembershipPayment(paymentIntent);
+          break;
+        }
+        // Truly unclassifiable money: keep this LOUD (recorded as a webhook
+        // error + surfaced by reconciliation) so it's never silently kept.
+        throw new Error(
+          `Unclassified payment_intent.succeeded ${paymentIntent.id}: no paymentType metadata, no membershipTypeConfigId, ` +
+          `and not invoice/subscription billing. Identify the charge in Stripe and record it manually (Record Payment) if it's real revenue.`,
+        );
+      }
     }
   }
 
