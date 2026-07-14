@@ -32,9 +32,11 @@ export class MemberStatsService {
   constructor(private readonly em: EntityManager) {}
 
   /**
-   * Get comprehensive statistics for a member
+   * Get comprehensive statistics for a member.
+   * When seasonId is given, orders/spend/events/trophies are scoped to that
+   * season (recent activity and upcoming events stay unscoped).
    */
-  async getMemberStats(userId: string): Promise<MemberStats> {
+  async getMemberStats(userId: string, seasonId?: string): Promise<MemberStats> {
     const em = this.em.fork();
 
     // Competition results are keyed by MECA ID (text) — competitor_id is often
@@ -45,6 +47,19 @@ export class MemberStatsService {
     );
     const mecaId = String(profileRow[0]?.meca_id ?? '').trim();
 
+    // Orders/payments have no season column — scope money by the season's
+    // date window instead. An unknown seasonId just falls back to all-time.
+    let seasonRange: { start: string; end: string } | null = null;
+    if (seasonId) {
+      const seasonRow = await em.getConnection().execute(
+        `SELECT start_date, end_date FROM seasons WHERE id = ?`,
+        [seasonId],
+      );
+      if (seasonRow[0]) {
+        seasonRange = { start: seasonRow[0].start_date, end: seasonRow[0].end_date };
+      }
+    }
+
     // Run all queries in parallel for performance
     const [
       orderStats,
@@ -54,9 +69,9 @@ export class MemberStatsService {
       recentActivity,
       upcomingEvents,
     ] = await Promise.all([
-      this.getOrderStats(em, userId),
-      this.getEventsAttendedCount(em, userId, mecaId),
-      this.getCompetitionResults(em, userId, mecaId),
+      this.getOrderStats(em, userId, seasonRange),
+      this.getEventsAttendedCount(em, userId, mecaId, seasonId),
+      this.getCompetitionResults(em, userId, mecaId, seasonId),
       this.getTeamInfo(em, userId),
       this.getRecentActivity(em, userId, mecaId),
       this.getUpcomingEvents(em, userId),
@@ -79,7 +94,15 @@ export class MemberStatsService {
   private async getOrderStats(
     em: EntityManager,
     userId: string,
+    seasonRange: { start: string; end: string } | null = null,
   ): Promise<{ count: number; totalSpent: number }> {
+    // Season scoping is by date window (end_date is inclusive — take the
+    // whole final day).
+    const rangeClause = seasonRange
+      ? `AND created_at >= ?::date AND created_at < ?::date + interval '1 day'`
+      : '';
+    const rangeParams = seasonRange ? [seasonRange.start, seasonRange.end] : [];
+
     // Orders carry the money in `total` (there is no total_amount column —
     // the old query summed nothing, so Lifetime Value always showed $0.00).
     const result = await em.getConnection().execute(`
@@ -87,8 +110,8 @@ export class MemberStatsService {
         COUNT(*)::int as count,
         COALESCE(SUM(total::decimal), 0)::float as total_spent
       FROM orders
-      WHERE member_id = ? AND status IN ('completed', 'paid')
-    `, [userId]);
+      WHERE member_id = ? AND status IN ('completed', 'paid') ${rangeClause}
+    `, [userId, ...rangeParams]);
 
     // Lifetime value cross-check: the payments ledger records the same money
     // (and covers payments that never got an Order row — subscription
@@ -97,8 +120,8 @@ export class MemberStatsService {
     const paid = await em.getConnection().execute(`
       SELECT COALESCE(SUM(amount::decimal), 0)::float as total
       FROM payments
-      WHERE user_id = ? AND payment_status = 'paid'
-    `, [userId]);
+      WHERE user_id = ? AND payment_status = 'paid' ${rangeClause}
+    `, [userId, ...rangeParams]);
 
     const ordersTotal = parseFloat(result[0]?.total_spent || '0');
     const paymentsTotal = parseFloat(paid[0]?.total || '0');
@@ -112,7 +135,17 @@ export class MemberStatsService {
   /**
    * Get count of events the member has attended (checked in)
    */
-  private async getEventsAttendedCount(em: EntityManager, userId: string, mecaId: string): Promise<number> {
+  private async getEventsAttendedCount(
+    em: EntityManager,
+    userId: string,
+    mecaId: string,
+    seasonId?: string,
+  ): Promise<number> {
+    // Season scoping: results rows sometimes lack season_id (imports), so
+    // fall back to the event's season.
+    const regSeasonClause = seasonId ? 'AND e.season_id = ?' : '';
+    const resultSeasonClause = seasonId ? 'AND COALESCE(cr.season_id, e2.season_id) = ?' : '';
+
     // "Attended" = checked-in/completed registrations UNION events where the
     // member has a competition result. Most competitors never register online
     // (results are imported at the event), so registrations alone showed 0
@@ -125,13 +158,18 @@ export class MemberStatsService {
           JOIN events e ON er.event_id = e.id
          WHERE er.user_id = ?
            AND (er.checked_in = true OR e.status = 'completed')
+           ${regSeasonClause}
         UNION
         SELECT cr.event_id
           FROM competition_results cr
+          LEFT JOIN events e2 ON cr.event_id = e2.id
          WHERE cr.event_id IS NOT NULL
            AND (cr.competitor_id = ? OR (? <> '' AND TRIM(cr.meca_id::text) = ?))
+           ${resultSeasonClause}
       ) attended
-    `, [userId, userId, mecaId, mecaId]);
+    `, seasonId
+      ? [userId, seasonId, userId, mecaId, mecaId, seasonId]
+      : [userId, userId, mecaId, mecaId]);
 
     return result[0]?.count || 0;
   }
@@ -143,19 +181,26 @@ export class MemberStatsService {
     em: EntityManager,
     userId: string,
     mecaId: string,
+    seasonId?: string,
   ): Promise<{ trophies: number; placements: { first: number; second: number; third: number } }> {
+    // Season scoping falls back to the event's season when the result row
+    // lacks season_id (imported data).
+    const seasonClause = seasonId ? 'AND COALESCE(cr.season_id, e.season_id) = ?' : '';
+
     // Count top 3 placements as "trophies". Match by competitor_id OR MECA ID
     // — imported results often carry only the MECA ID.
     const result = await em.getConnection().execute(`
       SELECT
-        COUNT(*) FILTER (WHERE placement = 1)::int as first_place,
-        COUNT(*) FILTER (WHERE placement = 2)::int as second_place,
-        COUNT(*) FILTER (WHERE placement = 3)::int as third_place,
-        COUNT(*) FILTER (WHERE placement <= 3)::int as total_trophies
-      FROM competition_results
-      WHERE (competitor_id = ? OR (? <> '' AND TRIM(meca_id::text) = ?))
-        AND placement IS NOT NULL AND placement > 0
-    `, [userId, mecaId, mecaId]);
+        COUNT(*) FILTER (WHERE cr.placement = 1)::int as first_place,
+        COUNT(*) FILTER (WHERE cr.placement = 2)::int as second_place,
+        COUNT(*) FILTER (WHERE cr.placement = 3)::int as third_place,
+        COUNT(*) FILTER (WHERE cr.placement <= 3)::int as total_trophies
+      FROM competition_results cr
+      LEFT JOIN events e ON cr.event_id = e.id
+      WHERE (cr.competitor_id = ? OR (? <> '' AND TRIM(cr.meca_id::text) = ?))
+        AND cr.placement IS NOT NULL AND cr.placement > 0
+        ${seasonClause}
+    `, seasonId ? [userId, mecaId, mecaId, seasonId] : [userId, mecaId, mecaId]);
 
     return {
       trophies: result[0]?.total_trophies || 0,

@@ -1803,9 +1803,34 @@ function OverviewTab({
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
 
+  // Season scope for the stat cards. Defaults to the current season;
+  // '' = View All (all-time). Stats wait for seasons so the first fetch is
+  // already current-season instead of flashing all-time numbers.
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonId, setSeasonId] = useState('');
+  const [seasonsLoaded, setSeasonsLoaded] = useState(false);
+
   useEffect(() => {
+    const loadSeasons = async () => {
+      try {
+        const seasonsData = await seasonsApi.getAll();
+        setSeasons(seasonsData);
+        const currentSeason = seasonsData.find((s: Season) => s.is_current);
+        if (currentSeason) setSeasonId(currentSeason.id);
+      } catch (err) {
+        console.error('Error fetching seasons for overview:', err);
+      } finally {
+        setSeasonsLoaded(true);
+      }
+    };
+    loadSeasons();
+  }, []);
+
+  useEffect(() => {
+    if (!seasonsLoaded) return;
     fetchOverviewData();
-  }, [member.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member.id, seasonId, seasonsLoaded]);
 
   const fetchOverviewData = async () => {
     setStatsLoading(true);
@@ -1819,7 +1844,7 @@ function OverviewTab({
       }
 
       // Fetch member stats from the backend API
-      const memberStats = await profilesApi.getMemberStats(member.id, session.access_token);
+      const memberStats = await profilesApi.getMemberStats(member.id, session.access_token, seasonId || undefined);
 
       setStats({
         totalOrders: memberStats.totalOrders,
@@ -1900,7 +1925,21 @@ function OverviewTab({
         </div>
       )}
 
-      <h2 className="text-2xl font-bold text-white mb-6">Overview</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h2 className="text-2xl font-bold text-white">Overview</h2>
+        <select
+          value={seasonId}
+          onChange={(e) => setSeasonId(e.target.value)}
+          className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent cursor-pointer"
+        >
+          {seasons.map(season => (
+            <option key={season.id} value={season.id}>
+              {season.name} {season.is_current ? '(Current)' : ''}
+            </option>
+          ))}
+          <option value="">View All</option>
+        </select>
+      </div>
 
       {/* Stats Error */}
       {statsError && (
@@ -1937,7 +1976,7 @@ function OverviewTab({
           </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
-          <div className="text-sm text-gray-400 mb-1">Lifetime Value</div>
+          <div className="text-sm text-gray-400 mb-1">{seasonId ? 'Season Value' : 'Lifetime Value'}</div>
           <div className="text-xl font-bold text-white">
             {statsLoading ? <span className="animate-pulse">...</span> : `$${stats.totalSpent.toFixed(2)}`}
           </div>
@@ -8202,10 +8241,19 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
     );
   }
 
-  // Calculate totals (from all results, not filtered)
-  const totalPoints = results.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
-  const totalEvents = new Set(results.map(r => r.eventId || r.event_id)).size;
-  const firstPlaceCount = results.filter(r => r.placement === 1).length;
+  // Summary cards follow the season filter (defaults to current season).
+  // Search/country/state narrow the table only, not the overview.
+  const seasonResults = filters.seasonId
+    ? results.filter(r => {
+        const eventId = r.eventId || r.event_id;
+        const event = r.event || eventsData[eventId || ''];
+        const resultSeasonId = r.seasonId || r.season_id || event?.season_id || event?.seasonId;
+        return resultSeasonId === filters.seasonId;
+      })
+    : results;
+  const totalPoints = seasonResults.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
+  const totalEvents = new Set(seasonResults.map(r => r.eventId || r.event_id)).size;
+  const firstPlaceCount = seasonResults.filter(r => r.placement === 1).length;
 
   return (
     <div>
@@ -8215,7 +8263,7 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-slate-700 rounded-lg p-4">
           <p className="text-gray-400 text-sm">Total Results</p>
-          <p className="text-2xl font-bold text-white">{results.length}</p>
+          <p className="text-2xl font-bold text-white">{seasonResults.length}</p>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <p className="text-gray-400 text-sm">Events Competed</p>
