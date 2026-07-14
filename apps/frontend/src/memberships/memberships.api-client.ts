@@ -805,6 +805,17 @@ export const membershipsApi = {
   },
 
   /**
+   * Admin: paid memberships created this calendar month, split new vs
+   * renewals — for the admin dashboard stat card.
+   */
+  adminGetMonthStats: async (seasonStart?: string, seasonEnd?: string): Promise<{ newThisMonth: number; renewalsThisMonth: number; seasonTotal: number }> => {
+    const response = await axios.get('/api/memberships/admin/month-stats', {
+      params: seasonStart && seasonEnd ? { seasonStart, seasonEnd } : {},
+    });
+    return response.data;
+  },
+
+  /**
    * Admin: run the membership status sync now (same job as the 1AM cron) —
    * activates/expires profile statuses from membership end dates and heals
    * stale MECA ID invalidation stamps for members with live paid memberships.

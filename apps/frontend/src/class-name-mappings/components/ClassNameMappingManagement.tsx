@@ -279,7 +279,9 @@ export default function ClassNameMappingManagement() {
   }, [orphans]);
 
   const handleLinkOrphanGroup = async (group: typeof orphanGroups[number]) => {
-    const classId = orphanGroupTarget[group.key];
+    // Match what the picker DISPLAYS: an untouched picker shows the
+    // suggested class as its default, so the link must use it too.
+    const classId = orphanGroupTarget[group.key] || group.suggestedClass?.id;
     if (!classId) {
       alert('Pick a target class first.');
       return;
@@ -323,13 +325,16 @@ export default function ClassNameMappingManagement() {
   };
 
   const getTargetClassName = (mapping: ClassNameMapping): string => {
-    if (mapping.targetClass) {
-      return `${mapping.targetClass.name} (${mapping.targetClass.format})`;
+    // targetClass can arrive as a partial/differently-shaped object (or point
+    // at a DELETED class) — never render "undefined (undefined)": fall through
+    // to the local class list and finally say plainly that the target is gone.
+    if (mapping.targetClass?.name) {
+      return `${mapping.targetClass.name} (${mapping.targetClass.format || '?'})`;
     }
     const classId = mapping.targetClassId || mapping.target_class_id;
     if (classId) {
       const cls = competitionClasses.find(c => c.id === classId);
-      return cls ? `${cls.name} (${cls.format})` : 'Unknown Class';
+      return cls ? `${cls.name} (${cls.format})` : '⚠ Target class deleted — edit this mapping';
     }
     return 'Not Mapped';
   };
@@ -348,11 +353,18 @@ export default function ClassNameMappingManagement() {
     return matchesSearch && matchesFilter;
   });
 
-  // Deduplicate classes by name+format (same class exists per season), then group by format
+  // Only ACTIVE classes are valid link/mapping targets — pointing anything at
+  // an inactive class recreates the exact "broken class link" rows this page
+  // exists to fix (and the backend now rejects inactive targets loudly).
+  const isActiveClass = (c: any) => (c.is_active ?? c.isActive) !== false;
+  const activeClasses = competitionClasses.filter(isActiveClass);
+
+  // Deduplicate ACTIVE classes by name+format (same class exists per season),
+  // then group by format
   const classesByFormat = (() => {
     const seen = new Set<string>();
     const unique: CompetitionClass[] = [];
-    for (const cls of competitionClasses) {
+    for (const cls of activeClasses) {
       const key = `${cls.name}|${cls.format}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -615,7 +627,7 @@ export default function ClassNameMappingManagement() {
                           </div>
                           <div className="flex items-center gap-2">
                             <ClassPicker
-                              classes={competitionClasses}
+                              classes={activeClasses}
                               value={orphanGroupTarget[g.key] || g.suggestedClass?.id || ''}
                               onChange={(id) => setOrphanGroupTarget((p) => ({ ...p, [g.key]: id }))}
                               placeholder="Link to class…"
@@ -731,7 +743,7 @@ export default function ClassNameMappingManagement() {
           <div className="mx-auto max-w-screen-2xl px-4 py-3 sm:px-6 lg:px-8 flex flex-wrap items-center gap-3">
             <div className="text-white font-semibold">{orphanSelectedRowIds.size} selected</div>
             <ClassPicker
-              classes={competitionClasses}
+              classes={activeClasses}
               value={orphanBulkTarget}
               onChange={setOrphanBulkTarget}
               placeholder="Link selected rows to class…"

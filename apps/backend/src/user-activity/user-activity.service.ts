@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { LoginAuditLog } from './login-audit-log.entity';
 import { Profile } from '../profiles/profiles.entity';
@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 
 @Injectable()
 export class UserActivityService {
+  private readonly logger = new Logger(UserActivityService.name);
+
   constructor(private readonly em: EntityManager) {}
 
   /**
@@ -136,6 +138,44 @@ export class UserActivityService {
        WHERE ${UserActivityService.ONLINE_WHERE}`,
     );
     return result[0]?.count || 0;
+  }
+
+  /**
+   * Current online count PLUS the all-time high-water mark ("highest online
+   * ever"), persisted in site_settings (`online_peak_count`) and bumped
+   * whenever the current count exceeds it. Powers the admin dashboard
+   * "Currently Online X / peak Y" card. NOTE: site_settings has no unique
+   * constraint on setting_key in prod, so this is SELECT-then-UPDATE/INSERT
+   * rather than ON CONFLICT.
+   */
+  async getOnlineStats(): Promise<{ count: number; peak: number }> {
+    const count = await this.getOnlineCount();
+    const conn = this.em.getConnection();
+    try {
+      const rows = await conn.execute(
+        `SELECT id, setting_value FROM "public"."site_settings" WHERE setting_key = 'online_peak_count' LIMIT 1`,
+      );
+      let peak = rows[0] ? parseInt(rows[0].setting_value, 10) || 0 : 0;
+      if (count > peak) {
+        peak = count;
+        if (rows[0]) {
+          await conn.execute(
+            `UPDATE "public"."site_settings" SET setting_value = ?, updated_at = NOW() WHERE id = ?`,
+            [String(count), rows[0].id],
+          );
+        } else {
+          await conn.execute(
+            `INSERT INTO "public"."site_settings" (setting_key, setting_value, setting_type, description)
+             VALUES ('online_peak_count', ?, 'number', 'High-water mark of concurrently online users (auto-updated by the online-count endpoint)')`,
+            [String(count)],
+          );
+        }
+      }
+      return { count, peak };
+    } catch (err) {
+      this.logger.warn(`Online peak tracking failed (non-fatal): ${err}`);
+      return { count, peak: count };
+    }
   }
 
   /**

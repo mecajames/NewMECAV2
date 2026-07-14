@@ -37,6 +37,14 @@ export class MemberStatsService {
   async getMemberStats(userId: string): Promise<MemberStats> {
     const em = this.em.fork();
 
+    // Competition results are keyed by MECA ID (text) — competitor_id is often
+    // NULL on imported rows — so every results-based stat must match EITHER.
+    const profileRow = await em.getConnection().execute(
+      `SELECT meca_id FROM profiles WHERE id = ?`,
+      [userId],
+    );
+    const mecaId = String(profileRow[0]?.meca_id ?? '').trim();
+
     // Run all queries in parallel for performance
     const [
       orderStats,
@@ -47,10 +55,10 @@ export class MemberStatsService {
       upcomingEvents,
     ] = await Promise.all([
       this.getOrderStats(em, userId),
-      this.getEventsAttendedCount(em, userId),
-      this.getCompetitionResults(em, userId),
+      this.getEventsAttendedCount(em, userId, mecaId),
+      this.getCompetitionResults(em, userId, mecaId),
       this.getTeamInfo(em, userId),
-      this.getRecentActivity(em, userId),
+      this.getRecentActivity(em, userId, mecaId),
       this.getUpcomingEvents(em, userId),
     ]);
 
@@ -72,31 +80,58 @@ export class MemberStatsService {
     em: EntityManager,
     userId: string,
   ): Promise<{ count: number; totalSpent: number }> {
+    // Orders carry the money in `total` (there is no total_amount column —
+    // the old query summed nothing, so Lifetime Value always showed $0.00).
     const result = await em.getConnection().execute(`
       SELECT
         COUNT(*)::int as count,
-        COALESCE(SUM(CAST(total_amount AS DECIMAL)), 0)::float as total_spent
+        COALESCE(SUM(total::decimal), 0)::float as total_spent
       FROM orders
       WHERE member_id = ? AND status IN ('completed', 'paid')
     `, [userId]);
 
+    // Lifetime value cross-check: the payments ledger records the same money
+    // (and covers payments that never got an Order row — subscription
+    // renewals, older data). The two ledgers overlap, so take the LARGER of
+    // the two totals rather than their sum (no double counting, no gaps).
+    const paid = await em.getConnection().execute(`
+      SELECT COALESCE(SUM(amount::decimal), 0)::float as total
+      FROM payments
+      WHERE user_id = ? AND payment_status = 'paid'
+    `, [userId]);
+
+    const ordersTotal = parseFloat(result[0]?.total_spent || '0');
+    const paymentsTotal = parseFloat(paid[0]?.total || '0');
+
     return {
       count: result[0]?.count || 0,
-      totalSpent: parseFloat(result[0]?.total_spent || '0'),
+      totalSpent: Math.max(ordersTotal, paymentsTotal),
     };
   }
 
   /**
    * Get count of events the member has attended (checked in)
    */
-  private async getEventsAttendedCount(em: EntityManager, userId: string): Promise<number> {
+  private async getEventsAttendedCount(em: EntityManager, userId: string, mecaId: string): Promise<number> {
+    // "Attended" = checked-in/completed registrations UNION events where the
+    // member has a competition result. Most competitors never register online
+    // (results are imported at the event), so registrations alone showed 0
+    // for members with dozens of results.
     const result = await em.getConnection().execute(`
-      SELECT COUNT(DISTINCT er.event_id)::int as count
-      FROM event_registrations er
-      JOIN events e ON er.event_id = e.id
-      WHERE er.user_id = ?
-        AND (er.checked_in = true OR e.status = 'completed')
-    `, [userId]);
+      SELECT COUNT(DISTINCT event_id)::int as count
+      FROM (
+        SELECT er.event_id
+          FROM event_registrations er
+          JOIN events e ON er.event_id = e.id
+         WHERE er.user_id = ?
+           AND (er.checked_in = true OR e.status = 'completed')
+        UNION
+        SELECT cr.event_id
+          FROM competition_results cr
+         WHERE cr.event_id IS NOT NULL
+           AND (cr.competitor_id = ? OR (? <> '' AND TRIM(cr.meca_id::text) = ?))
+      ) attended
+    `, [userId, userId, mecaId, mecaId]);
 
     return result[0]?.count || 0;
   }
@@ -107,8 +142,10 @@ export class MemberStatsService {
   private async getCompetitionResults(
     em: EntityManager,
     userId: string,
+    mecaId: string,
   ): Promise<{ trophies: number; placements: { first: number; second: number; third: number } }> {
-    // Count top 3 placements as "trophies"
+    // Count top 3 placements as "trophies". Match by competitor_id OR MECA ID
+    // — imported results often carry only the MECA ID.
     const result = await em.getConnection().execute(`
       SELECT
         COUNT(*) FILTER (WHERE placement = 1)::int as first_place,
@@ -116,8 +153,9 @@ export class MemberStatsService {
         COUNT(*) FILTER (WHERE placement = 3)::int as third_place,
         COUNT(*) FILTER (WHERE placement <= 3)::int as total_trophies
       FROM competition_results
-      WHERE competitor_id = ? AND placement IS NOT NULL AND placement > 0
-    `, [userId]);
+      WHERE (competitor_id = ? OR (? <> '' AND TRIM(meca_id::text) = ?))
+        AND placement IS NOT NULL AND placement > 0
+    `, [userId, mecaId, mecaId]);
 
     return {
       trophies: result[0]?.total_trophies || 0,
@@ -177,6 +215,7 @@ export class MemberStatsService {
   private async getRecentActivity(
     em: EntityManager,
     userId: string,
+    mecaId: string = '',
     limit: number = 10,
   ): Promise<ActivityItem[]> {
     const activities: ActivityItem[] = [];
@@ -207,10 +246,10 @@ export class MemberStatsService {
       FROM competition_results cr
       JOIN events e ON cr.event_id = e.id
       LEFT JOIN competition_classes cc ON cr.class_id = cc.id
-      WHERE cr.competitor_id = ?
+      WHERE (cr.competitor_id = ? OR (? <> '' AND TRIM(cr.meca_id::text) = ?))
       ORDER BY cr.created_at DESC
       LIMIT 5
-    `, [userId]);
+    `, [userId, mecaId, mecaId]);
 
     for (const result of results) {
       const placeText = result.placement ? `${this.getOrdinal(result.placement)} place` : 'competed';
@@ -223,9 +262,9 @@ export class MemberStatsService {
       });
     }
 
-    // Get recent orders
+    // Get recent orders (`total` is the money column — total_amount doesn't exist)
     const orders = await em.getConnection().execute(`
-      SELECT id, created_at, order_number, total_amount, status
+      SELECT id, created_at, order_number, total, status
       FROM orders
       WHERE member_id = ? AND status IN ('completed', 'paid')
       ORDER BY created_at DESC
@@ -236,9 +275,9 @@ export class MemberStatsService {
       activities.push({
         id: order.id,
         type: 'payment',
-        description: `Order #${order.order_number} - $${order.total_amount}`,
+        description: `Order #${order.order_number} - $${order.total}`,
         timestamp: new Date(order.created_at),
-        metadata: { total: order.total_amount, status: order.status },
+        metadata: { total: order.total, status: order.status },
       });
     }
 

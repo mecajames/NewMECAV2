@@ -422,6 +422,17 @@ export const competitionResultsApi = {
   // ==========================================
 
   /**
+   * Admin dashboard "Results" card: results entered + past events with no
+   * results yet (optionally season-scoped).
+   */
+  getAdminDashboardStats: async (seasonId?: string): Promise<{ totalResults: number; pastEventsMissingResults: number }> => {
+    const response = await axios.get('/api/competition-results/admin/dashboard-stats', {
+      params: seasonId ? { seasonId } : {},
+    });
+    return response.data;
+  },
+
+  /**
    * Admin-only — results an Event Director submitted whose class didn't match
    * the system and that were sent for review. EDs can't create classes, so
    * this queue is where an admin either assigns an existing class or creates

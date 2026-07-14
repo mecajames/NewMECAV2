@@ -23,6 +23,9 @@ import { eventsApi } from '@/events';
 import { eventRegistrationsApi } from '@/event-registrations';
 import { billingApi } from '@/api-client/billing.api-client';
 import { userActivityApi } from '@/user-activity/user-activity.api-client';
+import { shopApi } from '@/shop/shop.api-client';
+import { ticketsApi } from '@/tickets/tickets.api-client';
+import { membershipsApi } from '@/memberships/memberships.api-client';
 import { qaApi } from '@/api-client/qa.api-client';
 import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 
@@ -58,10 +61,23 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
+    upcomingEvents: 0,
     totalRegistrations: 0,
+    totalInterested: 0,
     totalMembers: 0,
     totalRevenue: '0.00',
+    monthRevenue: '0.00',
     onlineCount: 0,
+    onlinePeak: 0,
+    shopOrders: 0,
+    shopPending: 0,
+    membershipsNewMonth: 0,
+    membershipsRenewMonth: 0,
+    membershipsSeason: 0,
+    totalResults: 0,
+    eventsMissingResults: 0,
+    ticketsOpen: 0,
+    ticketsTotal: 0,
   });
   const [loading, setLoading] = useState(true);
   const [qaAssignments, setQaAssignments] = useState<any[]>([]);
@@ -119,7 +135,10 @@ export default function AdminDashboard() {
     endDate?: string,
   ) => {
     try {
-      const [profileStats, eventStats, registrationStats, billingStats, onlineCount] = await Promise.all([
+      // Calendar-month window for the month-vs-season money/membership pairs.
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const [profileStats, eventStats, registrationStats, billingStats, monthBillingStats, onlineStats, shopStats, ticketStats, monthMemberships, resultsStats] = await Promise.all([
         profilesApi.getStats(),
         eventsApi.getStats(seasonId ?? undefined),
         eventRegistrationsApi.getStats(seasonId ?? undefined),
@@ -127,26 +146,63 @@ export default function AdminDashboard() {
         billingApi
           .getDashboardStats(seasonId ? { startDate, endDate } : undefined)
           .catch(() => null),
-        userActivityApi.getOnlineCount().catch(() => 0),
+        billingApi
+          .getDashboardStats({ startDate: monthStart, endDate: now.toISOString() })
+          .catch(() => null),
+        userActivityApi.getOnlineStats().catch(() => ({ count: 0, peak: 0 })),
+        shopApi.adminGetStats().catch(() => null),
+        ticketsApi.getStats().catch(() => null),
+        membershipsApi.adminGetMonthStats(startDate, endDate).catch(() => null),
+        competitionResultsApi.getAdminDashboardStats(seasonId ?? undefined).catch(() => null),
       ]);
+
+      // "Open" tickets = everything not yet resolved or closed.
+      const ticketsTotal = Number(ticketStats?.total ?? 0);
+      const ticketsOpen = Math.max(0, ticketsTotal - Number(ticketStats?.resolved ?? 0) - Number(ticketStats?.closed ?? 0));
 
       setStats({
         totalUsers: profileStats.totalUsers,
         totalEvents: eventStats.totalEvents,
+        upcomingEvents: (eventStats as any).upcomingEvents ?? 0,
         totalRegistrations: registrationStats.totalRegistrations,
+        totalInterested: (registrationStats as any).totalInterested ?? 0,
         totalMembers: profileStats.totalMembers,
         totalRevenue: billingStats?.revenue?.total || '0.00',
-        onlineCount,
+        monthRevenue: monthBillingStats?.revenue?.total || '0.00',
+        onlineCount: onlineStats.count,
+        onlinePeak: onlineStats.peak,
+        shopOrders: Number((shopStats as any)?.totalOrders ?? 0),
+        shopPending: Number((shopStats as any)?.pendingOrders ?? 0) + Number((shopStats as any)?.processingOrders ?? 0),
+        membershipsNewMonth: monthMemberships?.newThisMonth ?? 0,
+        membershipsRenewMonth: monthMemberships?.renewalsThisMonth ?? 0,
+        membershipsSeason: monthMemberships?.seasonTotal ?? 0,
+        totalResults: resultsStats?.totalResults ?? 0,
+        eventsMissingResults: resultsStats?.pastEventsMissingResults ?? 0,
+        ticketsOpen,
+        ticketsTotal,
       });
     } catch (error) {
       console.error('Failed to fetch admin stats:', error);
       setStats({
         totalUsers: 0,
         totalEvents: 0,
+        upcomingEvents: 0,
         totalRegistrations: 0,
+        totalInterested: 0,
         totalMembers: 0,
         totalRevenue: '0.00',
+        monthRevenue: '0.00',
         onlineCount: 0,
+        onlinePeak: 0,
+        shopOrders: 0,
+        shopPending: 0,
+        membershipsNewMonth: 0,
+        membershipsRenewMonth: 0,
+        membershipsSeason: 0,
+        totalResults: 0,
+        eventsMissingResults: 0,
+        ticketsOpen: 0,
+        ticketsTotal: 0,
       });
     } finally {
       setLoading(false);
@@ -773,59 +829,121 @@ export default function AdminDashboard() {
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Overview</h2>
         <SeasonSelect value={seasonId} onChange={setSeasonId} />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Total Active Users <span className="text-[10px] text-slate-500 uppercase">· live</span></p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.totalMembers}</p>
+      {/* Compact stat cards — each shows current/total context and links to
+          the area it represents. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-8">
+        {([
+          {
+            label: 'Active Users',
+            live: true,
+            primary: stats.totalMembers.toLocaleString(),
+            secondary: stats.totalUsers.toLocaleString(),
+            hint: 'active / total users',
+            icon: <Users className="h-6 w-6 text-blue-500" />,
+            onClick: () => navigate('/admin/members'),
+          },
+          {
+            label: 'Currently Online',
+            live: true,
+            primary: stats.onlineCount.toLocaleString(),
+            secondary: stats.onlinePeak.toLocaleString(),
+            hint: 'now / all-time peak',
+            icon: (
+              <div className="relative">
+                <Wifi className="h-6 w-6 text-green-500" />
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-green-500 rounded-full animate-pulse" />
+              </div>
+            ),
+            onClick: () => navigate('/admin/member-activity'),
+          },
+          {
+            label: 'Events',
+            primary: stats.upcomingEvents.toLocaleString(),
+            secondary: stats.totalEvents.toLocaleString(),
+            hint: 'still to run / season total',
+            icon: <Calendar className="h-6 w-6 text-orange-500" />,
+            onClick: () => setCurrentView('events'),
+          },
+          {
+            label: 'Results Entered',
+            primary: stats.totalResults.toLocaleString(),
+            hint: stats.eventsMissingResults > 0
+              ? `⚠ ${stats.eventsMissingResults} past event${stats.eventsMissingResults === 1 ? '' : 's'} awaiting results`
+              : 'all past events have results',
+            icon: <ClipboardCheck className="h-6 w-6 text-teal-400" />,
+            onClick: () => setCurrentView('results'),
+          },
+          {
+            label: 'Registrations',
+            primary: stats.totalRegistrations.toLocaleString(),
+            hint: 'paid/confirmed this season',
+            icon: <Trophy className="h-6 w-6 text-yellow-500" />,
+            onClick: () => navigate('/admin/event-registrations'),
+          },
+          {
+            label: 'Event Interest',
+            primary: stats.totalInterested.toLocaleString(),
+            hint: '"interested" · upcoming events',
+            icon: <Star className="h-6 w-6 text-amber-400" />,
+            onClick: () => navigate('/admin/event-registrations?status=interested'),
+          },
+          {
+            label: 'Shop Orders',
+            primary: stats.shopPending.toLocaleString(),
+            secondary: stats.shopOrders.toLocaleString(),
+            hint: 'pending/awaiting shipment / total',
+            icon: <ShoppingCart className="h-6 w-6 text-purple-400" />,
+            onClick: () => navigate('/admin/shop/orders'),
+          },
+          {
+            label: 'Memberships (Month)',
+            primary: (stats.membershipsNewMonth + stats.membershipsRenewMonth).toLocaleString(),
+            secondary: stats.membershipsSeason.toLocaleString(),
+            hint: `${stats.membershipsNewMonth} new · ${stats.membershipsRenewMonth} renewals / season`,
+            icon: <CreditCard className="h-6 w-6 text-cyan-400" />,
+            onClick: () => navigate('/admin/billing'),
+          },
+          {
+            label: 'Revenue',
+            primary: `$${Number(stats.monthRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            secondary: `$${Number(stats.totalRevenue).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+            hint: 'this month / this season',
+            icon: <DollarSign className="h-6 w-6 text-green-500" />,
+            onClick: () => navigate('/admin/billing'),
+          },
+          {
+            label: 'Support Tickets',
+            primary: stats.ticketsOpen.toLocaleString(),
+            secondary: stats.ticketsTotal.toLocaleString(),
+            hint: 'open / total',
+            icon: <Ticket className="h-6 w-6 text-red-400" />,
+            onClick: () => navigate('/admin/tickets'),
+          },
+        ] as Array<{ label: string; live?: boolean; primary: string; secondary?: string; hint?: string; icon: React.ReactNode; onClick: () => void }>).map((card) => (
+          <button
+            key={card.label}
+            onClick={card.onClick}
+            className="bg-slate-800 rounded-xl p-3.5 border border-slate-700 text-left hover:border-orange-500/60 hover:bg-slate-750 hover:bg-slate-800/80 transition-colors group"
+            title={`Open ${card.label}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-slate-400 text-xs truncate">
+                  {card.label}
+                  {card.live && <span className="text-[9px] text-slate-500 uppercase"> · live</span>}
+                </p>
+                <p className="text-xl font-bold text-white mt-0.5 whitespace-nowrap">
+                  {card.primary}
+                  {card.secondary != null && (
+                    <span className="text-sm font-semibold text-slate-400">/{card.secondary}</span>
+                  )}
+                </p>
+                {card.hint && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{card.hint}</p>}
+              </div>
+              <div className="flex-shrink-0 opacity-80 group-hover:opacity-100">{card.icon}</div>
             </div>
-            <Users className="h-8 w-8 text-blue-500" />
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Currently Online <span className="text-[10px] text-slate-500 uppercase">· live</span></p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.onlineCount}</p>
-            </div>
-            <div className="relative">
-              <Wifi className="h-8 w-8 text-green-500" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Total Events</p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.totalEvents}</p>
-            </div>
-            <Calendar className="h-8 w-8 text-orange-500" />
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Registrations</p>
-              <p className="text-2xl font-bold text-white mt-1">{stats.totalRegistrations}</p>
-            </div>
-            <Trophy className="h-8 w-8 text-yellow-500" />
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Total Revenue</p>
-              <p className="text-2xl font-bold text-white mt-1">${Number(stats.totalRevenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            </div>
-            <DollarSign className="h-8 w-8 text-green-500" />
-          </div>
-        </div>
+          </button>
+        ))}
       </div>
 
       {/* QA Assignments Banner */}

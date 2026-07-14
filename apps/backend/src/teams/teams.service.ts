@@ -266,6 +266,45 @@ export class TeamsService {
     } as MemberWithUser;
   }
 
+  /**
+   * Fetch competition results belonging to a set of member user ids, matched
+   * by competitor_id OR the member's MECA ID. competition_results.competitor_id
+   * is NULL on most IMPORTED rows (results are keyed by meca_id text), so
+   * matching on competitor_id alone silently dropped the bulk of a team's
+   * history from stats/analytics/records. Rows matched via MECA ID get
+   * competitorId normalized in-memory so downstream per-member aggregation
+   * (leaderboards, records, points) works unchanged.
+   */
+  private async findMemberResults(
+    em: EntityManager,
+    memberUserIds: string[],
+    extraWhere: Record<string, any> = {},
+    options: Record<string, any> = {},
+  ): Promise<CompetitionResult[]> {
+    if (memberUserIds.length === 0) return [];
+    const profiles = await em.find(Profile, { id: { $in: memberUserIds } });
+    const mecaToUser = new Map<string, string>();
+    for (const p of profiles) {
+      const mid = String((p as any).meca_id ?? '').trim();
+      if (mid) mecaToUser.set(mid, p.id);
+    }
+    const mecaIds = [...mecaToUser.keys()];
+    const or: any[] = [{ competitorId: { $in: memberUserIds } }];
+    if (mecaIds.length > 0) or.push({ mecaId: { $in: mecaIds } });
+    const where: any = { $and: [{ $or: or }, extraWhere] };
+    const rows = await em.find(CompetitionResult, where, options as any);
+    for (const r of rows) {
+      if (!r.competitorId) {
+        const uid = mecaToUser.get(String(r.mecaId ?? '').trim());
+        if (uid) (r as any).competitorId = uid;
+      }
+    }
+    // Keep only rows attributable to a CURRENT member (a meca_id string could
+    // in theory match someone who left the roster between queries).
+    const memberSet = new Set(memberUserIds);
+    return rows.filter((r) => r.competitorId && memberSet.has(r.competitorId));
+  }
+
   // Batch-load profiles by IDs into a Map for efficient lookups
   private async loadProfileMap(em: EntityManager, userIds: string[]): Promise<Map<string, Profile>> {
     const uniqueIds = [...new Set(userIds.filter(Boolean))];
@@ -1448,20 +1487,15 @@ export class TeamsService {
       };
     }
 
-    // Build competition results query with optional season filter
-    const resultsQuery: any = {
-      competitorId: { $in: memberUserIds },
-    };
-
-    // If seasonId is provided, filter at the query level for efficiency
-    if (seasonId) {
-      resultsQuery.event = { season: { id: seasonId } };
-    }
+    // Optional season filter, applied at the query level for efficiency.
+    // Results are matched by competitor_id OR member MECA ID — see
+    // findMemberResults (imported rows usually have NULL competitor_id).
+    const extraWhere: any = seasonId ? { event: { season: { id: seasonId } } } : {};
 
     // Get all competition results for team members
     let allResults: CompetitionResult[] = [];
     try {
-      allResults = await em.find(CompetitionResult, resultsQuery, {
+      allResults = await this.findMemberResults(em, memberUserIds, extraWhere, {
         populate: ['event', 'event.season'],
         orderBy: { score: 'DESC' },
       });
@@ -1630,13 +1664,17 @@ export class TeamsService {
     };
 
     // One query for ALL results (every season) — records come from the full
-    // set, everything else from the season-filtered subset.
+    // set, everything else from the season-filtered subset. Matched by
+    // competitor_id OR member MECA ID (see findMemberResults — imported rows
+    // usually have NULL competitor_id).
     let allResults: CompetitionResult[] = [];
     try {
-      allResults = await em.find(CompetitionResult, {
-        competitorId: { $in: memberUserIds },
-        needsClassReview: false,
-      }, { populate: ['event'] });
+      allResults = await this.findMemberResults(
+        em,
+        memberUserIds,
+        { needsClassReview: false },
+        { populate: ['event'] },
+      );
     } catch (queryErr: any) {
       this.logger.warn(`Failed to query results for team analytics ${teamId}: ${queryErr.message}`);
     }
@@ -1899,11 +1937,18 @@ export class TeamsService {
     // ---- Team rank among all teams by member points (season-scoped) ----
     let teamRank: { rank: number; totalTeams: number; points: number } | null = null;
     try {
+      // Results join by competitor_id OR the member's MECA ID —
+      // competitor_id is NULL on most imported rows, so joining on it alone
+      // undercounted every team's points (and ranked them wrong).
       const rankSql = `
         SELECT t.id, COALESCE(SUM(cr.points_earned), 0) AS pts
         FROM teams t
         JOIN team_members tm ON tm.team_id = t.id AND tm.status = 'active'
-        JOIN competition_results cr ON cr.competitor_id = tm.user_id
+        JOIN profiles p ON p.id = tm.user_id
+        JOIN competition_results cr ON (
+              cr.competitor_id = tm.user_id
+              OR (p.meca_id IS NOT NULL AND TRIM(cr.meca_id) = TRIM(p.meca_id::text))
+            )
           AND cr.needs_class_review = false
           ${seasonId ? 'AND cr.season_id = ?' : ''}
         WHERE t.is_active = true

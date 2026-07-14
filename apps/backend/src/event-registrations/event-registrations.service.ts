@@ -838,15 +838,23 @@ export class EventRegistrationsService {
     });
   }
 
-  async getStats(seasonId?: string): Promise<{ totalRegistrations: number }> {
+  async getStats(seasonId?: string): Promise<{ totalRegistrations: number; totalInterested: number }> {
     const em = this.em.fork();
     const where: any = {
       registrationStatus: { $nin: [ST_INTERESTED, ST_AWAITING] },
     };
     // Scope to a season via the registration's event → season link.
     if (seasonId) where.event = { season: seasonId };
-    const totalRegistrations = await em.count(EventRegistration, where);
-    return { totalRegistrations };
+    const [totalRegistrations, totalInterested] = await Promise.all([
+      em.count(EventRegistration, where),
+      // "Interested" clicks for UPCOMING events — a leading indicator of
+      // turnout, shown as its own admin dashboard card.
+      em.count(EventRegistration, {
+        registrationStatus: ST_INTERESTED,
+        event: { eventDate: { $gte: new Date() }, ...(seasonId ? { season: seasonId } : {}) },
+      }),
+    ]);
+    return { totalRegistrations, totalInterested };
   }
 
   async getCountByEvent(eventId: string): Promise<{ count: number }> {

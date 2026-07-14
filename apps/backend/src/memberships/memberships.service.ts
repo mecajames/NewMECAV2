@@ -3282,6 +3282,50 @@ export class MembershipsService {
   }
 
   /**
+   * Paid memberships created THIS CALENDAR MONTH, split into first-time
+   * purchases vs renewals (renewal = the buyer already had a membership row
+   * before this month). Powers the admin dashboard "Memberships (month)" card.
+   */
+  async getMonthlyMembershipStats(seasonStart?: string, seasonEnd?: string): Promise<{
+    newThisMonth: number;
+    renewalsThisMonth: number;
+    seasonTotal: number;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const [row] = await conn.execute(`
+      SELECT
+        COUNT(*) FILTER (WHERE NOT EXISTS (
+          SELECT 1 FROM memberships prev
+          WHERE prev.user_id = m.user_id AND prev.created_at < date_trunc('month', NOW())
+        ))::int AS new_count,
+        COUNT(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM memberships prev
+          WHERE prev.user_id = m.user_id AND prev.created_at < date_trunc('month', NOW())
+        ))::int AS renewal_count
+      FROM memberships m
+      WHERE m.created_at >= date_trunc('month', NOW())
+        AND m.payment_status = 'paid'
+    `);
+    // Season context: paid memberships created inside the season's date
+    // range (memberships aren't season-tagged, so the range is the scope).
+    // Without a range, all-time.
+    const hasRange = !!(seasonStart && seasonEnd);
+    const [seasonRow] = await conn.execute(
+      `SELECT COUNT(*)::int AS count
+         FROM memberships m
+        WHERE m.payment_status = 'paid'
+          ${hasRange ? 'AND m.created_at >= ? AND m.created_at <= ?' : ''}`,
+      hasRange ? [seasonStart, seasonEnd] : [],
+    );
+    return {
+      newThisMonth: row?.new_count || 0,
+      renewalsThisMonth: row?.renewal_count || 0,
+      seasonTotal: seasonRow?.count || 0,
+    };
+  }
+
+  /**
    * Admin "Record Payment" for a membership. Records a real payment (cash /
    * check / Stripe) and applies it with one of three MODES — works whatever the
    * current state (pending, paid, expired, or cancelled):

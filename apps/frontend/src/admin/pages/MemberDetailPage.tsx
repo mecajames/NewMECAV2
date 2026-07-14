@@ -8381,9 +8381,21 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                     )}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
-                    {result.createdAt || result.created_at
-                      ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
-                      : '-'}
+                    {(() => {
+                      // Show the EVENT's date (when they actually competed),
+                      // not the row's created_at (when the result was entered
+                      // — imports happen days later). Entry date is only the
+                      // fallback when the event record isn't loaded.
+                      const eventId = result.eventId || result.event_id;
+                      const event: any = result.event || eventsData[eventId || ''];
+                      const raw = event?.event_date || event?.eventDate || result.createdAt || result.created_at;
+                      if (!raw) return '-';
+                      // Date-only strings ("2026-07-12") parse as UTC midnight
+                      // and render a day early in US timezones — pin to local.
+                      const s = String(raw);
+                      const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+                      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+                    })()}
                   </td>
                   {canOverridePoints && (
                     <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">

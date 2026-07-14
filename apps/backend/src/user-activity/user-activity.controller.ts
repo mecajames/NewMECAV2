@@ -92,10 +92,11 @@ export class UserActivityController {
    * Get count of currently online users (active in last 30 min). Admin only.
    */
   @Get('online-count')
-  async getOnlineCount(@Req() req: Request): Promise<{ count: number }> {
+  async getOnlineCount(@Req() req: Request): Promise<{ count: number; peak: number }> {
     await this.requireAdmin(req);
-    const count = await this.userActivityService.getOnlineCount();
-    return { count };
+    // Also returns (and maintains) the all-time high-water mark for the
+    // admin dashboard "Currently Online X / peak Y" card.
+    return this.userActivityService.getOnlineStats();
   }
 
   /**

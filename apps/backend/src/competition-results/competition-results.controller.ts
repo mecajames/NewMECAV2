@@ -487,6 +487,19 @@ export class CompetitionResultsController {
   }
 
   /**
+   * Admin dashboard "Results" card: results entered + past events with no
+   * results yet (optionally season-scoped).
+   */
+  @Get('admin/dashboard-stats')
+  async getAdminDashboardStats(
+    @Headers('authorization') authHeader: string,
+    @Query('seasonId') seasonId?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.getAdminDashboardStats(seasonId || undefined);
+  }
+
+  /**
    * Admin-only — repoint one or more results to a specific class.
    * Used by the orphan-review page: admin sees an unresolvable
    * result, picks the correct class, this endpoint updates the

@@ -949,12 +949,22 @@ export class EventsService {
     };
   }
 
-  async getStats(seasonId?: string): Promise<{ totalEvents: number }> {
+  async getStats(seasonId?: string): Promise<{ totalEvents: number; upcomingEvents: number; totalAllTime: number }> {
     const em = this.em.fork();
     const where: any = {};
     if (seasonId) where.season = seasonId;
-    const totalEvents = await em.count(Event, where);
-    return { totalEvents };
+    const [totalEvents, upcomingEvents, totalAllTime] = await Promise.all([
+      em.count(Event, where),
+      // Events still LEFT (not yet run) in the scope — powers the admin
+      // dashboard "remaining / season total" pair.
+      em.count(Event, {
+        ...where,
+        eventDate: { $gte: new Date() },
+        status: { $nin: ['completed', 'cancelled'] },
+      }),
+      em.count(Event, {}),
+    ]);
+    return { totalEvents, upcomingEvents, totalAllTime };
   }
 
   // In-memory progress tracking for backfill jobs
