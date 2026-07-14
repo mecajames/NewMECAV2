@@ -2546,12 +2546,17 @@ export class CompetitionResultsService {
             });
 
             if (mapping?.targetClassId) {
-              const mappedClass = await em.findOne(CompetitionClass, { id: mapping.targetClassId });
-              if (mappedClass && (!eventSeasonId || mappedClass.seasonId === eventSeasonId)) {
+              // Follows the mapping's target into THIS event's season via the
+              // class lineage (format+abbreviation/name) — a mapping created
+              // last season keeps working instead of failing after rollover.
+              const mappedClass = await this.resolveMappingTargetForSeason(
+                em, mapping.targetClassId, competitionClasses, eventSeasonId,
+              );
+              if (mappedClass) {
                 classId = mappedClass.id;
                 console.log(`[IMPORT] Mapped "${result.class}" to class ID ${classId} via mapping table`);
               } else {
-                console.warn(`[IMPORT] Mapping for "${result.class}" targets a class outside this event's season - sending to admin review`);
+                console.warn(`[IMPORT] Mapping for "${result.class}" targets a class outside this event's season with no same-season lineage - sending to admin review`);
               }
             } else {
               // 3. Log unmapped class for admin attention
@@ -2811,12 +2816,15 @@ export class CompetitionResultsService {
         createdAt: r.createdAt.toISOString(),
         // Suggestion: even though public lookup couldn't fully match,
         // we may still have a near-miss (e.g. matched name but wrong
-        // format) admins can use as a shortcut.
+        // format) admins can use as a shortcut. ACTIVE classes only —
+        // suggesting an inactive class preselected a dead target in the
+        // link picker, and linking to it left the rows exactly as broken
+        // as before ("Link says completed but nothing changes").
         suggestedClass: (() => {
           const n = norm(r.competitionClass);
           if (!n) return null;
           const near = allClasses.find(c =>
-            norm(c.name) === n || norm(c.abbreviation) === n,
+            c.isActive && (norm(c.name) === n || norm(c.abbreviation) === n),
           );
           if (!near) return null;
           return {
@@ -2840,6 +2848,69 @@ export class CompetitionResultsService {
    * triggers (or, more reliably, the next update() / leaderboard
    * recompute) pick up the new class. Returns the count updated.
    */
+  /**
+   * Admin dashboard "Results" card: how many results are entered (season-
+   * scoped when a season is given) and how many PAST events are still
+   * waiting on results — an event that has run but has zero result rows.
+   */
+  async getAdminDashboardStats(seasonId?: string): Promise<{
+    totalResults: number;
+    pastEventsMissingResults: number;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const seasonClause = seasonId ? 'AND e.season_id = ?' : '';
+    const [resultsRow] = await conn.execute(
+      `SELECT COUNT(*)::int AS count
+         FROM competition_results cr
+         ${seasonId ? 'WHERE cr.season_id = ?' : ''}`,
+      seasonId ? [seasonId] : [],
+    );
+    const [missingRow] = await conn.execute(
+      `SELECT COUNT(*)::int AS count
+         FROM events e
+        WHERE e.event_date < CURRENT_DATE
+          AND e.status != 'cancelled'
+          ${seasonClause}
+          AND NOT EXISTS (SELECT 1 FROM competition_results cr WHERE cr.event_id = e.id)`,
+      seasonId ? [seasonId] : [],
+    );
+    return {
+      totalResults: resultsRow?.count || 0,
+      pastEventsMissingResults: missingRow?.count || 0,
+    };
+  }
+
+  /**
+   * Resolve a class-name mapping's stored target INTO an event's season.
+   * Classes are SEASON-SCOPED (new rows every season) but mappings are meant
+   * to be durable — "old-system name" → class LINEAGE. When the mapping's
+   * stored target belongs to another season, follow the lineage — same
+   * format + abbreviation (falling back to same name) — into the event's
+   * season. One mapping then keeps working season after season instead of
+   * silently failing every time a new season's classes are minted.
+   */
+  private async resolveMappingTargetForSeason(
+    em: EntityManager,
+    targetClassId: string,
+    seasonClasses: CompetitionClass[],
+    eventSeasonId: string | null | undefined,
+  ): Promise<CompetitionClass | null> {
+    const mapped = await em.findOne(CompetitionClass, { id: targetClassId });
+    if (!mapped) return null;
+    if (!eventSeasonId || mapped.seasonId === eventSeasonId) return mapped;
+    const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
+    const lineage =
+      seasonClasses.find(
+        (c) => c.isActive && norm(c.format) === norm(mapped.format) && norm(c.abbreviation) === norm(mapped.abbreviation),
+      ) ||
+      seasonClasses.find(
+        (c) => c.isActive && norm(c.format) === norm(mapped.format) && norm(c.name) === norm(mapped.name),
+      );
+    // Out-of-season with no lineage in this season → unmatched (admin review).
+    return lineage ?? null;
+  }
+
   async repointResultsToClass(resultIds: string[], classId: string): Promise<{ updated: number }> {
     if (!Array.isArray(resultIds) || resultIds.length === 0) {
       return { updated: 0 };
@@ -2849,7 +2920,22 @@ export class CompetitionResultsService {
     if (!targetClass) {
       throw new NotFoundException(`Target class ${classId} not found`);
     }
+    // Linking to an INACTIVE class is a silent no-op from the admin's point
+    // of view: the repoint "succeeds" but the rows stay broken/hidden (the
+    // orphan report only clears rows whose class is ACTIVE). Refuse loudly
+    // instead — this is exactly what made "Link N" appear to do nothing.
+    if (!targetClass.isActive) {
+      throw new BadRequestException(
+        `"${targetClass.name}" (${targetClass.format}) is INACTIVE — linking results to it would leave them hidden from ` +
+        `public results and standings. Reactivate that class on the Classes admin page, or pick an active class.`,
+      );
+    }
     const rows = await em.find(CompetitionResult, { id: { $in: resultIds } });
+    // Snapshot the original class text BEFORE overwriting it — used below to
+    // repair the import mapping so future imports of this name resolve too.
+    const sourceTexts = new Set(
+      rows.map((r) => (r.competitionClass || '').trim()).filter(Boolean),
+    );
     let updated = 0;
     for (const r of rows) {
       (r as any).competitionClassEntity = targetClass;
@@ -2862,6 +2948,26 @@ export class CompetitionResultsService {
       (r as any).needsClassReview = false;
       updated++;
     }
+
+    // ROOT-CAUSE REPAIR: if an active import mapping for this source name
+    // points at a dead (deleted/inactive) class, re-point the MAPPING at the
+    // class the admin just chose — otherwise every future import of the same
+    // name re-creates the exact same broken rows the admin just fixed.
+    for (const text of sourceTexts) {
+      const mapping = await em.findOne(ClassNameMapping, { sourceName: { $ilike: text }, isActive: true });
+      if (mapping && mapping.targetClassId !== targetClass.id) {
+        const mappedTarget = mapping.targetClassId
+          ? await em.findOne(CompetitionClass, { id: mapping.targetClassId })
+          : null;
+        if (!mappedTarget || !mappedTarget.isActive) {
+          this.logger.log(
+            `repointResultsToClass: repairing mapping "${mapping.sourceName}" → ${targetClass.name} (was ${mappedTarget ? 'inactive class ' + mappedTarget.name : 'a deleted class'})`,
+          );
+          mapping.targetClassId = targetClass.id;
+        }
+      }
+    }
+
     await em.flush();
     return { updated };
   }
@@ -3599,14 +3705,17 @@ export class CompetitionResultsService {
           if (foundClass) {
             classId = foundClass.id;
           } else {
-            // Mapped target must belong to this event's season too.
+            // Mapped target resolves into this event's season (following the
+            // class lineage across seasons — see resolveMappingTargetForSeason).
             const mapping = await em.findOne(ClassNameMapping, {
               sourceName: { $ilike: result.class },
               isActive: true,
             });
             if (mapping?.targetClassId) {
-              const mappedClass = await em.findOne(CompetitionClass, { id: mapping.targetClassId });
-              if (mappedClass && (!eventSeasonId || mappedClass.seasonId === eventSeasonId)) {
+              const mappedClass = await this.resolveMappingTargetForSeason(
+                em, mapping.targetClassId, competitionClasses, eventSeasonId,
+              );
+              if (mappedClass) {
                 classId = mappedClass.id;
               }
             }

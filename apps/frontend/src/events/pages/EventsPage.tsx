@@ -726,6 +726,11 @@ export default function EventsPage() {
                             <span className="text-gray-400">Event Director:</span>{' '}
                             {(event as any).event_director.name}
                           </div>
+                          {/* ED email shows ONLY when the director opted in
+                              ("show my email on my events" in their ED
+                              dashboard) — the backend omits it otherwise.
+                              Site policy: no emails on public pages without
+                              the owner's explicit choice. */}
                           {((event as any).event_director.email || (event as any).event_director.phone) && (
                             <div className="text-xs sm:text-sm text-gray-400 break-all">
                               {(event as any).event_director.email && (

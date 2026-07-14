@@ -134,15 +134,12 @@ export default function MaintenanceModeGuard({ children }: MaintenanceModeGuardP
                   : 'We apologize for any inconvenience. Our team is working hard to improve your experience.'}
               </p>
 
+              {/* No email addresses on public pages (anti-scrape policy) —
+                  point to our social channels while the site is down. */}
               <div className="border-t border-slate-700 pt-4">
                 <p className="text-center text-xs">
-                  If you need immediate assistance, please contact us at{' '}
-                  <a
-                    href="mailto:support@mecacaraudio.com"
-                    className={`hover:opacity-80 ${isComingSoon ? 'text-blue-400' : 'text-orange-400'}`}
-                  >
-                    support@mecacaraudio.com
-                  </a>
+                  If you need immediate assistance, please reach out to us on our official
+                  MECA social media channels — we&apos;ll respond as soon as possible.
                 </p>
               </div>
             </div>

@@ -44,7 +44,7 @@ export default function AuthCallbackPage() {
         doRedirect(resolveRedirect());
       } catch (err) {
         console.error('Profile setup during callback failed:', err);
-        setError('We could not finish setting up your account. Please contact support at mecacaraudio@gmail.com.');
+        setError('We could not finish setting up your account. Please reach out through the contact form at mecacaraudio.com/contact and our team will assist you.');
         await supabase.auth.signOut();
       }
     };

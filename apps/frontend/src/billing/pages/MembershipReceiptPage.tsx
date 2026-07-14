@@ -234,9 +234,9 @@ export default function MembershipReceiptPage() {
           {/* Footer */}
           <div className="p-6 sm:p-8 bg-slate-900/40">
             <p className="text-xs text-gray-500">
-              For questions about this receipt, contact{' '}
-              <a href="mailto:billing@mecacaraudio.com" className="text-orange-400 hover:text-orange-300">
-                billing@mecacaraudio.com
+              For questions about this receipt, contact us through the{' '}
+              <a href="/member-support" className="text-orange-400 hover:text-orange-300">
+                MECA Support Desk
               </a>
               .
             </p>

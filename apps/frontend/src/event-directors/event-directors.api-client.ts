@@ -103,6 +103,8 @@ export interface EventDirector {
   city: string;
   specialized_formats: string[];
   is_active: boolean;
+  /** ED opt-in: show their email on their events on the public calendar (default false). */
+  show_email_publicly?: boolean;
   approved_date?: string;
   total_events_directed: number;
   average_rating?: number;
@@ -258,6 +260,26 @@ export async function getMyEventDirectorProfile(): Promise<EventDirector | null>
     console.warn('Error fetching event director profile:', error);
     return null;
   }
+}
+
+/**
+ * ED self-service settings: toggle whether the ED's email shows on their
+ * events on the public calendar (default off — site policy is no emails on
+ * public pages unless the director opts in).
+ */
+export async function updateMyEventDirectorSettings(settings: { show_email_publicly: boolean }): Promise<EventDirector> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/me/settings`, {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => null);
+    throw new Error(err?.message || 'Failed to update your settings');
+  }
+  const result = await response.json();
+  return result?.data !== undefined ? result.data : result;
 }
 
 // =============================================================================

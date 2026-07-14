@@ -268,9 +268,9 @@ export function GuestSupportPage() {
                     There's an issue with this account
                   </h2>
                   <p className="text-gray-400 mb-6">
-                    We're unable to process automated support for this account. Please email{' '}
-                    <a href="mailto:support@mecacaraudio.com" className="text-orange-400 hover:text-orange-300">
-                      support@mecacaraudio.com
+                    We're unable to process automated support for this account. Please use the{' '}
+                    <a href="/contact" className="text-orange-400 hover:text-orange-300">
+                      contact form
                     </a>{' '}
                     and our team will assist you.
                   </p>

@@ -125,6 +125,12 @@ export interface CreateMembershipDto {
   amountPaid: number;
   stripePaymentIntentId?: string;
   transactionId?: string;
+  // Private member details captured at checkout (stored on the PROFILE, not
+  // the membership): birthday (fill-if-empty), merch/award sizes (overwrite —
+  // sizes change). Admin-visible + member-editable only; never public.
+  birthday?: string; // YYYY-MM-DD
+  tshirtSize?: string;
+  ringSize?: string;
   // Competitor info
   competitorName?: string;
   vehicleLicensePlate?: string;
@@ -1015,6 +1021,24 @@ export class MembershipsService {
       });
     } catch (err) {
       this.logger.error(`Profile back-fill from billing failed for ${data.userId}:`, err);
+    }
+
+    // Private member details captured at checkout → PROFILE. Sizes always
+    // update to the freshest value (people's sizes change between renewals);
+    // birthday only fills if empty (it doesn't change — don't let a typo at
+    // checkout clobber a correct value).
+    if (data.birthday || data.tshirtSize || data.ringSize) {
+      try {
+        const buyer = await em.findOne(Profile, { id: data.userId });
+        if (buyer) {
+          if (data.birthday && !buyer.birthday) buyer.birthday = data.birthday;
+          if (data.tshirtSize) buyer.tshirt_size = data.tshirtSize;
+          if (data.ringSize) buyer.ring_size = data.ringSize;
+          await em.flush();
+        }
+      } catch (err) {
+        this.logger.error(`Profile sizes/birthday save from checkout failed for ${data.userId}:`, err);
+      }
     }
 
     // Sync profile membership status to ACTIVE
@@ -3254,6 +3278,50 @@ export class MembershipsService {
       orderId: order.id,
       invoiceId: invoice.id,
       message: `Recorded ${data.paymentMethod.toUpperCase()} payment of $${totalAmount.toFixed(2)}.`,
+    };
+  }
+
+  /**
+   * Paid memberships created THIS CALENDAR MONTH, split into first-time
+   * purchases vs renewals (renewal = the buyer already had a membership row
+   * before this month). Powers the admin dashboard "Memberships (month)" card.
+   */
+  async getMonthlyMembershipStats(seasonStart?: string, seasonEnd?: string): Promise<{
+    newThisMonth: number;
+    renewalsThisMonth: number;
+    seasonTotal: number;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+    const [row] = await conn.execute(`
+      SELECT
+        COUNT(*) FILTER (WHERE NOT EXISTS (
+          SELECT 1 FROM memberships prev
+          WHERE prev.user_id = m.user_id AND prev.created_at < date_trunc('month', NOW())
+        ))::int AS new_count,
+        COUNT(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM memberships prev
+          WHERE prev.user_id = m.user_id AND prev.created_at < date_trunc('month', NOW())
+        ))::int AS renewal_count
+      FROM memberships m
+      WHERE m.created_at >= date_trunc('month', NOW())
+        AND m.payment_status = 'paid'
+    `);
+    // Season context: paid memberships created inside the season's date
+    // range (memberships aren't season-tagged, so the range is the scope).
+    // Without a range, all-time.
+    const hasRange = !!(seasonStart && seasonEnd);
+    const [seasonRow] = await conn.execute(
+      `SELECT COUNT(*)::int AS count
+         FROM memberships m
+        WHERE m.payment_status = 'paid'
+          ${hasRange ? 'AND m.created_at >= ? AND m.created_at <= ?' : ''}`,
+      hasRange ? [seasonStart, seasonEnd] : [],
+    );
+    return {
+      newThisMonth: row?.new_count || 0,
+      renewalsThisMonth: row?.renewal_count || 0,
+      seasonTotal: seasonRow?.count || 0,
     };
   }
 

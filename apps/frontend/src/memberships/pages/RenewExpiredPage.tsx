@@ -22,14 +22,16 @@ export default function RenewExpiredPage() {
             get you back competing.
           </p>
 
+          {/* No email addresses on public pages (anti-scrape policy) — the
+              support desk / contact form is the renewal-help channel. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
-            <a
-              href="mailto:memberships@mecacaraudio.com"
+            <Link
+              to="/member-support"
               className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-medium px-5 py-3 rounded-lg transition-colors"
             >
               <Mail className="w-4 h-4" />
-              memberships@mecacaraudio.com
-            </a>
+              MECA Support Desk
+            </Link>
             <Link
               to="/contact"
               className="inline-flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-medium px-5 py-3 rounded-lg transition-colors"

@@ -92,7 +92,10 @@ export function ClassPicker({
         }}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
       >
-        <span className={`truncate text-left ${selected ? '' : 'text-gray-400'}`}>
+        <span
+          className={`truncate text-left ${selected ? '' : 'text-gray-400'}`}
+          title={selected ? label : undefined}
+        >
           {selected ? label : placeholder}
         </span>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -105,7 +108,7 @@ export function ClassPicker({
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            width: Math.max(pos.width, 320),
+            width: Math.max(pos.width, 400),
           }}
           className="z-[100] bg-slate-800 border border-slate-600 rounded-lg shadow-2xl overflow-hidden"
         >
@@ -138,10 +141,15 @@ export function ClassPicker({
             ) : (
               filtered.map((c) => {
                 const isSel = c.id === value;
+                const fullLabel = `[${c.format}] ${c.name} (${c.abbreviation})${!c.is_active ? ' · inactive' : ''}`;
                 return (
                   <button
                     key={c.id}
                     type="button"
+                    // Native tooltip: long class names truncate, and similar
+                    // names ("Dueling Demos Modified Street 1/2/3") become
+                    // indistinguishable — hover shows the full label.
+                    title={fullLabel}
                     onClick={() => {
                       onChange(c.id);
                       setOpen(false);
@@ -156,10 +164,15 @@ export function ClassPicker({
                     ) : (
                       <span className="h-3.5 w-3.5 flex-shrink-0" />
                     )}
-                    <span className="truncate">
-                      <span className="text-gray-400">[{c.format}]</span> {c.name}{' '}
-                      <span className="text-gray-500">({c.abbreviation})</span>
-                      {!c.is_active && <span className="text-red-400 text-xs"> · inactive</span>}
+                    {/* Only the NAME truncates — the abbreviation (the part
+                        that actually tells near-identical classes apart)
+                        stays pinned and always visible on the right. */}
+                    <span className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                      <span className="truncate">
+                        <span className="text-gray-400">[{c.format}]</span> {c.name}
+                      </span>
+                      <span className="text-gray-500 flex-shrink-0">({c.abbreviation})</span>
+                      {!c.is_active && <span className="text-red-400 text-xs flex-shrink-0">· inactive</span>}
                     </span>
                   </button>
                 );

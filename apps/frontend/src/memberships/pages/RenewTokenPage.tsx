@@ -390,7 +390,7 @@ export default function RenewTokenPage() {
               </button>
               {!isStripeReady && (
                 <p className="text-xs text-red-400 mt-2">
-                  Stripe is not configured. Contact memberships@mecacaraudio.com to renew.
+                  Stripe is not configured. Please use the contact form on our website to renew.
                 </p>
               )}
             </>

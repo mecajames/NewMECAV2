@@ -295,13 +295,15 @@ export const profilesApi = {
   },
 
   /**
-   * Gets member statistics including orders, events, trophies, and activity (admin only)
+   * Gets member statistics including orders, events, trophies, and activity (admin only).
+   * Pass seasonId to scope orders/spend/events/trophies to one season.
    */
-  getMemberStats: async (userId: string, authToken: string): Promise<MemberStats> => {
+  getMemberStats: async (userId: string, authToken: string, seasonId?: string): Promise<MemberStats> => {
     const response = await axios.get(`/api/profiles/${userId}/stats`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
       },
+      params: seasonId ? { seasonId } : {},
     });
     return response.data;
   },

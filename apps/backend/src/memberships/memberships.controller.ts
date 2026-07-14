@@ -1106,6 +1106,20 @@ export class MembershipsController {
    * This syncs profile.membership_status with actual membership end_dates.
    * Normally runs automatically at 1:00 AM daily.
    */
+  /**
+   * Admin: paid memberships created this calendar month, split new vs
+   * renewals — for the admin dashboard stat card.
+   */
+  @Get('admin/month-stats')
+  async getMonthlyMembershipStats(
+    @Headers('authorization') authHeader: string,
+    @Query('seasonStart') seasonStart?: string,
+    @Query('seasonEnd') seasonEnd?: string,
+  ): Promise<{ newThisMonth: number; renewalsThisMonth: number; seasonTotal: number }> {
+    await this.requireAdmin(authHeader);
+    return this.membershipsService.getMonthlyMembershipStats(seasonStart || undefined, seasonEnd || undefined);
+  }
+
   @Post('admin/sync-membership-statuses')
   @HttpCode(HttpStatus.OK)
   async syncMembershipStatuses(

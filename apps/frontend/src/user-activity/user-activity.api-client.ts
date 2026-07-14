@@ -116,6 +116,12 @@ export const userActivityApi = {
     return data.count;
   },
 
+  /** Current online count + all-time peak (admin dashboard card) */
+  getOnlineStats: async (): Promise<{ count: number; peak: number }> => {
+    const { data } = await axios.get<{ count: number; peak?: number }>('/api/user-activity/online-count');
+    return { count: data.count ?? 0, peak: data.peak ?? data.count ?? 0 };
+  },
+
   /** Get list of online user IDs (admin) */
   getOnlineUsers: async (): Promise<string[]> => {
     const { data } = await axios.get<{ userIds: string[] }>('/api/user-activity/online-users');

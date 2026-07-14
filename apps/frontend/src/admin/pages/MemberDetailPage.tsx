@@ -53,6 +53,7 @@ import { permissionsApi, type Role } from '@/api-client/permissions.api-client';
 import { notificationsApi } from '@/notifications/notifications.api-client';
 import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '../../utils/countries';
+import { TSHIRT_SIZES, RING_SIZES } from '@/shared/memberSizes';
 import {
   adminGetRetailerByUserId,
   adminGetManufacturerByUserId,
@@ -1802,9 +1803,34 @@ function OverviewTab({
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
 
+  // Season scope for the stat cards. Defaults to the current season;
+  // '' = View All (all-time). Stats wait for seasons so the first fetch is
+  // already current-season instead of flashing all-time numbers.
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonId, setSeasonId] = useState('');
+  const [seasonsLoaded, setSeasonsLoaded] = useState(false);
+
   useEffect(() => {
+    const loadSeasons = async () => {
+      try {
+        const seasonsData = await seasonsApi.getAll();
+        setSeasons(seasonsData);
+        const currentSeason = seasonsData.find((s: Season) => s.is_current);
+        if (currentSeason) setSeasonId(currentSeason.id);
+      } catch (err) {
+        console.error('Error fetching seasons for overview:', err);
+      } finally {
+        setSeasonsLoaded(true);
+      }
+    };
+    loadSeasons();
+  }, []);
+
+  useEffect(() => {
+    if (!seasonsLoaded) return;
     fetchOverviewData();
-  }, [member.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member.id, seasonId, seasonsLoaded]);
 
   const fetchOverviewData = async () => {
     setStatsLoading(true);
@@ -1818,7 +1844,7 @@ function OverviewTab({
       }
 
       // Fetch member stats from the backend API
-      const memberStats = await profilesApi.getMemberStats(member.id, session.access_token);
+      const memberStats = await profilesApi.getMemberStats(member.id, session.access_token, seasonId || undefined);
 
       setStats({
         totalOrders: memberStats.totalOrders,
@@ -1899,7 +1925,21 @@ function OverviewTab({
         </div>
       )}
 
-      <h2 className="text-2xl font-bold text-white mb-6">Overview</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h2 className="text-2xl font-bold text-white">Overview</h2>
+        <select
+          value={seasonId}
+          onChange={(e) => setSeasonId(e.target.value)}
+          className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent cursor-pointer"
+        >
+          {seasons.map(season => (
+            <option key={season.id} value={season.id}>
+              {season.name} {season.is_current ? '(Current)' : ''}
+            </option>
+          ))}
+          <option value="">View All</option>
+        </select>
+      </div>
 
       {/* Stats Error */}
       {statsError && (
@@ -1936,7 +1976,7 @@ function OverviewTab({
           </div>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
-          <div className="text-sm text-gray-400 mb-1">Lifetime Value</div>
+          <div className="text-sm text-gray-400 mb-1">{seasonId ? 'Season Value' : 'Lifetime Value'}</div>
           <div className="text-xl font-bold text-white">
             {statsLoading ? <span className="animate-pulse">...</span> : `$${stats.totalSpent.toFixed(2)}`}
           </div>
@@ -2762,6 +2802,8 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
     last_name: member.last_name,
     phone: member.phone || '',
     birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
+    tshirt_size: (member as any).tshirt_size || '',
+    ring_size: (member as any).ring_size || '',
     meca_id: member.meca_id ? String(member.meca_id) : '',
     role: member.role,
     membership_status: member.membership_status,
@@ -2825,6 +2867,8 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
       last_name: member.last_name,
       phone: member.phone || '',
       birthday: (member as any).birthday ? String((member as any).birthday).slice(0, 10) : '',
+      tshirt_size: (member as any).tshirt_size || '',
+      ring_size: (member as any).ring_size || '',
       meca_id: member.meca_id ? String(member.meca_id) : '',
       role: member.role,
       membership_status: member.membership_status,
@@ -2982,6 +3026,44 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
                   ? new Date(String((member as any).birthday).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                   : 'Not set'}
               </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              T-Shirt Size <span className="text-gray-500 text-xs">(private — event merch / World Finals)</span>
+            </label>
+            {isEditing ? (
+              <select
+                value={formData.tshirt_size}
+                onChange={(e) => setFormData({ ...formData, tshirt_size: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Not set</option>
+                {TSHIRT_SIZES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{(member as any).tshirt_size || 'Not set'}</div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Ring Size <span className="text-gray-500 text-xs">(private — World Finals rings)</span>
+            </label>
+            {isEditing ? (
+              <select
+                value={formData.ring_size}
+                onChange={(e) => setFormData({ ...formData, ring_size: e.target.value })}
+                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Not set</option>
+                {RING_SIZES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">{(member as any).ring_size || 'Not set'}</div>
             )}
           </div>
           <div>
@@ -8159,10 +8241,19 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
     );
   }
 
-  // Calculate totals (from all results, not filtered)
-  const totalPoints = results.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
-  const totalEvents = new Set(results.map(r => r.eventId || r.event_id)).size;
-  const firstPlaceCount = results.filter(r => r.placement === 1).length;
+  // Summary cards follow the season filter (defaults to current season).
+  // Search/country/state narrow the table only, not the overview.
+  const seasonResults = filters.seasonId
+    ? results.filter(r => {
+        const eventId = r.eventId || r.event_id;
+        const event = r.event || eventsData[eventId || ''];
+        const resultSeasonId = r.seasonId || r.season_id || event?.season_id || event?.seasonId;
+        return resultSeasonId === filters.seasonId;
+      })
+    : results;
+  const totalPoints = seasonResults.reduce((sum, r) => sum + (r.pointsEarned || r.points_earned || 0), 0);
+  const totalEvents = new Set(seasonResults.map(r => r.eventId || r.event_id)).size;
+  const firstPlaceCount = seasonResults.filter(r => r.placement === 1).length;
 
   return (
     <div>
@@ -8172,7 +8263,7 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-slate-700 rounded-lg p-4">
           <p className="text-gray-400 text-sm">Total Results</p>
-          <p className="text-2xl font-bold text-white">{results.length}</p>
+          <p className="text-2xl font-bold text-white">{seasonResults.length}</p>
         </div>
         <div className="bg-slate-700 rounded-lg p-4">
           <p className="text-gray-400 text-sm">Events Competed</p>
@@ -8338,9 +8429,21 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                     )}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
-                    {result.createdAt || result.created_at
-                      ? new Date(result.createdAt || result.created_at!).toLocaleDateString()
-                      : '-'}
+                    {(() => {
+                      // Show the EVENT's date (when they actually competed),
+                      // not the row's created_at (when the result was entered
+                      // — imports happen days later). Entry date is only the
+                      // fallback when the event record isn't loaded.
+                      const eventId = result.eventId || result.event_id;
+                      const event: any = result.event || eventsData[eventId || ''];
+                      const raw = event?.event_date || event?.eventDate || result.createdAt || result.created_at;
+                      if (!raw) return '-';
+                      // Date-only strings ("2026-07-12") parse as UTC midnight
+                      // and render a day early in US timezones — pin to local.
+                      const s = String(raw);
+                      const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+                      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+                    })()}
                   </td>
                   {canOverridePoints && (
                     <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">

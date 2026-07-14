@@ -598,9 +598,10 @@ export class ProfilesController {
   async getMemberStats(
     @Param('id') id: string,
     @Headers('authorization') authHeader: string,
+    @Query('seasonId') seasonId?: string,
   ) {
     await this.requireAdmin(authHeader);
-    return this.memberStatsService.getMemberStats(id);
+    return this.memberStatsService.getMemberStats(id, seasonId || undefined);
   }
 
   // ===== Judge and Event Director Permission Endpoints =====

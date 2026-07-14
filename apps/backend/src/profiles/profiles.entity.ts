@@ -33,6 +33,16 @@ export class Profile {
   @Property({ type: 'date', nullable: true })
   birthday?: string;
 
+  // PRIVATE merch/award sizes — collected at membership checkout (optional)
+  // and editable in the member's own profile. Admin-visible only, never
+  // public. tshirt_size drives event merch planning + World Finals packages;
+  // ring_size drives World Finals championship rings for qualifiers.
+  @Property({ type: 'text', nullable: true, fieldName: 'tshirt_size' })
+  tshirt_size?: string;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'ring_size' })
+  ring_size?: string;
+
   @Property({ type: 'text', nullable: true })
   address?: string;
 

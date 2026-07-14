@@ -208,19 +208,14 @@ export default function ManufacturerPartnerInfoPage() {
           <p className="text-gray-400 mb-6">
             Have questions before applying? Feel free to reach out to us directly.
           </p>
+          {/* No email addresses on public pages (anti-scrape policy) — route
+              all inquiries through the contact form / support desk. */}
           <div className="flex flex-wrap justify-center gap-6">
-            <a
-              href="mailto:support@mecacaraudio.com"
-              className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition-colors"
-            >
-              <Mail className="h-5 w-5" />
-              support@mecacaraudio.com
-            </a>
             <button
               onClick={() => navigate('/contact')}
               className="flex items-center gap-2 text-orange-400 hover:text-orange-300 transition-colors"
             >
-              <Phone className="h-5 w-5" />
+              <Mail className="h-5 w-5" />
               Contact Us
             </button>
           </div>
