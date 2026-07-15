@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import AdminDashboard from '@/dashboard/components/AdminDashboard';
 
-export default function AdminDashboardPage() {
+export default function AdminDashboardPage({ initialView }: { initialView?: 'hosting-requests' } = {}) {
   const navigate = useNavigate();
   const { profile, loading } = useAuth();
 
@@ -46,5 +46,5 @@ export default function AdminDashboardPage() {
     );
   }
 
-  return <AdminDashboard />;
+  return <AdminDashboard initialView={initialView} />;
 }
