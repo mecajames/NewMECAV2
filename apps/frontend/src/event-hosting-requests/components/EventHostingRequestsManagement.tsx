@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import {
   eventHostingRequestsApi,
@@ -112,6 +113,22 @@ export default function EventHostingRequestsManagement() {
     fetchAvailableEDs();
     fetchCompetitionFormats();
   }, [statusFilter]);
+
+  // Deep-link support: /admin/hosting-requests?id=<requestId> (used by the
+  // "New Event Hosting Request" admin notifications) opens that request's
+  // detail directly. Fetched by id so it works even if the request isn't in
+  // the current list page/filter.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const deepLinkId = searchParams.get('id');
+    if (!deepLinkId) return;
+    eventHostingRequestsApi
+      .getById(deepLinkId)
+      .then((req) => setSelectedRequest(req))
+      .catch((err) => console.error('Error loading deep-linked hosting request:', err));
+    // Run once on mount — later in-page selection must not be overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (selectedRequest) {

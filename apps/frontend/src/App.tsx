@@ -372,6 +372,10 @@ function App() {
               <Route path="/support/guest/access/:token" element={<L><GuestTicketAccessPage /></L>} />
 
               {/* Admin Routes */}
+              {/* Deep link used by "New Event Hosting Request" notifications —
+                  opens the admin dashboard on the Event Request Admin view;
+                  ?id=<requestId> auto-selects that request. */}
+              <Route path="/admin/hosting-requests" element={<L><AdminDashboardPage initialView="hosting-requests" /></L>} />
               <Route path="/admin/members" element={<L><MembersPage /></L>} />
               <Route path="/admin/name-mismatches" element={<L><NameMismatchReportPage /></L>} />
               <Route path="/admin/event-director-revenue" element={<L><EventDirectorRevenuePage /></L>} />

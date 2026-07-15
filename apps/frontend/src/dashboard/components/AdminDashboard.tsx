@@ -52,11 +52,13 @@ interface AdminSection {
   actions: AdminAction[];
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ initialView }: { initialView?: AdminView } = {}) {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const viewerIsSuperAdmin = isSuperAdmin(profile as any);
-  const [currentView, setCurrentView] = useState<AdminView>('overview');
+  // initialView lets deep-link routes (e.g. /admin/hosting-requests, used by
+  // notification links) open the dashboard directly on an internal view.
+  const [currentView, setCurrentView] = useState<AdminView>(initialView ?? 'overview');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalUsers: 0,
