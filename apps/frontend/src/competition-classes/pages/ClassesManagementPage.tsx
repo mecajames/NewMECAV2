@@ -337,9 +337,11 @@ export default function ClassesManagementPage() {
       }
       resetForm();
       fetchClasses();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving class:', error);
-      alert('Failed to save class. Please try again.');
+      // Surface the server's actual reason (e.g. duplicate name+format in
+      // this season) instead of a generic failure message.
+      alert(error?.response?.data?.message || 'Failed to save class. Please try again.');
     }
   };
 
@@ -367,9 +369,9 @@ export default function ClassesManagementPage() {
       await competitionClassesApi.delete(id);
       alert('Class deleted successfully!');
       fetchClasses();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting class:', error);
-      alert('Failed to delete class. Please try again.');
+      alert(error?.response?.data?.message || 'Failed to delete class. Please try again.');
     }
   };
 
