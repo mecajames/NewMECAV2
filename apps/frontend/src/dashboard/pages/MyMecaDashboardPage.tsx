@@ -3580,6 +3580,29 @@ export default function MyMecaDashboardPage() {
     );
   };
 
+  // Helper to detect format from result - checks multiple fields. Shared by
+  // the Results table (Format column) and the Analytics tab aggregations.
+  const getResultFormat = (r: any): string => {
+    // Check direct format field first (may exist on some results)
+    if ((r as any).format) return (r as any).format;
+
+    // Check class.format (from joined CompetitionClass)
+    if (r.class?.format) return r.class.format;
+
+    // Check event.format
+    if (r.event?.format) return r.event.format;
+
+    // Try to extract from competition_class string (e.g., "SPL Street", "SQL Amateur")
+    const classStr = (r.competition_class || '').toUpperCase();
+    if (classStr.includes('SPL')) return 'SPL';
+    if (classStr.includes('SQL') || classStr.includes('SQ')) return 'SQL';
+    if (classStr.includes('SHOW') || classStr.includes('SHINE')) return 'Show and Shine';
+    if (classStr.includes('RIDE') || classStr.includes('LIGHT')) return 'Ride the Light';
+
+    // Default to SPL if we can't determine (most common format)
+    return 'SPL';
+  };
+
   const renderResults = () => {
     // Get unique states from results for filter dropdown
     const availableResultsStates = [...new Set(
@@ -3665,7 +3688,9 @@ export default function MyMecaDashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-700">
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Date</th>
                   <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Event</th>
+                  <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Format</th>
                   <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Class</th>
                   <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Score</th>
                   <th className="text-center py-3 px-4 text-gray-400 font-medium text-sm">Place</th>
@@ -3678,12 +3703,13 @@ export default function MyMecaDashboardPage() {
                 {filteredResultsData.map((result) => (
                   <React.Fragment key={result.id}>
                     <tr className="border-b border-slate-700/50 hover:bg-slate-700/30">
-                      <td className="py-3 px-4">
-                        <div>
-                          <p className="text-white font-medium">{result.event?.title}</p>
-                          <p className="text-gray-400 text-sm">{result.event && new Date(result.event.event_date).toLocaleDateString()}</p>
-                        </div>
+                      <td className="py-3 px-4 text-gray-300 whitespace-nowrap">
+                        {result.event ? new Date(result.event.event_date).toLocaleDateString() : '—'}
                       </td>
+                      <td className="py-3 px-4">
+                        <p className="text-white font-medium">{result.event?.title}</p>
+                      </td>
+                      <td className="py-3 px-4 text-gray-300">{getResultFormat(result)}</td>
                       <td className="py-3 px-4 text-gray-300">{result.competition_class}</td>
                       <td className="py-3 px-4 text-gray-300">{result.score}</td>
                       <td className="py-3 px-4 text-center">
@@ -3721,14 +3747,14 @@ export default function MyMecaDashboardPage() {
                           url={`${window.location.origin}/results/member/${profile?.meca_id || ''}`}
                           title={`I placed ${result.placement}${result.placement === 1 ? 'st' : result.placement === 2 ? 'nd' : result.placement === 3 ? 'rd' : 'th'} in ${result.competition_class} at ${result.event?.title}! #MECA #CarAudio`}
                           variant="inline"
-                          platforms={['facebook']}
+                          platforms={['facebook', 'twitter', 'tiktok']}
                         />
                       </td>
                     </tr>
                     {/* Expanded Rating Panel */}
                     {expandedRatingEventId === result.event?.id && result.event && (
                       <tr>
-                        <td colSpan={7} className="p-0">
+                        <td colSpan={9} className="p-0">
                           <div className="bg-slate-700/50 p-4 border-b border-slate-600">
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-white font-semibold flex items-center gap-2">
@@ -3799,28 +3825,6 @@ export default function MyMecaDashboardPage() {
       }
       return true;
     });
-
-    // Helper to detect format from result - checks multiple fields
-    const getResultFormat = (r: any): string => {
-      // Check direct format field first (may exist on some results)
-      if ((r as any).format) return (r as any).format;
-
-      // Check class.format (from joined CompetitionClass)
-      if (r.class?.format) return r.class.format;
-
-      // Check event.format
-      if (r.event?.format) return r.event.format;
-
-      // Try to extract from competition_class string (e.g., "SPL Street", "SQL Amateur")
-      const classStr = (r.competition_class || '').toUpperCase();
-      if (classStr.includes('SPL')) return 'SPL';
-      if (classStr.includes('SQL') || classStr.includes('SQ')) return 'SQL';
-      if (classStr.includes('SHOW') || classStr.includes('SHINE')) return 'Show and Shine';
-      if (classStr.includes('RIDE') || classStr.includes('LIGHT')) return 'Ride the Light';
-
-      // Default to SPL if we can't determine (most common format)
-      return 'SPL';
-    };
 
     // Calculate format/category stats from filtered results data
     const formatStats = filteredResults.reduce((acc, r) => {

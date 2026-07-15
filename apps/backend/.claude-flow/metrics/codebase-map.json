@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-15T00:44:27.525Z",
+  "projectRoot": "E:\\MECA Oct 2025\\NewMECAV2\\apps\\backend",
+  "structure": {
+    "hasPackageJson": true,
+    "hasTsConfig": true,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1784076267525
+}

@@ -209,7 +209,7 @@ export class MemberAnalyticsService {
          FROM member_page_views
          WHERE viewed_at >= ?
          GROUP BY page_path
-         ORDER BY views::int DESC
+         ORDER BY COUNT(*) DESC
          LIMIT 25`,
         [since],
       ),
@@ -222,7 +222,7 @@ export class MemberAnalyticsService {
          JOIN profiles p ON p.id = mpv.user_id
          WHERE mpv.viewed_at >= ?
          GROUP BY mpv.user_id, p.first_name, p.last_name, p.email, p.meca_id
-         ORDER BY views::int DESC
+         ORDER BY COUNT(*) DESC
          LIMIT 25`,
         [since],
       ),
@@ -232,7 +232,7 @@ export class MemberAnalyticsService {
          FROM member_page_views
          WHERE viewed_at >= ?
          GROUP BY browser_family
-         ORDER BY views::int DESC
+         ORDER BY COUNT(*) DESC
          LIMIT 10`,
         [since],
       ),
@@ -242,7 +242,7 @@ export class MemberAnalyticsService {
          FROM member_page_views
          WHERE viewed_at >= ?
          GROUP BY os_family
-         ORDER BY views::int DESC
+         ORDER BY COUNT(*) DESC
          LIMIT 10`,
         [since],
       ),
@@ -252,7 +252,7 @@ export class MemberAnalyticsService {
          FROM member_page_views
          WHERE viewed_at >= ?
          GROUP BY device_type
-         ORDER BY views::int DESC`,
+         ORDER BY COUNT(*) DESC`,
         [since],
       ),
     ]);

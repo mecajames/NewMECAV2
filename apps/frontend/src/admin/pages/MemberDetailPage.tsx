@@ -8370,39 +8370,57 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
 
       {/* Results Table */}
       <div className="bg-slate-700 rounded-lg overflow-x-auto">
-        <table className="min-w-[700px] w-full">
+        <table className="min-w-[820px] w-full">
           <thead className="bg-slate-600">
             <tr>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
               <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Event</th>
-              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Class</th>
               <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Format</th>
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Class</th>
               <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Score</th>
               <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Place</th>
               <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Points</th>
-              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Date</th>
               {canOverridePoints && (
                 <th className="px-3 sm:px-4 py-3 text-center text-sm font-medium text-gray-300">Points Tools</th>
               )}
+              <th className="px-3 sm:px-4 py-3 text-left text-sm font-medium text-gray-300">Entered</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-600">
             {filteredResults.length === 0 ? (
               <tr>
-                <td colSpan={canOverridePoints ? 8 : 7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={canOverridePoints ? 9 : 8} className="px-4 py-8 text-center text-gray-400">
                   No results match the current filters
                 </td>
               </tr>
             ) : (
               filteredResults.map((result) => (
                 <tr key={result.id} className="hover:bg-slate-600/50">
+                  <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                    {(() => {
+                      // Show the EVENT's date (when they actually competed),
+                      // not the row's created_at (when the result was entered
+                      // — imports happen days later). Entry date is only the
+                      // fallback when the event record isn't loaded.
+                      const eventId = result.eventId || result.event_id;
+                      const event: any = result.event || eventsData[eventId || ''];
+                      const raw = event?.event_date || event?.eventDate || result.createdAt || result.created_at;
+                      if (!raw) return '-';
+                      // Date-only strings ("2026-07-12") parse as UTC midnight
+                      // and render a day early in US timezones — pin to local.
+                      const s = String(raw);
+                      const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+                      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
+                    })()}
+                  </td>
                   <td className="px-3 sm:px-4 py-3 text-white whitespace-nowrap">
                     {result.event?.name || result.event?.title || eventMap[result.eventId || result.event_id || ''] || 'Unknown Event'}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-gray-300 whitespace-nowrap">
-                    {result.competitionClass || result.competition_class}
+                    {result.format || '-'}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-gray-300 whitespace-nowrap">
-                    {result.format || '-'}
+                    {result.competitionClass || result.competition_class}
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-center text-white font-medium whitespace-nowrap">
                     {result.score?.toFixed(2) || '-'}
@@ -8427,23 +8445,6 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                         <Lock className="h-2.5 w-2.5" /> manual
                       </span>
                     )}
-                  </td>
-                  <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
-                    {(() => {
-                      // Show the EVENT's date (when they actually competed),
-                      // not the row's created_at (when the result was entered
-                      // — imports happen days later). Entry date is only the
-                      // fallback when the event record isn't loaded.
-                      const eventId = result.eventId || result.event_id;
-                      const event: any = result.event || eventsData[eventId || ''];
-                      const raw = event?.event_date || event?.eventDate || result.createdAt || result.created_at;
-                      if (!raw) return '-';
-                      // Date-only strings ("2026-07-12") parse as UTC midnight
-                      // and render a day early in US timezones — pin to local.
-                      const s = String(raw);
-                      const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
-                      return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
-                    })()}
                   </td>
                   {canOverridePoints && (
                     <td className="px-3 sm:px-4 py-3 text-center whitespace-nowrap">
@@ -8503,6 +8504,22 @@ function CompetitionResultsTab({ member }: { member: Profile }) {
                       )}
                     </td>
                   )}
+                  <td className="px-3 sm:px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                    {(() => {
+                      // When the result row was ENTERED (created_at) and by
+                      // whom (created_by_name, resolved server-side) — distinct
+                      // from the Date column, which is when they competed.
+                      const raw = result.createdAt || result.created_at;
+                      const d = raw ? new Date(raw) : null;
+                      const entered = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : '-';
+                      return (
+                        <div>
+                          <p>{entered}</p>
+                          <p className="text-xs text-gray-500">{result.created_by_name || 'Unknown'}</p>
+                        </div>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))
             )}
