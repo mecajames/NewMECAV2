@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Ticket,
   Mail,
-  Phone,
   Globe,
   Award,
   Users,

@@ -738,11 +738,15 @@ export class CompetitionResultsService {
     if (idRows.length === 0) return [];
     const results = await em.find(CompetitionResult, { id: { $in: idRows.map(r => r.id) } }, {
       orderBy: { createdAt: 'DESC' },
-      populate: ['event'],
+      // creator = who entered the result (import/manual entry). The relation
+      // is hidden on the entity so toObject() only ever emits the resolved
+      // created_by_name string below — no profile fields leak to members.
+      populate: ['event', 'creator'],
     });
 
     return results.map(result => {
       const serialized = wrap(result).toObject() as any;
+      serialized.created_by_name = this.formatProfileName(result.creator) ?? null;
       if (result.event) {
         serialized.event = {
           id: result.event.id,

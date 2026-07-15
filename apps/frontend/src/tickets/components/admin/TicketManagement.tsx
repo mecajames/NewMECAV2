@@ -22,6 +22,7 @@ import {
   Eye,
   UserPlus,
   PauseCircle,
+  Inbox,
   Save,
   RotateCcw,
   Star,
@@ -653,6 +654,24 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
     setTimeout(() => setSavedFilterMsg(null), 2000);
   };
 
+  /**
+   * Clicking a stat card jumps the queue to exactly what that card counts,
+   * so the card's number and the table below always agree: clears the
+   * search box and every panel filter, then applies just the card's lens
+   * (a tab and/or an explicit status selection).
+   */
+  const jumpToStatView = (tab: typeof activeTab, statuses: TicketStatus[] = []) => {
+    setActiveTab(tab);
+    setSearchQuery('');
+    setStatusFilter(statuses);
+    setPriorityFilter([]);
+    setDepartmentFilter([]);
+    setAssigneeFilter([]);
+    setLastReplyFilter('');
+    setWaitingOnFilter('');
+    setPage(1);
+  };
+
   // True when anything deviates from the default view — gates the "Clear
   // filters" button so it only appears when there's actually something to
   // clear. Default = "All Open" tab with no explicit status selection.
@@ -736,34 +755,59 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
       {/* Stats Cards — one compact row. Cards share the width evenly and only
           wrap when the viewport is genuinely too narrow (e.g. mobile). Rare
           statuses are inserted only when present so the totals still reconcile.
-          Data-driven so a card's presence never pushes Avg Time onto a 2nd row. */}
+          Data-driven so a card's presence never pushes Avg Time onto a 2nd row.
+          Every status card is clickable and jumps the queue to exactly what it
+          counts. "Open" is the LIFECYCLE count (anything not resolved/closed —
+          same as the All Open tab and the table's Open badge); the raw
+          status === 'open' bucket surfaces as "In Queue" when non-empty.
+          Open + Resolved + Closed = Total. */}
       <div className="flex flex-wrap gap-3">
         {[
-          { show: true, label: 'Total', value: stats?.total ?? 0, Icon: BarChart3, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white' },
-          { show: true, label: 'Open', value: stats?.open ?? 0, Icon: AlertCircle, border: 'border-blue-500/30', accent: 'text-blue-400', val: 'text-blue-400' },
-          { show: true, label: 'In Progress', value: stats?.in_progress ?? 0, Icon: Clock, border: 'border-orange-500/30', accent: 'text-orange-400', val: 'text-orange-400' },
-          { show: true, label: 'Awaiting Response', value: stats?.awaiting_response ?? 0, Icon: MessageSquare, border: 'border-yellow-500/30', accent: 'text-yellow-400', val: 'text-yellow-400' },
-          { show: true, label: 'On Hold', value: stats?.on_hold ?? 0, Icon: PauseCircle, border: 'border-purple-500/30', accent: 'text-purple-400', val: 'text-purple-400' },
-          { show: true, label: 'Resolved', value: stats?.resolved ?? 0, Icon: CheckCircle, border: 'border-green-500/30', accent: 'text-green-400', val: 'text-green-400' },
-          // Closed — shown so the status cards add up to Total.
-          { show: true, label: 'Closed', value: stats?.closed ?? 0, Icon: XCircle, border: 'border-slate-600/50', accent: 'text-gray-300', val: 'text-gray-300' },
+          { show: true, label: 'Total', value: stats?.total ?? 0, Icon: BarChart3, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white', onClick: () => jumpToStatView('all') },
+          { show: true, label: 'Open', value: Math.max(0, (stats?.total ?? 0) - (stats?.resolved ?? 0) - (stats?.closed ?? 0)), Icon: AlertCircle, border: 'border-blue-500/30', accent: 'text-blue-400', val: 'text-blue-400', onClick: () => jumpToStatView('open') },
+          // In Queue — brand-new tickets nobody has grabbed yet (stored
+          // status 'open'); only when present, like the rare statuses.
+          { show: !!stats?.open, label: 'In Queue', value: stats?.open ?? 0, Icon: Inbox, border: 'border-sky-500/30', accent: 'text-sky-400', val: 'text-sky-400', onClick: () => jumpToStatView('all', ['open']) },
+          { show: true, label: 'In Progress', value: stats?.in_progress ?? 0, Icon: Clock, border: 'border-orange-500/30', accent: 'text-orange-400', val: 'text-orange-400', onClick: () => jumpToStatView('all', ['in_progress']) },
+          { show: true, label: 'Awaiting Response', value: stats?.awaiting_response ?? 0, Icon: MessageSquare, border: 'border-yellow-500/30', accent: 'text-yellow-400', val: 'text-yellow-400', onClick: () => jumpToStatView('all', ['awaiting_response']) },
+          { show: true, label: 'On Hold', value: stats?.on_hold ?? 0, Icon: PauseCircle, border: 'border-purple-500/30', accent: 'text-purple-400', val: 'text-purple-400', onClick: () => jumpToStatView('all', ['on_hold']) },
+          { show: true, label: 'Resolved', value: stats?.resolved ?? 0, Icon: CheckCircle, border: 'border-green-500/30', accent: 'text-green-400', val: 'text-green-400', onClick: () => jumpToStatView('all', ['resolved']) },
+          // Closed — shown so Open + Resolved + Closed add up to Total.
+          { show: true, label: 'Closed', value: stats?.closed ?? 0, Icon: XCircle, border: 'border-slate-600/50', accent: 'text-gray-300', val: 'text-gray-300', onClick: () => jumpToStatView('all', ['closed']) },
           // Rare statuses — only when present, so they don't clutter the row.
-          { show: !!stats?.escalated, label: 'Escalated', value: stats?.escalated ?? 0, Icon: AlertCircle, border: 'border-red-500/30', accent: 'text-red-400', val: 'text-red-400' },
-          { show: !!stats?.pending_internal_review, label: 'Pending Review', value: stats?.pending_internal_review ?? 0, Icon: Eye, border: 'border-indigo-500/30', accent: 'text-indigo-400', val: 'text-indigo-400' },
-          { show: !!stats?.reopened, label: 'Reopened', value: stats?.reopened ?? 0, Icon: RotateCcw, border: 'border-amber-500/30', accent: 'text-amber-400', val: 'text-amber-400' },
-          { show: !!stats?.uncategorized, label: 'Other status', value: stats?.uncategorized ?? 0, Icon: AlertCircle, border: 'border-pink-500/40', accent: 'text-pink-400', val: 'text-pink-400' },
-          { show: true, label: 'Avg Time', value: stats?.average_resolution_time_hours ? `${stats.average_resolution_time_hours}h` : 'N/A', Icon: TrendingUp, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white' },
+          { show: !!stats?.escalated, label: 'Escalated', value: stats?.escalated ?? 0, Icon: AlertCircle, border: 'border-red-500/30', accent: 'text-red-400', val: 'text-red-400', onClick: () => jumpToStatView('all', ['escalated']) },
+          { show: !!stats?.pending_internal_review, label: 'Pending Review', value: stats?.pending_internal_review ?? 0, Icon: Eye, border: 'border-indigo-500/30', accent: 'text-indigo-400', val: 'text-indigo-400', onClick: () => jumpToStatView('all', ['pending_internal_review']) },
+          { show: !!stats?.reopened, label: 'Reopened', value: stats?.reopened ?? 0, Icon: RotateCcw, border: 'border-amber-500/30', accent: 'text-amber-400', val: 'text-amber-400', onClick: () => jumpToStatView('all', ['reopened']) },
+          { show: !!stats?.uncategorized, label: 'Other status', value: stats?.uncategorized ?? 0, Icon: AlertCircle, border: 'border-pink-500/40', accent: 'text-pink-400', val: 'text-pink-400', onClick: undefined },
+          { show: true, label: 'Avg Time', value: stats?.average_resolution_time_hours ? `${stats.average_resolution_time_hours}h` : 'N/A', Icon: TrendingUp, border: 'border-slate-700', accent: 'text-gray-400', val: 'text-white', onClick: undefined },
         ]
           .filter((c) => c.show)
-          .map((c) => (
-            <div key={c.label} className={`flex-1 min-w-[104px] bg-slate-800 rounded-lg p-3 border ${c.border}`}>
-              <div className={`flex items-start gap-1.5 mb-1.5 min-h-[1.75rem] ${c.accent}`}>
-                <c.Icon className="w-4 h-4 shrink-0 mt-px" />
-                <span className="text-[10px] font-semibold uppercase tracking-wide leading-tight">{c.label}</span>
+          .map((c) => {
+            const inner = (
+              <>
+                <div className={`flex items-start gap-1.5 mb-1.5 min-h-[1.75rem] ${c.accent}`}>
+                  <c.Icon className="w-4 h-4 shrink-0 mt-px" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wide leading-tight">{c.label}</span>
+                </div>
+                <p className={`text-xl font-bold leading-none ${c.val}`}>{c.value}</p>
+              </>
+            );
+            return c.onClick ? (
+              <button
+                key={c.label}
+                type="button"
+                onClick={c.onClick}
+                title={`Show ${c.label.toLowerCase()} tickets`}
+                className={`flex-1 min-w-[104px] bg-slate-800 rounded-lg p-3 border ${c.border} text-left cursor-pointer transition-colors hover:bg-slate-700/80 focus:outline-none focus:ring-1 focus:ring-orange-500/60`}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={c.label} className={`flex-1 min-w-[104px] bg-slate-800 rounded-lg p-3 border ${c.border}`}>
+                {inner}
               </div>
-              <p className={`text-xl font-bold leading-none ${c.val}`}>{c.value}</p>
-            </div>
-          ))}
+            );
+          })}
       </div>
 
       {/* Priority Distribution */}

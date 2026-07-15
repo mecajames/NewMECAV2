@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 import { EntityManager, Reference } from '@mikro-orm/core';
 import { CompetitionClass } from './competition-classes.entity';
 import { CompetitionFormat } from '../competition-formats/competition-formats.entity';
@@ -57,6 +57,23 @@ export class CompetitionClassesService {
     const season = await em.findOne(Season, { id: seasonId });
     if (!season) {
       throw new NotFoundException(`Season with ID ${seasonId} not found`);
+    }
+
+    // Friendly pre-check for the (name, format, season) unique constraint —
+    // says WHICH class collides and whether it's just inactive (hidden from
+    // the default list), instead of the generic translated 409. The DB
+    // constraint remains the race-proof backstop.
+    const duplicate = await em.findOne(CompetitionClass, {
+      name: input.name,
+      format: input.format,
+      season,
+    });
+    if (duplicate) {
+      throw new ConflictException(
+        duplicate.isActive
+          ? `A class named "${input.name}" already exists for ${input.format} in this season.`
+          : `A class named "${input.name}" already exists for ${input.format} in this season, but it is INACTIVE (hidden from the active list). Edit and reactivate it instead of creating a duplicate.`,
+      );
     }
 
     const competitionClass = em.create(CompetitionClass, {
