@@ -5,6 +5,8 @@ import { TicketComment } from './ticket-comment.entity';
 import { sanitizeSignatureHtml } from './staff-signatures.service';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { TicketDepartment as TicketDepartmentEntity } from './entities/ticket-department.entity';
+import { TicketCategoryEntity } from './entities/ticket-category.entity';
+import { TicketStaff } from './entities/ticket-staff.entity';
 import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
@@ -801,27 +803,61 @@ export class TicketsService {
       submitterUserAgent: meta?.userAgent,
     };
 
-    // Department: prefer the one the submitter chose; otherwise fall back to
-    // what routing resolved from the category/keywords.
-    const chosenDepartmentId = (data as any).department_id || routingResult.departmentId;
+    // Department resolution:
+    //   1. A matched routing rule that names an ACTIVE department re-routes the
+    //      ticket — even over the submitter's choice (standard helpdesk triage,
+    //      e.g. "description contains 'refund' → Billing"). Inactive rule
+    //      targets (legacy pre-redesign rules) are ignored.
+    //   2. Otherwise the submitter's chosen department.
+    //   3. Otherwise whatever routing resolved (the default/fallback department).
+    const ruleDept = routingResult.matchedRule?.assignToDepartment;
+    const ruleDepartmentId = ruleDept?.isActive ? ruleDept.id : undefined;
+    const chosenDepartmentId =
+      ruleDepartmentId || (data as any).department_id || routingResult.departmentId;
     if (chosenDepartmentId) {
       ticketData.departmentEntity = Reference.createFromPK(TicketDepartmentEntity, chosenDepartmentId);
     }
 
-    // Set assigned staff from routing if available
+    // Resolve the assignee, first source that yields a usable person wins:
+    //   1. routing-rule staff (explicit "Assign to Staff" on a matched rule)
+    //   2. the category's auto-assign override
+    //   3. the department's default assignee
+    // Every lookup is guarded — assignment is a convenience and must NEVER
+    // block ticket creation (stale routing rules used to point at deleted
+    // staff and could take the whole submission down).
+    let assignedProfileId: string | undefined;
+
     if (routingResult.staffId) {
-      // Get the profile_id from the staff record
-      const staff = await this.staffService.findById(routingResult.staffId);
-      if (staff && staff.profile) {
-        ticketData.assignedTo = Reference.createFromPK(Profile, staff.profile.id);
-        ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+      try {
+        const staff = await this.staffService.findById(routingResult.staffId);
+        if (staff?.profile && staff.is_active && staff.can_be_assigned_tickets) {
+          assignedProfileId = staff.profile.id;
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Routing-rule staff ${routingResult.staffId} could not be resolved (falling back to category/department assignee): ${err?.message || err}`,
+        );
       }
-    } else if (chosenDepartmentId) {
-      // No routing-rule assignee — fall back to the department's configured
-      // default assignee, so every ticket lands on the right person. Guarded:
-      // this convenience lookup must NEVER block ticket creation (e.g. if the
-      // ticket_departments.default_assignee_id migration hasn't been applied yet,
-      // loading the department would throw and take the whole submission down).
+    }
+
+    if (!assignedProfileId) {
+      try {
+        const categoryConfig = await em.findOne(
+          TicketCategoryEntity,
+          { key: ticketData.category },
+          { populate: ['defaultAssignee'] },
+        );
+        if (categoryConfig?.defaultAssignee?.id) {
+          assignedProfileId = categoryConfig.defaultAssignee.id;
+        }
+      } catch (err: any) {
+        this.logger.error(
+          `Category default-assignee lookup failed for "${ticketData.category}" (continuing): ${err?.message || err}`,
+        );
+      }
+    }
+
+    if (!assignedProfileId && chosenDepartmentId) {
       try {
         const dept = await em.findOne(
           TicketDepartmentEntity,
@@ -829,14 +865,19 @@ export class TicketsService {
           { populate: ['defaultAssignee'] },
         );
         if (dept?.defaultAssignee?.id) {
-          ticketData.assignedTo = Reference.createFromPK(Profile, dept.defaultAssignee.id);
-          ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+          assignedProfileId = dept.defaultAssignee.id;
         }
       } catch (err: any) {
         this.logger.error(
           `Department default-assignee lookup failed for ${chosenDepartmentId} (continuing without auto-assign): ${err?.message || err}`,
         );
       }
+    }
+
+    if (assignedProfileId) {
+      ticketData.assignedTo = Reference.createFromPK(Profile, assignedProfileId);
+      ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+      ticketData.assignedAt = new Date(); // Anchors the unanswered-ticket nag clock
     }
 
     // Prefer an explicitly-sent event_id; otherwise use an event_reference
@@ -865,7 +906,63 @@ export class TicketsService {
       this.logger.error(`Failed to send ticket creation emails: ${err.message}`);
     });
 
+    // Tell the auto-assigned person they own this ticket (bell + email).
+    if (assignedProfileId) {
+      this.notifyAssignee(createdTicket, assignedProfileId).catch(err => {
+        this.logger.error(`Failed to send assignment notification: ${err.message}`);
+      });
+    }
+
     return createdTicket;
+  }
+
+  /**
+   * Notify a staff member that a ticket has been assigned to them — in-app
+   * bell notification always, email unless their ticket-staff record has
+   * email notifications turned off. Skipped when they assigned it to
+   * themselves (actorProfileId === assignee). Fire-and-forget from callers.
+   */
+  private async notifyAssignee(
+    ticket: { id: string; ticketNumber: string; title: string },
+    assigneeProfileId: string,
+    actorProfileId?: string,
+  ): Promise<void> {
+    if (!assigneeProfileId || assigneeProfileId === actorProfileId) return;
+
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: assigneeProfileId });
+    if (!profile) return;
+
+    await this.notificationsService.createForUser({
+      userId: assigneeProfileId,
+      title: `Ticket ${ticket.ticketNumber} assigned to you`,
+      message: ticket.title,
+      type: 'info',
+      link: `/admin/tickets/${ticket.id}`,
+    });
+
+    // Respect the staff member's "receive email notifications" toggle.
+    const staff = await em.findOne(TicketStaff, { profile: assigneeProfileId });
+    if (staff && !staff.receiveEmailNotifications) return;
+    if (!profile.email) return;
+
+    const viewUrl = `${this.frontendUrl}/admin/tickets/${ticket.id}`;
+    const greeting = profile.first_name ? `Hi ${profile.first_name},` : 'Hi,';
+    const body = `
+      <p style="margin:0 0 16px 0;">${greeting}</p>
+      <p style="margin:0 0 16px 0;">Support ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you:</p>
+      <p style="margin:0 0 24px 0; padding:12px 16px; background:#f1f5f9; border-left:4px solid #ea580c; border-radius:4px;"><strong>${ticket.title}</strong></p>
+      <p style="margin:0 0 24px 0;"><a href="${viewUrl}" style="display:inline-block; background:#ea580c; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Open Ticket</a></p>
+    `;
+    const html = this.emailService.buildBrandedHtml('Ticket Assigned to You', body, {
+      preheader: `${ticket.ticketNumber}: ${ticket.title}`,
+    });
+    await this.emailService.sendEmail({
+      to: profile.email,
+      subject: `Ticket ${ticket.ticketNumber} assigned to you: ${ticket.title}`,
+      html,
+      text: `${greeting}\n\nSupport ticket ${ticket.ticketNumber} has been assigned to you:\n${ticket.title}\n\nOpen it here: ${viewUrl}`,
+    });
   }
 
   async update(
@@ -944,10 +1041,18 @@ export class TicketsService {
     };
 
     const assignedToId = extractId(data.assigned_to_id);
+    const prevAssigneeId = (ticket.assignedTo as any)?.id as string | undefined;
     if (assignedToId !== undefined) {
       ticket.assignedTo = assignedToId
         ? Reference.createFromPK(Profile, assignedToId) as any
         : null as any;
+      // Restart the unanswered-ticket nag cycle whenever the ticket changes
+      // hands (or is unassigned) — the new assignee gets a fresh 48h clock.
+      if (assignedToId !== prevAssigneeId) {
+        ticket.assignedAt = assignedToId ? new Date() : undefined;
+        ticket.assigneeReminderCount = 0;
+        ticket.assigneeRemindedAt = undefined;
+      }
     }
 
     const eventId = extractId(data.event_id);
@@ -982,6 +1087,14 @@ export class TicketsService {
       });
     }
 
+    // Tell the new assignee when the ticket changed hands (unless they
+    // assigned it to themselves — notifyAssignee skips that case).
+    if (assignedToId && assignedToId !== prevAssigneeId) {
+      this.notifyAssignee(updatedTicket, assignedToId, requester?.userId).catch(err => {
+        this.logger.error(`Failed to send assignment notification: ${err.message}`);
+      });
+    }
+
     return updatedTicket;
   }
 
@@ -999,11 +1112,124 @@ export class TicketsService {
     await em.removeAndFlush(ticket);
   }
 
-  async assignTicket(id: string, assignedToId: string): Promise<Ticket> {
-    return this.update(id, {
-      assigned_to_id: assignedToId,
-      status: TicketStatus.IN_PROGRESS,
-    });
+  async assignTicket(id: string, assignedToId: string, actorId?: string): Promise<Ticket> {
+    // isAdmin:true keeps the trusted-caller semantics this method always had
+    // (the endpoint is staff-facing); the actor id is only used to suppress
+    // the "assigned to you" notification on self-assignment.
+    return this.update(
+      id,
+      {
+        assigned_to_id: assignedToId,
+        status: TicketStatus.IN_PROGRESS,
+      },
+      actorId ? { userId: actorId, isAdmin: true } : undefined,
+    );
+  }
+
+  /**
+   * Merge a duplicate ticket into another ticket from the same person.
+   * The source ticket's conversation (comments + attachments) moves to the
+   * target, the source is closed with a pointer comment, and the reporter is
+   * told where the thread continues. `targetRef` accepts a ticket UUID or a
+   * ticket number ("MECA-20260721-0001").
+   */
+  async mergeTickets(sourceId: string, targetRef: string, actorId: string): Promise<Ticket> {
+    const em = this.em.fork();
+
+    const source = await em.findOne(Ticket, { id: sourceId }, { populate: ['reporter', 'assignedTo'] });
+    if (!source) {
+      throw new NotFoundException(`Ticket with ID ${sourceId} not found`);
+    }
+
+    const ref = (targetRef || '').trim();
+    if (!ref) {
+      throw new BadRequestException('Enter the ticket number to merge into.');
+    }
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
+    const target = await em.findOne(
+      Ticket,
+      isUuid ? { id: ref } : { ticketNumber: ref.toUpperCase() },
+      { populate: ['reporter', 'assignedTo'] },
+    );
+    if (!target) {
+      throw new NotFoundException(`Ticket "${ref}" not found. Check the ticket number.`);
+    }
+    if (target.id === source.id) {
+      throw new BadRequestException('A ticket cannot be merged into itself.');
+    }
+    if (target.status === TicketStatus.CLOSED) {
+      throw new BadRequestException(
+        `Ticket ${target.ticketNumber} is closed. Reopen it first, or merge in the other direction.`,
+      );
+    }
+
+    // Both tickets must belong to the same person — merging moves the whole
+    // conversation, and the target's reporter can read everything in it.
+    const sameReporter =
+      source.reporter?.id && target.reporter?.id && source.reporter.id === target.reporter.id;
+    const sameGuest =
+      source.isGuestTicket &&
+      target.isGuestTicket &&
+      !!source.guestEmail &&
+      source.guestEmail.toLowerCase() === target.guestEmail?.toLowerCase();
+    if (!sameReporter && !sameGuest) {
+      throw new BadRequestException(
+        'These tickets belong to different people and cannot be merged.',
+      );
+    }
+
+    // Move the conversation to the target; the thread sorts by date, so the
+    // merged messages interleave chronologically.
+    await em.nativeUpdate(TicketComment, { ticket: source.id }, { ticket: target.id } as any);
+    await em.nativeUpdate(TicketAttachment, { ticket: source.id }, { ticket: target.id } as any);
+
+    // Breadcrumbs on both sides.
+    em.create(TicketComment, {
+      ticket: Reference.createFromPK(Ticket, target.id),
+      author: Reference.createFromPK(Profile, actorId),
+      content: `Merged ticket ${source.ticketNumber} ("${source.title}") into this ticket. Its conversation has been moved here.`,
+      contentFormat: 'text',
+      isInternal: true,
+    } as any);
+    em.create(TicketComment, {
+      ticket: Reference.createFromPK(Ticket, source.id),
+      author: Reference.createFromPK(Profile, actorId),
+      content: `This ticket has been merged into ${target.ticketNumber}. The conversation continues there.`,
+      contentFormat: 'text',
+      isInternal: false,
+    } as any);
+
+    // Carry the assignee over when the target doesn't have one yet.
+    if (!target.assignedTo && source.assignedTo) {
+      target.assignedTo = Reference.createFromPK(Profile, (source.assignedTo as any).id) as any;
+      if (target.status === TicketStatus.OPEN) {
+        target.status = TicketStatus.IN_PROGRESS;
+      }
+    }
+
+    source.status = TicketStatus.CLOSED;
+    source.autoCloseAt = undefined;
+    source.autoCloseWarningAt = undefined;
+
+    await em.flush();
+
+    // Point the reporter at the surviving thread (in-app; the pointer comment
+    // covers anyone reading the closed ticket later).
+    if (source.reporter?.id) {
+      this.notificationsService
+        .createForUser({
+          userId: source.reporter.id,
+          title: `Ticket ${source.ticketNumber} merged`,
+          message: `Your ticket was merged into ${target.ticketNumber}. Follow updates there.`,
+          type: 'info',
+          link: `/tickets/${target.id}`,
+        })
+        .catch((err) =>
+          this.logger.error(`Failed to send merge notification: ${(err as Error).message}`),
+        );
+    }
+
+    return this.findById(target.id);
   }
 
   async resolveTicket(id: string): Promise<Ticket> {
@@ -1252,6 +1478,19 @@ export class TicketsService {
 
     const comment = em.create(TicketComment, commentData);
     await em.persistAndFlush(comment);
+
+    // First staff reply claims the ticket: replying to an UNASSIGNED ticket
+    // auto-assigns it to the replier, so support never has to "Assign to me"
+    // before answering. A ticket already assigned to someone else is NOT
+    // stolen — a colleague chiming in doesn't take ownership. Internal notes
+    // don't claim either (a private aside isn't taking the ticket).
+    if (isStaffReply && !data.is_internal && !ticket.assignedTo) {
+      ticket.assignedTo = Reference.createFromPK(Profile, data.author_id) as any;
+      ticket.assignedAt = new Date();
+      ticket.assigneeReminderCount = 0;
+      ticket.assigneeRemindedAt = undefined;
+      await em.flush();
+    }
 
     // Auto-transition status to reflect "who has the ball" so admins can tell
     // at a glance whether a ticket is waiting on the customer or on support.

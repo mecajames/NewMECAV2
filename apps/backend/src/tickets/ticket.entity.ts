@@ -55,6 +55,20 @@ export class Ticket {
   @ManyToOne(() => Profile, { nullable: true, fieldName: 'assigned_to_id' })
   assignedTo?: Profile;
 
+  // Assignee nag-email bookkeeping (TicketAssigneeReminderService). assignedAt
+  // is when the CURRENT assignee got the ticket — re-stamped on reassignment,
+  // cleared on unassignment. Count/remindedAt track the current nag cycle
+  // (48h → 96h → every 8h) and reset when the ticket changes hands or the
+  // customer adds a newer message than the last nag. Internal — not in toJSON.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'assigned_at' })
+  assignedAt?: Date;
+
+  @Property({ type: 'integer', default: 0, fieldName: 'assignee_reminder_count' })
+  assigneeReminderCount: number = 0;
+
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'assignee_reminded_at' })
+  assigneeRemindedAt?: Date;
+
   @ManyToOne(() => Event, { nullable: true, fieldName: 'event_id' })
   event?: Event;
 

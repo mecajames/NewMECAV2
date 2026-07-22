@@ -66,6 +66,8 @@ import { sanitizeAnnouncementHtml } from '@/announcements/sanitize';
 import { TicketAttachmentImage } from './TicketAttachmentImage';
 import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
+import { TicketPresenceBanner } from './TicketPresenceBanner';
+import { TicketMergeModal } from './TicketMergeModal';
 import { useTicketCategoryLabels } from '../category-labels';
 import { LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../status-lifecycle';
 
@@ -282,6 +284,7 @@ export function TicketDetail({
 
   // Action states
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
   const [assigneeId, setAssigneeId] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -1048,6 +1051,15 @@ export function TicketDetail({
 
   return (
     <div className="space-y-6">
+      {/* Agent-collision banner: who else is on this ticket right now.
+          typing = the viewer has reply text in the composer. */}
+      {isStaff && (
+        <TicketPresenceBanner
+          ticketId={ticket.id}
+          typing={newComment.replace(/<[^>]*>/g, '').trim().length > 0}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
@@ -2053,6 +2065,24 @@ export function TicketDetail({
                   )}
                 </span>
               </div>
+              {/* Staff: de-duplicate — merge this ticket into another one from
+                  the same person. Hidden once closed (nothing left to move). */}
+              {isStaff && ticket.status !== 'closed' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4" />
+                    Duplicate?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowMergeModal(true)}
+                    title="Merge this ticket into another ticket from the same person"
+                    className="text-xs px-2 py-0.5 rounded bg-slate-600/60 text-gray-200 border border-slate-500 hover:bg-slate-600 flex items-center gap-1"
+                  >
+                    Merge into another ticket
+                  </button>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
@@ -2827,6 +2857,18 @@ export function TicketDetail({
       })()}
 
       {/* Assign Modal */}
+      {showMergeModal && (
+        <TicketMergeModal
+          ticketId={ticket.id}
+          ticketNumber={ticket.ticket_number}
+          onClose={() => setShowMergeModal(false)}
+          onMerged={(targetId) => {
+            setShowMergeModal(false);
+            navigate(`/admin/tickets/${targetId}`);
+          }}
+        />
+      )}
+
       {showAssignModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-md p-6 border border-slate-700">

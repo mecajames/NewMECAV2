@@ -37,6 +37,8 @@ export const CreateTicketDepartmentSchema = z.object({
   // When non-empty, only members holding one of these roles see this department
   // (e.g. ['event_director','judge']). Implies members-only.
   required_roles: z.array(z.string()).optional().nullable(),
+  // Profile that new tickets in this department auto-assign to (null = nobody).
+  default_assignee_id: z.string().uuid().optional().nullable(),
 });
 export type CreateTicketDepartmentDto = z.infer<typeof CreateTicketDepartmentSchema>;
 
@@ -56,6 +58,7 @@ export const TicketDepartmentResponseSchema = z.object({
   display_order: z.number(),
   audience: TicketAudienceSchema.default('all'),
   required_roles: z.array(z.string()).nullable().optional(),
+  default_assignee_id: z.string().uuid().nullable().optional(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
 });
@@ -120,6 +123,14 @@ export const SetDepartmentHeadSchema = z.object({
   is_department_head: z.boolean(),
 });
 export type SetDepartmentHeadDto = z.infer<typeof SetDepartmentHeadSchema>;
+
+// Department-centric membership write: replace the full set of staff working a
+// department in one call (empty array = nobody works it). Complements the
+// per-staff AssignStaffToDepartments endpoint.
+export const SetDepartmentStaffSchema = z.object({
+  staff_ids: z.array(z.string().uuid()),
+});
+export type SetDepartmentStaffDto = z.infer<typeof SetDepartmentStaffSchema>;
 
 // =============================================================================
 // Routing Rule Schemas

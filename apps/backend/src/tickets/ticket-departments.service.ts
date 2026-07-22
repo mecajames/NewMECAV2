@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { TicketDepartment } from './entities/ticket-department.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { CreateTicketDepartmentDto, UpdateTicketDepartmentDto } from '@newmeca/shared';
 import { TicketAudienceViewer, isVisibleToViewer } from './ticket-audience.util';
 
@@ -89,6 +90,11 @@ export class TicketDepartmentsService {
       requiredRoles: data.required_roles?.length ? data.required_roles : undefined,
     } as any);
 
+    if (data.default_assignee_id) {
+      department.defaultAssignee = em.getReference(Profile, data.default_assignee_id);
+      department.defaultAssigneeId = data.default_assignee_id;
+    }
+
     await em.persistAndFlush(department);
     return department;
   }
@@ -141,6 +147,13 @@ export class TicketDepartmentsService {
     if (data.audience !== undefined) department.audience = data.audience;
     if (data.required_roles !== undefined) {
       department.requiredRoles = data.required_roles?.length ? data.required_roles : undefined;
+    }
+    if (data.default_assignee_id !== undefined) {
+      department.defaultAssignee = data.default_assignee_id
+        ? em.getReference(Profile, data.default_assignee_id)
+        : (null as any);
+      // Keep the persist:false serialization scalar in sync for the response.
+      department.defaultAssigneeId = data.default_assignee_id ?? undefined;
     }
 
     await em.flush();

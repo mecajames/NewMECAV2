@@ -25,6 +25,7 @@ import { TicketConfigSyncService } from './ticket-config-sync.service';
 import { TicketStaffSetupService } from './ticket-staff-setup.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketPurchasesService } from './ticket-purchases.service';
+import { TicketPresenceService } from './ticket-presence.service';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
@@ -49,6 +50,7 @@ export class TicketsController {
     private readonly staffSetupService: TicketStaffSetupService,
     private readonly customFieldsService: TicketCustomFieldsService,
     private readonly purchasesService: TicketPurchasesService,
+    private readonly presenceService: TicketPresenceService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -349,8 +351,63 @@ export class TicketsController {
     @Param('id') id: string,
     @Body('assigned_to_id') assignedToId: string,
   ): Promise<Ticket> {
-    await this.requireAuth(authHeader);
-    return this.ticketsService.assignTicket(id, assignedToId);
+    const user = await this.requireAuth(authHeader);
+    // Actor id lets the service skip the "assigned to you" notification on
+    // self-assignment ("Assign to me").
+    return this.ticketsService.assignTicket(id, assignedToId, user.id);
+  }
+
+  /**
+   * Merge THIS ticket (the duplicate) into another ticket from the same
+   * person. Body: { target: "<ticket number or uuid>" }. Admin/staff only.
+   * Returns the surviving target ticket.
+   */
+  @Post(':id/merge')
+  async mergeTicket(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body('target') target: string,
+  ): Promise<Ticket> {
+    const { user } = await this.requireAdmin(authHeader);
+    return this.ticketsService.mergeTickets(id, target, user.id);
+  }
+
+  /**
+   * Agent-collision heartbeat: marks the caller as currently viewing this
+   * ticket (typing = composing a reply) and returns the OTHER staff viewing
+   * it. Staff-only; non-admin callers are not tracked and see nobody.
+   */
+  @Post(':id/presence')
+  @HttpCode(HttpStatus.OK)
+  async ticketPresence(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+    @Body('typing') typing?: boolean,
+  ): Promise<{ viewers: Array<{ profile_id: string; name: string; typing: boolean }> }> {
+    const user = await this.requireAuth(authHeader);
+    const em = this.em.fork();
+    const profile = await em.findOne(Profile, { id: user.id });
+    if (!isAdminUser(profile)) {
+      return { viewers: [] };
+    }
+    const name =
+      `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() ||
+      profile?.email?.split('@')[0] ||
+      'A colleague';
+    const others = this.presenceService.heartbeat(id, user.id, name, !!typing);
+    return {
+      viewers: others.map((v) => ({ profile_id: v.profileId, name: v.name, typing: v.typing })),
+    };
+  }
+
+  @Delete(':id/presence')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async leaveTicketPresence(
+    @Headers('authorization') authHeader: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    const user = await this.requireAuth(authHeader);
+    this.presenceService.leave(id, user.id);
   }
 
   @Post(':id/resolve')

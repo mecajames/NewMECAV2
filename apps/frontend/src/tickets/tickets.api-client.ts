@@ -18,6 +18,13 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TicketCategory = 'general' | 'membership' | 'event_registration' | 'payment' | 'technical' | 'competition_results' | 'event_hosting' | 'account' | 'other';
 export type TicketDepartment = 'general_support' | 'membership_services' | 'event_operations' | 'technical_support' | 'billing' | 'administration';
 
+/** Another staff member currently viewing (or typing on) a ticket. */
+export interface TicketViewer {
+  profile_id: string;
+  name: string;
+  typing: boolean;
+}
+
 export interface Ticket {
   id: string;
   ticket_number: string;
@@ -359,6 +366,30 @@ export const ticketsApi = {
   assign: async (id: string, assignedToId: string): Promise<Ticket> => {
     const response = await axios.post(`/api/tickets/${id}/assign`, { assigned_to_id: assignedToId });
     return response.data;
+  },
+
+  /**
+   * Merge THIS ticket (the duplicate) into another ticket from the same
+   * person. `target` is a ticket number ("MECA-…") or UUID. Returns the
+   * surviving target ticket.
+   */
+  merge: async (id: string, target: string): Promise<Ticket> => {
+    const response = await axios.post(`/api/tickets/${id}/merge`, { target });
+    return response.data;
+  },
+
+  /**
+   * Agent-collision heartbeat: mark the current staff viewer as present on
+   * this ticket (typing = composing a reply) and get back the OTHER staff
+   * currently viewing it.
+   */
+  presence: async (id: string, typing: boolean): Promise<{ viewers: TicketViewer[] }> => {
+    const response = await axios.post(`/api/tickets/${id}/presence`, { typing });
+    return response.data;
+  },
+
+  presenceLeave: async (id: string): Promise<void> => {
+    await axios.delete(`/api/tickets/${id}/presence`);
   },
 
   resolve: async (id: string): Promise<Ticket> => {

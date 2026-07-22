@@ -45,7 +45,14 @@ export function useSeasonFilter() {
     ? { startDate: startOf(season), endDate: endOf(season) }
     : {};
 
-  return { seasonId, setSeasonId, season, dateRange, seasons, currentSeason, loading };
+  // Stay "loading" until the current-season default has actually been applied
+  // (the effect above runs a render AFTER seasons resolve). Without this, a
+  // consumer's `if (loading) return` fetch guard passes while seasonId is
+  // still null and fires an unwanted ALL-TIME fetch that races the real
+  // season-scoped one — the heavier all-time response lands last and wins.
+  const pendingDefault = !touched && !!currentSeason?.id && seasonId === null;
+
+  return { seasonId, setSeasonId, season, dateRange, seasons, currentSeason, loading: loading || pendingDefault };
 }
 
 export interface SeasonSelectProps {
