@@ -11,6 +11,7 @@ import { TicketCategory, TicketPriority, TicketStatus, TicketCustomFieldAnswerIn
 import { TicketRoutingService } from './ticket-routing.service';
 import { adminRecipientWhere } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketCategoriesService } from './ticket-categories.service';
@@ -83,6 +84,7 @@ export class TicketGuestService {
     private readonly em: EntityManager,
     private readonly routingService: TicketRoutingService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
     private readonly uploadsService: UploadsService,
     private readonly customFieldsService: TicketCustomFieldsService,
     private readonly categoriesService: TicketCategoriesService,
@@ -589,11 +591,58 @@ export class TicketGuestService {
 
     await em.persistAndFlush([comment, ticket]);
 
+    // Tell the assigned tech the customer responded — same as member replies
+    // (createComment → sendTicketReplyEmail); this path was silently skipping
+    // it for guest tickets. Fire-and-forget so a mail hiccup never fails the
+    // guest's reply.
+    this.notifyAssignedStaffOfGuestReply(ticket, content).catch(err => {
+      this.logger.error(`Failed to notify assigned staff of guest reply: ${(err as Error).message}`);
+    });
+
     return {
       id: comment.id,
       content: comment.content,
       created_at: comment.createdAt,
     };
+  }
+
+  /** Email + bell to the assigned staff member when a guest replies. */
+  private async notifyAssignedStaffOfGuestReply(ticket: Ticket, content: string): Promise<void> {
+    const assignee = ticket.assignedTo;
+    if (!assignee?.id) return;
+
+    const adminUrl = `${this.frontendUrl}/admin/tickets/${ticket.id}`;
+    const fromName = ticket.guestName || ticket.guestEmail || 'The customer';
+
+    await this.notificationsService.createForUser({
+      userId: assignee.id,
+      title: `New reply on ticket ${ticket.ticketNumber}`,
+      message: `${fromName} replied to a ticket assigned to you.`,
+      type: 'info',
+      link: `/admin/tickets/${ticket.id}`,
+    });
+
+    if (!assignee.email) return;
+    const escaped = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .slice(0, 300);
+    const greeting = assignee.first_name ? `Hi ${assignee.first_name},` : 'Hi,';
+    const body = `
+      <p style="margin:0 0 16px 0;">${greeting}</p>
+      <p style="margin:0 0 16px 0;"><strong>${fromName}</strong> replied on ticket <strong>${ticket.ticketNumber}</strong> ("${ticket.title}"):</p>
+      <p style="margin:0 0 24px 0; padding:12px 16px; background:#f1f5f9; border-left:4px solid #ea580c; border-radius:4px; white-space:pre-wrap;">${escaped}${content.length > 300 ? '…' : ''}</p>
+      <p style="margin:0 0 24px 0;"><a href="${adminUrl}" style="display:inline-block; background:#ea580c; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Open Ticket</a></p>
+    `;
+    await this.emailService.sendEmail({
+      to: assignee.email,
+      subject: `New reply on ticket ${ticket.ticketNumber}: ${ticket.title}`,
+      html: this.emailService.buildBrandedHtml('New Customer Reply', body, {
+        preheader: `${fromName} replied on ${ticket.ticketNumber}`,
+      }),
+      text: `${greeting}\n\n${fromName} replied on ticket ${ticket.ticketNumber} ("${ticket.title}"):\n\n${content.slice(0, 300)}\n\n${adminUrl}`,
+    });
   }
 
   /**

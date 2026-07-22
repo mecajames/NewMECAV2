@@ -28,6 +28,8 @@ import { TicketQuickLinksService } from './ticket-quick-links.service';
 import { TicketQuickLinksController } from './ticket-quick-links.controller';
 import { TicketConfigSyncService } from './ticket-config-sync.service';
 import { TicketStaffSetupService } from './ticket-staff-setup.service';
+import { TicketPresenceService } from './ticket-presence.service';
+import { TicketAssigneeReminderService } from './ticket-assignee-reminder.service';
 
 @Module({
   imports: [UploadsModule, forwardRef(() => StripeModule), forwardRef(() => PayPalModule), RefundsModule],
@@ -59,6 +61,8 @@ import { TicketStaffSetupService } from './ticket-staff-setup.service';
     TicketQuickLinksService,
     TicketConfigSyncService,
     TicketStaffSetupService,
+    TicketPresenceService,
+    TicketAssigneeReminderService,
   ],
   exports: [
     TicketsService,

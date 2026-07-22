@@ -511,7 +511,8 @@
         <li><a href="#triage-the-queue">1. Triage the queue</a></li>
         <li><a href="#reply-to-a-ticket">2. Reply to a ticket</a></li>
         <li><a href="#change-status">3. Change status</a></li>
-        <li><a href="#handle-guest-tickets">4. Handle guest tickets</a></li>
+        <li><a href="#merge-duplicates">4. Merge duplicate tickets</a></li>
+        <li><a href="#handle-guest-tickets">5. Handle guest tickets</a></li>
         </ul>
     </div>
 
@@ -544,6 +545,15 @@
             <div class="step-number">1</div>
             <div class="step-content">
                 <div class="step-title">On the ticket detail page, type your reply in the comment box.</div>
+                <div class="step-details">Replying to an <strong>unassigned</strong> ticket automatically assigns it to you —
+                no need to click "Assign to me" first. Replying to a colleague's ticket does <strong>not</strong> take it from
+                them. When a ticket is assigned to you (automatically or by someone else), you get a bell notification and an
+                email. If another team member is viewing or typing on the same ticket, a colored banner at the top warns you
+                so two people don't answer the same question.
+                <br/><br/><strong>Answer within 48 hours.</strong> You get the new-ticket email when a ticket lands on you.
+                If it goes 48 hours without an answer, you get a reminder email — and from then on another reminder
+                <strong>every 8 hours</strong> until you reply, resolve, close, or reassign the ticket. When a member replies
+                back to you, you have <strong>24 hours</strong> to answer before the every-8-hours reminders start again.</div>
             </div>
         </div>
         <div class="step">
@@ -575,7 +585,26 @@
             </div>
         </div>
     </div>
-<h2 id="handle-guest-tickets">4. Handle guest tickets</h2>
+<h2 id="merge-duplicates">4. Merge duplicate tickets</h2>
+    <div class="workflow-container">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <div class="step-title">Open the duplicate ticket (the one you want to get rid of).</div>
+                <div class="step-details">In the Details sidebar, next to "Duplicate?", click <strong>Merge into another ticket</strong>.</div>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <div class="step-title">Enter the ticket number to keep (e.g. MECA-20260721-0001) and confirm.</div>
+                <div class="step-details">The duplicate's messages and attachments move into the surviving ticket, the duplicate
+                closes with a "merged into…" note, and the member gets a notification pointing at the surviving ticket. Both
+                tickets must belong to the <strong>same person</strong>, and you can't merge into a closed ticket.</div>
+            </div>
+        </div>
+    </div>
+<h2 id="handle-guest-tickets">5. Handle guest tickets</h2>
     <div class="workflow-container">
         <div class="step">
             <div class="step-number">1</div>

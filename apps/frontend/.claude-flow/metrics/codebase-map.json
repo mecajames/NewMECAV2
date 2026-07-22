@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-22T00:49:46.301Z",
+  "timestamp": "2026-07-22T01:34:46.378Z",
   "projectRoot": "E:\\MECA Oct 2025\\NewMECAV2\\apps\\frontend",
   "structure": {
     "hasPackageJson": true,
@@ -7,5 +7,5 @@
     "hasClaudeConfig": true,
     "hasClaudeFlow": true
   },
-  "scannedAt": 1784681386301
+  "scannedAt": 1784684086378
 }
