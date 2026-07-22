@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { EntityManager } from '@mikro-orm/core';
 import { CreateTicketCategoryDto, UpdateTicketCategoryDto } from '@newmeca/shared';
 import { TicketCategoryEntity } from './entities/ticket-category.entity';
+import { Profile } from '../profiles/profiles.entity';
 import { TicketAudienceViewer, isVisibleToViewer } from './ticket-audience.util';
 
 @Injectable()
@@ -81,6 +82,10 @@ export class TicketCategoriesService {
       audience: dto.audience ?? 'all',
       requiredRoles: dto.required_roles?.length ? dto.required_roles : undefined,
     } as any);
+    if (dto.default_assignee_id) {
+      cat.defaultAssignee = em.getReference(Profile, dto.default_assignee_id);
+      cat.defaultAssigneeId = dto.default_assignee_id;
+    }
     await em.persistAndFlush(cat);
     return cat;
   }
@@ -102,6 +107,13 @@ export class TicketCategoriesService {
     if (dto.audience !== undefined) cat.audience = dto.audience;
     if (dto.required_roles !== undefined) {
       cat.requiredRoles = dto.required_roles?.length ? dto.required_roles : undefined;
+    }
+    if (dto.default_assignee_id !== undefined) {
+      cat.defaultAssignee = dto.default_assignee_id
+        ? em.getReference(Profile, dto.default_assignee_id)
+        : (null as any);
+      // Keep the persist:false serialization scalar in sync for the response.
+      cat.defaultAssigneeId = dto.default_assignee_id ?? undefined;
     }
     await em.flush();
     return cat;

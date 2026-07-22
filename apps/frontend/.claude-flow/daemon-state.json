@@ -1,76 +1,70 @@
 {
   "running": true,
-  "startedAt": "2026-07-22T00:27:50.895Z",
+  "startedAt": "2026-07-22T00:49:46.294Z",
   "workers": {
     "map": {
-      "runCount": 68,
-      "successCount": 68,
+      "runCount": 1,
+      "successCount": 1,
       "failureCount": 0,
-      "averageDurationMs": 1.6176470588235294,
-      "lastRun": "2026-07-22T00:42:50.913Z",
-      "lastStartedAt": "2026-07-22T00:42:50.912Z",
-      "nextRun": "2026-07-22T00:57:50.914Z",
-      "isRunning": false
+      "averageDurationMs": 1,
+      "isRunning": false,
+      "nextRun": "2026-07-22T01:04:46.303Z",
+      "lastStartedAt": "2026-07-22T00:49:46.300Z",
+      "lastRun": "2026-07-22T00:49:46.301Z"
     },
     "audit": {
-      "runCount": 100,
-      "successCount": 100,
+      "runCount": 1,
+      "successCount": 1,
       "failureCount": 0,
-      "averageDurationMs": 1.4399999999999997,
-      "lastRun": "2026-07-22T00:49:50.936Z",
-      "lastStartedAt": "2026-07-22T00:49:50.933Z",
-      "nextRun": "2026-07-22T00:59:50.938Z",
-      "isRunning": false
+      "averageDurationMs": 3,
+      "isRunning": false,
+      "nextRun": "2026-07-22T01:01:46.314Z",
+      "lastStartedAt": "2026-07-22T00:51:46.310Z",
+      "lastRun": "2026-07-22T00:51:46.313Z"
     },
     "optimize": {
-      "runCount": 67,
-      "successCount": 67,
+      "runCount": 1,
+      "successCount": 1,
       "failureCount": 0,
-      "averageDurationMs": 1.537313432835821,
-      "lastRun": "2026-07-22T00:46:50.941Z",
-      "lastStartedAt": "2026-07-22T00:46:50.939Z",
-      "nextRun": "2026-07-22T01:01:50.941Z",
-      "isRunning": false
+      "averageDurationMs": 1,
+      "isRunning": false,
+      "nextRun": "2026-07-22T01:08:46.310Z",
+      "lastStartedAt": "2026-07-22T00:53:46.308Z",
+      "lastRun": "2026-07-22T00:53:46.309Z"
     },
     "consolidate": {
-      "runCount": 34,
-      "successCount": 34,
+      "runCount": 1,
+      "successCount": 1,
       "failureCount": 0,
-      "averageDurationMs": 1.7058823529411764,
-      "lastRun": "2026-07-22T00:33:50.907Z",
-      "lastStartedAt": "2026-07-22T00:33:50.906Z",
-      "nextRun": "2026-07-22T01:03:50.908Z",
-      "isRunning": false
+      "averageDurationMs": 3,
+      "isRunning": false,
+      "nextRun": "2026-07-22T00:55:46.295Z",
+      "lastStartedAt": "2026-07-22T00:55:46.309Z",
+      "lastRun": "2026-07-22T00:55:46.312Z"
     },
     "testgaps": {
-      "runCount": 51,
-      "successCount": 51,
+      "runCount": 0,
+      "successCount": 0,
       "failureCount": 0,
-      "averageDurationMs": 1.6666666666666667,
-      "lastRun": "2026-07-22T00:55:50.950Z",
-      "lastStartedAt": "2026-07-22T00:55:50.945Z",
-      "nextRun": "2026-07-22T00:55:50.915Z",
-      "isRunning": false
+      "averageDurationMs": 0,
+      "isRunning": false,
+      "nextRun": "2026-07-22T00:57:46.296Z"
     },
     "backup": {
-      "runCount": 3,
-      "successCount": 3,
+      "runCount": 0,
+      "successCount": 0,
       "failureCount": 0,
-      "averageDurationMs": 2.3333333333333335,
-      "lastRun": "2026-07-22T00:37:50.914Z",
-      "lastStartedAt": "2026-07-22T00:37:50.912Z",
-      "nextRun": "2026-07-23T00:37:50.914Z",
-      "isRunning": false
+      "averageDurationMs": 0,
+      "isRunning": false,
+      "nextRun": "2026-07-22T00:59:46.296Z"
     },
     "harness": {
-      "runCount": 4,
-      "successCount": 4,
+      "runCount": 0,
+      "successCount": 0,
       "failureCount": 0,
-      "averageDurationMs": 9.25,
-      "lastRun": "2026-07-22T00:39:50.920Z",
-      "lastStartedAt": "2026-07-22T00:39:50.908Z",
-      "nextRun": "2026-07-22T06:39:50.921Z",
-      "isRunning": false
+      "averageDurationMs": 0,
+      "isRunning": false,
+      "nextRun": "2026-07-22T01:01:46.297Z"
     },
     "predict": {
       "runCount": 0,
@@ -89,8 +83,8 @@
   },
   "config": {
     "autoStart": false,
-    "logDir": "E:\\MECA Oct 2025\\NewMECAV2\\.claude-flow\\logs",
-    "stateFile": "E:\\MECA Oct 2025\\NewMECAV2\\.claude-flow\\daemon-state.json",
+    "logDir": "E:\\MECA Oct 2025\\NewMECAV2\\apps\\frontend\\.claude-flow\\logs",
+    "stateFile": "E:\\MECA Oct 2025\\NewMECAV2\\apps\\frontend\\.claude-flow\\daemon-state.json",
     "maxConcurrent": 2,
     "workerTimeoutMs": 960000,
     "resourceThresholds": {
@@ -175,5 +169,5 @@
       }
     ]
   },
-  "savedAt": "2026-07-22T00:55:50.950Z"
+  "savedAt": "2026-07-22T00:55:46.312Z"
 }

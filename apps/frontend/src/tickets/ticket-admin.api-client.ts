@@ -149,6 +149,15 @@ export async function getStaffForDepartment(departmentId: string): Promise<Ticke
   return data;
 }
 
+/**
+ * Department-centric membership write: make staffIds exactly the set of staff
+ * working this department. Returns the refreshed full staff list.
+ */
+export async function setDepartmentStaff(departmentId: string, staffIds: string[]): Promise<TicketStaffResponse[]> {
+  const { data } = await axios.put(`${API_BASE}/departments/${departmentId}/staff`, { staff_ids: staffIds });
+  return data;
+}
+
 // ==========================================================================
 // Routing Rules API
 // ==========================================================================

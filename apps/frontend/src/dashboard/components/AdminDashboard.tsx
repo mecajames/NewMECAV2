@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isSuperAdmin } from '@/auth/permissions';
@@ -131,11 +131,18 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
     localStorage.setItem('adminDashboardExpandedSections', JSON.stringify(expandedSections));
   }, [expandedSections]);
 
+  // Bumped on every fetchStats call; only the LATEST invocation may write
+  // state. Without this, an earlier (heavier, e.g. all-time) fetch can
+  // resolve after a later season-scoped one and overwrite it with stale
+  // numbers.
+  const fetchStatsRequestRef = useRef(0);
+
   const fetchStats = async (
     seasonId: string | null,
     startDate?: string,
     endDate?: string,
   ) => {
+    const requestToken = ++fetchStatsRequestRef.current;
     try {
       // Calendar-month window for the month-vs-season money/membership pairs.
       const now = new Date();
@@ -157,6 +164,8 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
         membershipsApi.adminGetMonthStats(startDate, endDate).catch(() => null),
         competitionResultsApi.getAdminDashboardStats(seasonId ?? undefined).catch(() => null),
       ]);
+
+      if (requestToken !== fetchStatsRequestRef.current) return; // stale response — a newer fetch owns the UI
 
       // "Open" tickets = everything not yet resolved or closed.
       const ticketsTotal = Number(ticketStats?.total ?? 0);
@@ -184,6 +193,7 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
         ticketsTotal,
       });
     } catch (error) {
+      if (requestToken !== fetchStatsRequestRef.current) return; // stale response
       console.error('Failed to fetch admin stats:', error);
       setStats({
         totalUsers: 0,
@@ -207,7 +217,7 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
         ticketsTotal: 0,
       });
     } finally {
-      setLoading(false);
+      if (requestToken === fetchStatsRequestRef.current) setLoading(false);
     }
   };
 

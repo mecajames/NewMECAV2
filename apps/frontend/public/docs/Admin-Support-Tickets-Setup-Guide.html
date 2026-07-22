@@ -110,8 +110,9 @@
     <div class="lead">
         <strong>The big idea:</strong> the support form asks the member <strong>one question at a time</strong>. They pick a
         <strong>Department</strong> → then a <strong>Category</strong> that belongs to that department → and then the form
-        automatically shows any <strong>extra fields</strong> you've attached to that category. You control all of it from the
-        tabs along the top of the Support Tickets page — no developer needed.
+        automatically shows any <strong>extra fields</strong> you've attached to that category. You control all of it from
+        <strong>Support Tickets → Settings</strong>, where a sub-menu holds every configuration screen
+        (Assignments, Departments, Categories, Custom Fields, Routing, General, Setup Guide) — no developer needed.
     </div>
 
     <div class="toc">
@@ -121,7 +122,7 @@
             <li><a href="#order">2. The order to set things up in</a></li>
             <li><a href="#departments">3. Step 1 — Departments (the teams)</a></li>
             <li><a href="#categories">4. Step 2 — Categories (the topics under each department)</a></li>
-            <li><a href="#routing">5. Step 3 — Routing rules (auto-assign &amp; priority)</a></li>
+            <li><a href="#routing">5. Step 3 — Staff &amp; Assignments (who receives each ticket)</a></li>
             <li><a href="#custom-fields">6. Step 4 — Custom Fields (extra questions)</a></li>
             <li><a href="#conditional">7. Step 5 — Conditional fields (show a field only when…)</a></li>
             <li><a href="#refunds">8. Step 6 — Refund requests (the "My Purchase" field &amp; refund panel)</a></li>
@@ -151,13 +152,13 @@ Extra fields ◄── you create these in the "Custom Fields" tab and attach th
 Description + Screenshots
    │
    ▼
-Submit  ──►  Routing rules decide which staff / priority  ──►  lands in the Ticket Queue</div>
+Submit  ──►  Assignments decide who gets it (category override → department's auto-assignee)  ──►  Ticket Queue</div>
 
     <div class="info-box success">
         <h4>What's automatic vs. what you choose</h4>
         <p>The member only ever picks a <strong>Department</strong> and a <strong>Category</strong>. They never choose a staff
-        member to route to — the <strong>Routing rules</strong> do that behind the scenes. Everything the member sees on the form
-        is something <strong>you</strong> turned on in these tabs.</p>
+        member to route to — the <strong>Assignments</strong> screen decides that behind the scenes. Everything the member sees
+        on the form is something <strong>you</strong> turned on in these screens.</p>
     </div>
 
     <h2 id="order">2. The order to set things up in</h2>
@@ -165,13 +166,13 @@ Submit  ──►  Routing rules decide which staff / priority  ──►  lands
     <div class="workflow-container">
         <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Departments</div><div class="step-details">Create the teams (Events, Billing, Membership, Technical…). This is the first thing the member picks.</div></div></div>
         <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Categories</div><div class="step-details">Under each department, create the topics (e.g. Events → Points, Results, Staff). This is the second thing the member picks.</div></div></div>
-        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Staff &amp; Routing</div><div class="step-details">Add your support staff, then write routing rules so tickets land with the right person at the right priority.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Staff &amp; Assignments</div><div class="step-details">Add your support staff, then use the <strong>Assignments</strong> screen to pick who works each department and who new tickets are automatically assigned to.</div></div></div>
         <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Custom Fields</div><div class="step-details">Add the extra questions that appear for specific categories — including the special "Related Event", "My Purchase", and "Staff Member" fields.</div></div></div>
         <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Settings</div><div class="step-details">Turn on auto-close for inactive tickets and other global options.</div></div></div>
     </div>
 
     <h2 id="departments">3. Step 1 — Departments (the teams)</h2>
-    <p><span class="nav-path">Support Tickets → Departments</span></p>
+    <p><span class="nav-path">Support Tickets → Settings → Departments</span></p>
     <p>A <strong>department</strong> is a team that handles a kind of request. It is the <strong>first</strong> thing the member
     chooses on the form. Examples: <em>General Support, Membership Services, Event Operations, Billing, Score &amp; Points,
     Event Disputes</em>.</p>
@@ -188,7 +189,7 @@ Submit  ──►  Routing rules decide which staff / priority  ──►  lands
     </div>
 
     <h2 id="categories">4. Step 2 — Categories (the topics under each department)</h2>
-    <p><span class="nav-path">Support Tickets → Categories</span></p>
+    <p><span class="nav-path">Support Tickets → Settings → Categories</span></p>
     <p>A <strong>category</strong> is a topic that lives <strong>inside one department</strong>. After the member picks a department,
     the form shows only that department's categories. Example: under the <strong>Events</strong> department you might create
     <strong>Points</strong>, <strong>Results</strong>, and <strong>Staff</strong>.</p>
@@ -211,27 +212,46 @@ Submit  ──►  Routing rules decide which staff / priority  ──►  lands
         you'll tick which categories it appears under — those use the Key. So pick a sensible label up front; the key follows it.</p>
     </div>
 
-    <h2 id="routing">5. Step 3 — Routing rules (auto-assign &amp; priority)</h2>
-    <p><span class="nav-path">Support Tickets → Staff</span> &nbsp;then&nbsp; <span class="nav-path">Support Tickets → Routing</span></p>
-    <p>First add your support people on the <strong>Staff</strong> tab (and tick "can be assigned tickets"). Then, on the
-    <strong>Routing</strong> tab, you write rules that automatically send a new ticket to the right team member and set its
-    priority — so nobody has to triage by hand.</p>
+    <h2 id="routing">5. Step 3 — Staff &amp; Assignments (who receives each ticket)</h2>
+    <p><span class="nav-path">Support Tickets → Staff</span> &nbsp;then&nbsp; <span class="nav-path">Support Tickets → Settings → Assignments</span></p>
+    <p>First add your support people on the <strong>Staff</strong> tab (and tick "can be assigned tickets"). Then open
+    <strong>Settings → Assignments</strong> — this one screen controls who works each department and who new tickets are
+    automatically assigned to. Every change saves immediately (you'll see a little checkmark).</p>
     <div class="workflow-container">
         <div class="step"><div class="step-number">1</div><div class="step-content"><div class="step-title">Add staff (Staff tab)</div><div class="step-details">Add each support team member and make sure "can be assigned tickets" is on for anyone who should receive tickets.</div></div></div>
-        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Add a routing rule (Routing tab → "Add Rule")</div><div class="step-details">Give it a name (e.g. "Points questions → Jane").</div></div></div>
-        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Set the conditions</div><div class="step-details">Pick the <strong>Category</strong> (and optionally keywords or member status) that should trigger this rule.</div></div></div>
-        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Set the actions</div><div class="step-details">Choose which staff member it assigns to and/or the priority to set. Save.</div></div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Pick the staff for each department</div><div class="step-details">On <strong>Assignments</strong>, each department has a <strong>"Support staff for this department"</strong> multi-select. Check everyone who works that team's tickets.</div></div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">Set "Auto-assign new tickets to"</div><div class="step-details">Choose the one person who should automatically receive every new ticket in that department. If a department shows a yellow <strong>"No auto-assignee"</strong> badge, its tickets will sit unassigned until someone claims them.</div></div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">Optional: per-category overrides</div><div class="step-details">Under each department, every category has its own dropdown. Leave it on <strong>"Department default (…)"</strong> to use the department's auto-assignee — the name in parentheses shows exactly who that is. Pick a specific person only when that one topic should go to someone else (e.g. "Bug report" → your web person).</div></div></div>
     </div>
-    <div class="info-box">
-        <h4>Good to know</h4>
-        <p>Because the member already chose a department, the ticket starts in that department automatically. Routing rules let you
-        get more specific — for example, "Results questions go to the head scorer at High priority." Higher-priority rules are
-        checked first; the first matching rule wins. Use the <strong>Test</strong> button on the Routing tab to preview where a
-        sample ticket would land.</p>
+    <div class="info-box success">
+        <h4>How a new ticket finds its owner</h4>
+        <p>When a ticket is submitted, the system assigns it in this order — first match wins:</p>
+        <ul>
+            <li><strong>1. Routing rule</strong> — only if an advanced routing rule (below) matches AND names a staff member.</li>
+            <li><strong>2. Category override</strong> — the category's dropdown on the Assignments screen.</li>
+            <li><strong>3. Department auto-assignee</strong> — the department's "Auto-assign new tickets to" person.</li>
+        </ul>
+        <p>If none of those are set, the ticket stays unassigned in the queue.</p>
+    </div>
+    <div class="info-box warning">
+        <h4>Heads up: "Production Staff Setup"</h4>
+        <p>The owner-only <strong>Production Staff Setup → Apply setup</strong> button (on Settings → General) writes a fixed,
+        pre-programmed staff list and department assignees. Running it will <strong>overwrite</strong> whatever you've configured
+        on the Assignments screen — so once you manage assignments here, don't re-run Apply setup.</p>
     </div>
 
+    <h3>Advanced: Routing rules (keywords &amp; priority escalation)</h3>
+    <p><span class="nav-path">Support Tickets → Settings → Routing</span></p>
+    <p>You normally don't need this screen — the Assignments screen covers day-to-day "who gets what". Routing rules are
+    <strong>advanced overrides</strong> that fire only when their conditions match, e.g. "if the description contains
+    <em>fraud</em>, set priority to Critical" or "tickets matching these keywords go straight to a specific person".
+    A rule that names a staff member beats the Assignments settings (that's what makes it an override). Higher-priority rules
+    are checked first; the first matching rule wins. Use the <strong>Test</strong> button to preview where a sample ticket
+    would land. If an old rule shows <em>"(inactive)"</em> or <em>"Deleted staff member"</em> next to its assignment, it's a
+    leftover from an earlier setup — delete it.</p>
+
     <h2 id="custom-fields">6. Step 4 — Custom Fields (extra questions)</h2>
-    <p><span class="nav-path">Support Tickets → Custom Fields</span></p>
+    <p><span class="nav-path">Support Tickets → Settings → Custom Fields</span></p>
     <p>Custom fields are the extra questions that appear on the form <strong>based on the category the member picked</strong>.
     This is how you collect exactly the info your team needs for each kind of request.</p>
 
@@ -347,7 +367,7 @@ Submit  ──►  Routing rules decide which staff / priority  ──►  lands
     </div>
 
     <h2 id="auto-close">10. Step 8 — Auto-close inactive tickets</h2>
-    <p><span class="nav-path">Support Tickets → Settings → Automation</span></p>
+    <p><span class="nav-path">Support Tickets → Settings → General → Automation</span></p>
     <p>The <strong>Auto-Close Inactive Tickets</strong> setting closes tickets that are waiting on the member and never get a reply,
     so your queue stays clean.</p>
     <div class="workflow-container">
@@ -369,7 +389,7 @@ Submit  ──►  Routing rules decide which staff / priority  ──►  lands
         <div class="step"><div class="step-number">2</div><div class="step-content"><div class="step-title">Categories</div><div class="step-details">On the <strong>Categories</strong> tab, add three categories under Events: <strong>Points</strong>, <strong>Results</strong>, and <strong>Staff</strong>.</div></div></div>
         <div class="step"><div class="step-number">3</div><div class="step-content"><div class="step-title">"Related Event" field for Points &amp; Results</div><div class="step-details">On <strong>Custom Fields</strong>, add (or edit the existing) <strong>Related Event</strong> field. Tick the categories <strong>Points</strong> and <strong>Results</strong>. Mark it <strong>Required</strong>. Now picking Points or Results shows the event picker.</div></div></div>
         <div class="step"><div class="step-number">4</div><div class="step-content"><div class="step-title">"Staff Member" field for Staff</div><div class="step-details">Add a <strong>Staff Member</strong> field and tick only the <strong>Staff</strong> category. Now picking "Staff" shows the team dropdown.</div></div></div>
-        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Routing</div><div class="step-details">On <strong>Routing</strong>, add rules: Points/Results → your scorer; Staff → a manager. Set priorities if you like.</div></div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-content"><div class="step-title">Assignments</div><div class="step-details">On <strong>Assignments</strong>, set the Events department's staff and auto-assignee, then use the category overrides: Points/Results → your scorer; Staff → a manager.</div></div></div>
         <div class="step"><div class="step-number">6</div><div class="step-content"><div class="step-title">Test it</div><div class="step-details">Open the public support form, pick Events → Points, and confirm the Related Event field appears and is required. Switch to Staff and confirm the team dropdown appears instead.</div></div></div>
     </div>
 

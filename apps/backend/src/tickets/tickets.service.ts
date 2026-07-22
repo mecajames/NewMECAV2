@@ -5,6 +5,7 @@ import { TicketComment } from './ticket-comment.entity';
 import { sanitizeSignatureHtml } from './staff-signatures.service';
 import { TicketAttachment } from './ticket-attachment.entity';
 import { TicketDepartment as TicketDepartmentEntity } from './entities/ticket-department.entity';
+import { TicketCategoryEntity } from './entities/ticket-category.entity';
 import { TicketStaffDepartment } from './entities/ticket-staff-department.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { Event } from '../events/events.entity';
@@ -808,20 +809,46 @@ export class TicketsService {
       ticketData.departmentEntity = Reference.createFromPK(TicketDepartmentEntity, chosenDepartmentId);
     }
 
-    // Set assigned staff from routing if available
+    // Resolve the assignee, first source that yields a usable person wins:
+    //   1. routing-rule staff (explicit "Assign to Staff" on a matched rule)
+    //   2. the category's auto-assign override
+    //   3. the department's default assignee
+    // Every lookup is guarded — assignment is a convenience and must NEVER
+    // block ticket creation (stale routing rules used to point at deleted
+    // staff and could take the whole submission down).
+    let assignedProfileId: string | undefined;
+
     if (routingResult.staffId) {
-      // Get the profile_id from the staff record
-      const staff = await this.staffService.findById(routingResult.staffId);
-      if (staff && staff.profile) {
-        ticketData.assignedTo = Reference.createFromPK(Profile, staff.profile.id);
-        ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+      try {
+        const staff = await this.staffService.findById(routingResult.staffId);
+        if (staff?.profile && staff.is_active && staff.can_be_assigned_tickets) {
+          assignedProfileId = staff.profile.id;
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Routing-rule staff ${routingResult.staffId} could not be resolved (falling back to category/department assignee): ${err?.message || err}`,
+        );
       }
-    } else if (chosenDepartmentId) {
-      // No routing-rule assignee — fall back to the department's configured
-      // default assignee, so every ticket lands on the right person. Guarded:
-      // this convenience lookup must NEVER block ticket creation (e.g. if the
-      // ticket_departments.default_assignee_id migration hasn't been applied yet,
-      // loading the department would throw and take the whole submission down).
+    }
+
+    if (!assignedProfileId) {
+      try {
+        const categoryConfig = await em.findOne(
+          TicketCategoryEntity,
+          { key: ticketData.category },
+          { populate: ['defaultAssignee'] },
+        );
+        if (categoryConfig?.defaultAssignee?.id) {
+          assignedProfileId = categoryConfig.defaultAssignee.id;
+        }
+      } catch (err: any) {
+        this.logger.error(
+          `Category default-assignee lookup failed for "${ticketData.category}" (continuing): ${err?.message || err}`,
+        );
+      }
+    }
+
+    if (!assignedProfileId && chosenDepartmentId) {
       try {
         const dept = await em.findOne(
           TicketDepartmentEntity,
@@ -829,14 +856,18 @@ export class TicketsService {
           { populate: ['defaultAssignee'] },
         );
         if (dept?.defaultAssignee?.id) {
-          ticketData.assignedTo = Reference.createFromPK(Profile, dept.defaultAssignee.id);
-          ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
+          assignedProfileId = dept.defaultAssignee.id;
         }
       } catch (err: any) {
         this.logger.error(
           `Department default-assignee lookup failed for ${chosenDepartmentId} (continuing without auto-assign): ${err?.message || err}`,
         );
       }
+    }
+
+    if (assignedProfileId) {
+      ticketData.assignedTo = Reference.createFromPK(Profile, assignedProfileId);
+      ticketData.status = TicketStatus.IN_PROGRESS; // Auto-assign changes status
     }
 
     // Prefer an explicitly-sent event_id; otherwise use an event_reference

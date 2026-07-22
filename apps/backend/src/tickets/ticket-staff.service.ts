@@ -256,6 +256,50 @@ export class TicketStaffService {
     await em.flush();
   }
 
+  /**
+   * Department-centric membership write: make `staffIds` exactly the set of
+   * staff working `departmentId`. Adds missing assignments, removes ones not in
+   * the list, and preserves is_department_head on assignments that stay.
+   */
+  async setDepartmentStaff(departmentId: string, staffIds: string[]): Promise<void> {
+    const em = this.em.fork();
+
+    const department = await em.findOne(TicketDepartment, { id: departmentId });
+    if (!department) {
+      throw new NotFoundException(`Department with ID ${departmentId} not found`);
+    }
+
+    const uniqueIds = [...new Set(staffIds)];
+    if (uniqueIds.length > 0) {
+      const staff = await em.find(TicketStaff, { id: { $in: uniqueIds } });
+      if (staff.length !== uniqueIds.length) {
+        throw new NotFoundException('One or more staff members not found');
+      }
+    }
+
+    const existing = await em.find(TicketStaffDepartment, { department: departmentId });
+    const keep = new Set(uniqueIds);
+    const existingByStaff = new Map(existing.map(a => [a.staff.id, a]));
+
+    for (const assignment of existing) {
+      if (!keep.has(assignment.staff.id)) {
+        em.remove(assignment);
+      }
+    }
+    for (const staffId of uniqueIds) {
+      if (!existingByStaff.has(staffId)) {
+        const assignment = em.create(TicketStaffDepartment, {
+          staff: Reference.createFromPK(TicketStaff, staffId),
+          department: department,
+          isDepartmentHead: false,
+        } as any);
+        em.persist(assignment);
+      }
+    }
+
+    await em.flush();
+  }
+
   private async assignToDepartmentsInternal(em: EntityManager, staff: TicketStaff, departmentIds: string[]): Promise<void> {
     // Verify all departments exist
     const departments = await em.find(TicketDepartment, { id: { $in: departmentIds } });

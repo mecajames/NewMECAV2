@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Ticket,
   Users,
+  UserCheck,
   Building2,
   Route,
   Settings,
@@ -18,6 +19,7 @@ import {
   TicketDepartmentManagement,
   TicketStaffArea,
   TicketRoutingRules,
+  TicketAssignments,
   TicketCategoriesManagement,
   TicketCustomFields,
   TicketSystemSettings,
@@ -26,21 +28,31 @@ import {
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { isAdminUser } from '@/auth/isAdminUser';
 
-type TabId = 'tickets' | 'mytools' | 'staff' | 'departments' | 'categories' | 'routing' | 'custom-fields' | 'settings' | 'setup';
+type TabId = 'tickets' | 'mytools' | 'staff' | 'assignments' | 'departments' | 'categories' | 'routing' | 'custom-fields' | 'settings' | 'setup';
 
+// Top row stays short so it never needs a horizontal scrollbar; all the
+// configuration screens live in a sub-menu under Settings. Old ?tab= deep
+// links (e.g. ?tab=routing) keep working — those ids are now sub-tabs.
 const tabs: { id: TabId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'tickets', label: 'Ticket Queue', icon: <Ticket className="w-4 h-4" /> },
   // Per-tech personal settings (signature + canned responses). Available to
   // every support tech, not just admins.
   { id: 'mytools', label: 'My Tools', icon: <Wrench className="w-4 h-4" /> },
   { id: 'staff', label: 'Staff', icon: <Users className="w-4 h-4" />, adminOnly: true },
-  { id: 'departments', label: 'Departments', icon: <Building2 className="w-4 h-4" />, adminOnly: true },
-  { id: 'categories', label: 'Categories', icon: <Tags className="w-4 h-4" />, adminOnly: true },
-  { id: 'routing', label: 'Routing', icon: <Route className="w-4 h-4" />, adminOnly: true },
-  { id: 'custom-fields', label: 'Custom Fields', icon: <ListChecks className="w-4 h-4" />, adminOnly: true },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" />, adminOnly: true },
-  { id: 'setup', label: 'Setup Guide', icon: <BookOpen className="w-4 h-4" />, adminOnly: true },
 ];
+
+const settingsSubTabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'assignments', label: 'Assignments', icon: <UserCheck className="w-4 h-4" /> },
+  { id: 'departments', label: 'Departments', icon: <Building2 className="w-4 h-4" /> },
+  { id: 'categories', label: 'Categories', icon: <Tags className="w-4 h-4" /> },
+  { id: 'custom-fields', label: 'Custom Fields', icon: <ListChecks className="w-4 h-4" /> },
+  { id: 'routing', label: 'Routing', icon: <Route className="w-4 h-4" /> },
+  { id: 'settings', label: 'General', icon: <Settings className="w-4 h-4" /> },
+  { id: 'setup', label: 'Setup Guide', icon: <BookOpen className="w-4 h-4" /> },
+];
+
+const settingsTabIds = new Set<TabId>(settingsSubTabs.map((t) => t.id));
 
 export function AdminTicketsPage() {
   const { id } = useParams<{ id: string }>();
@@ -104,6 +116,8 @@ export function AdminTicketsPage() {
         return <MyTicketTools />;
       case 'staff':
         return <TicketStaffArea />;
+      case 'assignments':
+        return <TicketAssignments />;
       case 'departments':
         return <TicketDepartmentManagement />;
       case 'categories':
@@ -170,23 +184,48 @@ export function AdminTicketsPage() {
 
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-slate-700">
-          <nav className="flex items-center gap-1 overflow-x-auto pb-px">
-            {visibleTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-orange-500 text-orange-400'
-                    : 'border-transparent text-gray-400 hover:text-white hover:border-slate-600'
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
+          <nav className="flex items-center gap-1 flex-wrap">
+            {visibleTabs.map((tab) => {
+              const isActive =
+                activeTab === tab.id ||
+                (tab.id === 'settings' && settingsTabIds.has(activeTab));
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    isActive
+                      ? 'border-orange-500 text-orange-400'
+                      : 'border-transparent text-gray-400 hover:text-white hover:border-slate-600'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              );
+            })}
           </nav>
         </div>
+
+        {/* Settings Sub-menu */}
+        {isAdmin && settingsTabIds.has(activeTab) && (
+          <div className="mb-6 -mt-2 flex items-center gap-2 flex-wrap">
+            {settingsSubTabs.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => handleTabChange(sub.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors whitespace-nowrap ${
+                  activeTab === sub.id
+                    ? 'bg-orange-500/15 text-orange-400 border border-orange-500/40'
+                    : 'bg-slate-800 text-gray-400 border border-slate-700 hover:text-white hover:border-slate-500'
+                }`}
+              >
+                {sub.icon}
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Tab Content */}
         {renderTabContent()}

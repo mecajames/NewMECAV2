@@ -81,10 +81,12 @@ export function TicketRoutingRules() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Load INACTIVE departments/staff too — legacy rules can reference
+      // deactivated ones, and resolving their names beats showing "Unknown".
       const [rulesData, deptData, staffData] = await Promise.all([
         ticketAdminApi.listRoutingRules(showInactive),
-        ticketAdminApi.listDepartments(false),
-        ticketAdminApi.listStaff(false),
+        ticketAdminApi.listDepartments(true),
+        ticketAdminApi.listStaff(true),
       ]);
       setRules(rulesData);
       setDepartments(deptData);
@@ -252,16 +254,24 @@ export function TicketRoutingRules() {
     setExpandedRules(newExpanded);
   };
 
+  // Active-only lists for the form dropdowns; the full lists (incl. inactive)
+  // are kept for resolving names on existing rules.
+  const activeDepartments = departments.filter((d) => d.is_active);
+  const activeStaff = staff.filter((s) => s.is_active);
+
   const getDepartmentName = (id: string | null) => {
     if (!id) return null;
-    return departments.find((d) => d.id === id)?.name || 'Unknown';
+    const dept = departments.find((d) => d.id === id);
+    if (!dept) return 'Deleted department';
+    return dept.is_active ? dept.name : `${dept.name} (inactive)`;
   };
 
   const getStaffName = (id: string | null) => {
     if (!id) return null;
     const member = staff.find((s) => s.id === id);
-    if (!member) return 'Unknown';
-    return member.profile?.first_name || member.profile?.email?.split('@')[0] || 'Unknown';
+    if (!member) return 'Deleted staff member';
+    const name = member.profile?.first_name || member.profile?.email?.split('@')[0] || 'Unknown';
+    return member.is_active ? name : `${name} (inactive)`;
   };
 
   const renderFormFields = () => (
@@ -396,7 +406,7 @@ export function TicketRoutingRules() {
               className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
             >
               <option value="">No change</option>
-              {departments.map((d) => (
+              {activeDepartments.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
@@ -409,7 +419,7 @@ export function TicketRoutingRules() {
               className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
             >
               <option value="">No change</option>
-              {staff.filter((s) => s.can_be_assigned_tickets).map((s) => (
+              {activeStaff.filter((s) => s.can_be_assigned_tickets).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.profile?.first_name || s.profile?.email?.split('@')[0]}
                 </option>
@@ -446,6 +456,17 @@ export function TicketRoutingRules() {
 
   return (
     <div className="space-y-6">
+      {/* Pointer to the simple assignment config */}
+      <div className="flex items-start gap-3 p-4 bg-cyan-500/5 border border-cyan-500/20 rounded-xl">
+        <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-gray-300">
+          Looking for who receives new tickets? That's configured on the{' '}
+          <span className="text-cyan-400 font-medium">Assignments</span> tab (per department and category).
+          Routing rules are advanced overrides — keyword matching and priority escalation — and only apply
+          when a rule's conditions match.
+        </p>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -454,7 +475,7 @@ export function TicketRoutingRules() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Routing Rules</h2>
-            <p className="text-sm text-gray-400">Automatic ticket assignment based on conditions</p>
+            <p className="text-sm text-gray-400">Advanced condition-based overrides (keywords, priority escalation)</p>
           </div>
         </div>
         <div className="flex items-center gap-3">

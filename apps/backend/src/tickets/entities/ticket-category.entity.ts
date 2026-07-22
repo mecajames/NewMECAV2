@@ -1,5 +1,6 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
+import { Entity, ManyToOne, PrimaryKey, Property } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
+import { Profile } from '../../profiles/profiles.entity';
 
 /**
  * Admin-managed, department-scoped ticket category. The submitter picks a
@@ -39,6 +40,16 @@ export class TicketCategoryEntity {
   @Property({ type: 'json', nullable: true, fieldName: 'required_roles' })
   requiredRoles?: string[];
 
+  // Per-category auto-assign override: wins over the department's default
+  // assignee for new tickets. The persist:false scalar emits the id for the
+  // admin UI; the hidden ManyToOne owns the column (mirrors the department's
+  // default-assignee pattern).
+  @Property({ type: 'uuid', fieldName: 'default_assignee_id', persist: false, nullable: true })
+  defaultAssigneeId?: string;
+
+  @ManyToOne(() => Profile, { nullable: true, fieldName: 'default_assignee_id', hidden: true })
+  defaultAssignee?: Profile;
+
   @Property({ onCreate: () => new Date(), fieldName: 'created_at' })
   createdAt: Date = new Date();
 
@@ -56,6 +67,7 @@ export class TicketCategoryEntity {
       is_active: this.isActive,
       audience: this.audience ?? 'all',
       required_roles: this.requiredRoles ?? null,
+      default_assignee_id: this.defaultAssigneeId ?? null,
       created_at: this.createdAt.toISOString(),
       updated_at: this.updatedAt.toISOString(),
     };

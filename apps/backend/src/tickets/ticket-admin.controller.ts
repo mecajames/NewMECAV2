@@ -40,6 +40,7 @@ import {
   UpdateTicketCustomFieldDto,
   CreateTicketCategoryDto,
   UpdateTicketCategoryDto,
+  SetDepartmentStaffDto,
 } from '@newmeca/shared';
 
 @Controller('api/tickets/admin')
@@ -273,6 +274,18 @@ export class TicketAdminController {
   ) {
     await this.requireAdmin(authHeader);
     return this.staffService.getStaffForDepartment(departmentId);
+  }
+
+  @Put('departments/:departmentId/staff')
+  @HttpCode(HttpStatus.OK)
+  async setDepartmentStaff(
+    @Headers('authorization') authHeader: string,
+    @Param('departmentId') departmentId: string,
+    @Body() data: SetDepartmentStaffDto,
+  ) {
+    await this.requireAdmin(authHeader);
+    await this.staffService.setDepartmentStaff(departmentId, data.staff_ids ?? []);
+    return this.staffService.findAll(false);
   }
 
   // ==========================================================================
