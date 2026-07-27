@@ -1,6 +1,6 @@
 import { Entity, PrimaryKey, Property, ManyToOne, OneToMany, Collection } from '@mikro-orm/core';
 import { randomUUID } from 'crypto';
-import { AccountType } from '@newmeca/shared';
+import { AccountType, AudioSystem } from '@newmeca/shared';
 
 @Entity({ tableName: 'profiles', schema: 'public' })
 export class Profile {
@@ -159,6 +159,19 @@ export class Profile {
 
   @Property({ type: 'text', nullable: true, fieldName: 'car_audio_system' })
   car_audio_system?: string;
+
+  // Structured audio system (AudioSystemSchema in @newmeca/shared);
+  // car_audio_system above is the legacy free-text fallback.
+  @Property({ type: 'json', nullable: true, fieldName: 'audio_system' })
+  audio_system?: AudioSystem;
+
+  // Member opt-in: show vehicle make/model/color (never the plate) publicly.
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'vehicle_public' })
+  vehicle_public?: boolean;
+
+  // Member opt-in: show the audio system publicly.
+  @Property({ type: 'boolean', nullable: true, default: false, fieldName: 'audio_system_public' })
+  audio_system_public?: boolean;
 
   @Property({ type: 'json', nullable: true, fieldName: 'profile_images' })
   profile_images?: string[];

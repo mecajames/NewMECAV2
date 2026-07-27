@@ -80,6 +80,59 @@ export class TicketAutoCloseService {
   }
 
   /**
+   * Read-only diagnostic for the admin UI/API: what the sweep sees RIGHT NOW —
+   * which tickets would be warned, which are in their 24h grace window (and
+   * when they close), and which staff-set timers are pending. Lets an admin
+   * verify the auto-close rules are actually being followed without waiting
+   * for the next cron tick. Writes nothing.
+   */
+  async preview(): Promise<{
+    enabled: boolean;
+    inactive_days: number;
+    would_warn_now: Array<{ ticket_number: string; title: string; last_reply_at: string | null }>;
+    warned_grace_window: Array<{ ticket_number: string; title: string; closes_at: string }>;
+    staff_timers: Array<{ ticket_number: string; title: string; closes_at: string; overdue: boolean }>;
+  }> {
+    const days = await this.settingsService.getNumber('auto_close_inactive_days', 0);
+    const enabled = !!days && days > 0;
+    const now = Date.now();
+
+    const em = this.em.fork();
+    const timerTickets = await em.find(
+      Ticket,
+      {
+        autoCloseAt: { $ne: null },
+        status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED, TicketStatus.ON_HOLD] },
+      } as any,
+      { fields: ['id', 'ticketNumber', 'title', 'autoCloseAt'] as any },
+    );
+
+    const warned = await this.findWarnedTickets(false);
+    const wouldWarn = enabled ? await this.findWarnCandidates(days) : [];
+
+    return {
+      enabled,
+      inactive_days: days,
+      would_warn_now: wouldWarn.map((r) => ({
+        ticket_number: r.ticket_number,
+        title: r.title,
+        last_reply_at: r.last_reply_at ? new Date(r.last_reply_at).toISOString() : null,
+      })),
+      warned_grace_window: warned.map((r) => ({
+        ticket_number: r.ticket_number,
+        title: r.title,
+        closes_at: new Date(new Date(r.auto_close_warning_at).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      })),
+      staff_timers: timerTickets.map((t) => ({
+        ticket_number: t.ticketNumber,
+        title: t.title,
+        closes_at: t.autoCloseAt!.toISOString(),
+        overdue: t.autoCloseAt!.getTime() <= now,
+      })),
+    };
+  }
+
+  /**
    * Phase 0 — close tickets whose staff-set per-reply countdown (auto_close_at)
    * has elapsed. auto_close_at is set only on a staff reply that chose a timer
    * and is cleared on any non-internal reply, so a non-null, expired value means
@@ -107,14 +160,21 @@ export class TicketAutoCloseService {
     );
   }
 
-  /** Phase 1 — email a 24h warning for tickets stale X days, stamp warning_at. */
-  private async warnStaleTickets(days: number): Promise<number> {
+  /**
+   * Rows eligible for the Phase-1 warning: stale X days, no warning yet, staff
+   * replied last, and — critically — NO staff-set per-reply countdown.
+   * A staff-chosen timer (auto_close_at) OVERRIDES the global inactivity flow
+   * entirely: if a tech gave the member 96 hours, the global 2-day rule must
+   * not warn or close underneath it. Shared by the live sweep and preview().
+   */
+  private async findWarnCandidates(days: number): Promise<any[]> {
     const em = this.em.fork();
     const conn = em.getConnection();
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const rows = await conn.execute<any[]>(
+    return conn.execute<any[]>(
       `SELECT t.id, t.ticket_number, t.title, t.reporter_id, t.guest_email, t.guest_name, t.access_token,
+              l.created_at AS last_reply_at,
               rp.email AS reporter_email, rp.first_name AS reporter_first_name
        FROM public.tickets t
        LEFT JOIN LATERAL (
@@ -127,10 +187,17 @@ export class TicketAutoCloseService {
        LEFT JOIN public.profiles rp ON rp.id = t.reporter_id
        WHERE t.status NOT IN ('resolved', 'closed', 'on_hold', 'escalated', 'pending_internal_review')
          AND t.auto_close_warning_at IS NULL
+         AND t.auto_close_at IS NULL
          AND l.created_at <= ?
          AND ${this.staffRepliedLast}`,
       [cutoff.toISOString()],
     );
+  }
+
+  /** Phase 1 — email a 24h warning for tickets stale X days, stamp warning_at. */
+  private async warnStaleTickets(days: number): Promise<number> {
+    const em = this.em.fork();
+    const rows = await this.findWarnCandidates(days);
 
     let warned = 0;
     const now = new Date();
@@ -171,14 +238,18 @@ export class TicketAutoCloseService {
     return warned;
   }
 
-  /** Phase 2 — close tickets whose 24h warning window has elapsed. */
-  private async closeExpiredWarnedTickets(): Promise<number> {
+  /**
+   * Rows whose 24h warning window has elapsed. `elapsedOnly=false` (preview)
+   * returns every warned ticket still in its grace window too. Timer tickets
+   * (auto_close_at set) are excluded — the staff-set countdown owns them.
+   */
+  private async findWarnedTickets(elapsedOnly: boolean): Promise<any[]> {
     const em = this.em.fork();
     const conn = em.getConnection();
     const closeCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const rows = await conn.execute<any[]>(
-      `SELECT t.id
+    return conn.execute<any[]>(
+      `SELECT t.id, t.ticket_number, t.title, t.auto_close_warning_at
        FROM public.tickets t
        LEFT JOIN LATERAL (
          SELECT author_id, is_guest_comment, created_at
@@ -189,10 +260,17 @@ export class TicketAutoCloseService {
        LEFT JOIN public.profiles p ON p.id = l.author_id
        WHERE t.status NOT IN ('resolved', 'closed', 'on_hold', 'escalated', 'pending_internal_review')
          AND t.auto_close_warning_at IS NOT NULL
-         AND t.auto_close_warning_at <= ?
+         AND t.auto_close_at IS NULL
+         ${elapsedOnly ? 'AND t.auto_close_warning_at <= ?' : ''}
          AND ${this.staffRepliedLast}`,
-      [closeCutoff.toISOString()],
+      elapsedOnly ? [closeCutoff.toISOString()] : [],
     );
+  }
+
+  /** Phase 2 — close tickets whose 24h warning window has elapsed. */
+  private async closeExpiredWarnedTickets(): Promise<number> {
+    const em = this.em.fork();
+    const rows = await this.findWarnedTickets(true);
 
     if (rows.length === 0) return 0;
     const ids = rows.map((r: any) => r.id);

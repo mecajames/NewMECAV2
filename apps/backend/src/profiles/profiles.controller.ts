@@ -180,7 +180,7 @@ export class ProfilesController {
   // Member-only: the individual member profile page (/members/:id). Gated for
   // the same reason as getPublicProfiles above.
   @Get('public/:id')
-  async getPublicProfile(@Param('id') id: string): Promise<Profile> {
+  async getPublicProfile(@Param('id') id: string): Promise<Partial<Profile>> {
     return this.profilesService.findPublicById(id);
   }
 
@@ -238,10 +238,17 @@ export class ProfilesController {
     return target;
   }
 
-  @Public()
+  // Was @Public() — fixed 2026-07-27: an unauthenticated caller could create
+  // arbitrary profile rows (and, before the same-day service fix, mint MECA
+  // IDs from the competitor pool). No frontend code calls this endpoint;
+  // profile provisioning goes through /ensure (self) or the admin wizards.
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createProfile(@Body() data: Partial<Profile>): Promise<Profile> {
+  async createProfile(
+    @Headers('authorization') authHeader: string,
+    @Body() data: Partial<Profile>,
+  ): Promise<Profile> {
+    await this.requireAdmin(authHeader);
     return this.profilesService.create(data);
   }
 

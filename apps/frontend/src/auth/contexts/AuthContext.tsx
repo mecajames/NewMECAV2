@@ -169,10 +169,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error, data: null };
     }
 
-    // Generate MECA ID by calling the database function
-    const { data: mecaIdData } = await supabase.rpc('generate_meca_id');
-    const mecaId = mecaIdData || 700800;
-
+    // NO MECA ID at signup (policy 2026-07-27). This used to call the
+    // generate_meca_id DB function and stamp the profile — which burned a
+    // real 7015xx competitor-pool ID for every account that merely signed up
+    // (event-registration signups, abandoned checkouts). MECA IDs are minted
+    // ONLY when a membership is created; the backend mirrors the number onto
+    // the profile then.
     const signUpFullName = [firstName, lastName].filter(Boolean).join(' ') || email;
 
     const { error: profileError } = await supabase
@@ -183,12 +185,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         first_name: firstName,
         last_name: lastName,
         full_name: signUpFullName,
-        meca_id: mecaId,
         role: 'user',
         membership_status: 'none',
       });
 
-    if (profileError) {
+    // 23505 = duplicate key: the profile row already exists (prod has an
+    // auth.users trigger that auto-provisions one, and /api/profiles/ensure
+    // also creates it). That's success, not failure.
+    if (profileError && (profileError as any).code !== '23505') {
       return { error: profileError, data: null };
     }
 

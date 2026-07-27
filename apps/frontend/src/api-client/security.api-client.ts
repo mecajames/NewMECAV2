@@ -103,6 +103,16 @@ export const securityApi = {
     return data;
   },
 
+  async releaseOrphanedMecaIds(dryRun: boolean): Promise<{
+    dryRun: boolean;
+    releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: string }>;
+    kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }>;
+    released: number;
+  }> {
+    const { data } = await axios.post('/api/admin/security/release-orphaned-meca-ids', { dryRun });
+    return data;
+  },
+
   async getEnforcement(): Promise<{ enabled: boolean }> {
     const { data } = await axios.get('/api/admin/security/enforcement');
     return data;

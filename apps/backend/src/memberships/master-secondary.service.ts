@@ -10,6 +10,7 @@ import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertVehicleChangeAllowed } from './vehicle-lock.util';
 
 // DTO for creating a secondary membership
 export interface CreateSecondaryMembershipDto {
@@ -126,7 +127,10 @@ export class MasterSecondaryService {
   /**
    * Create a secondary membership linked to a master
    */
-  async createSecondaryMembership(dto: CreateSecondaryMembershipDto): Promise<Membership> {
+  async createSecondaryMembership(
+    dto: CreateSecondaryMembershipDto,
+    opts: { isAdmin?: boolean } = {},
+  ): Promise<Membership> {
     const em = this.em.fork();
 
     // Find and validate master membership
@@ -158,6 +162,47 @@ export class MasterSecondaryService {
     const secondaryCount = masterMembership.secondaryMemberships.length;
     if (secondaryCount >= this.DEFAULT_MAX_SECONDARIES) {
       throw new BadRequestException(`Maximum of ${this.DEFAULT_MAX_SECONDARIES} secondary memberships allowed`);
+    }
+
+    // Vehicle rules. A unique vehicle is the premise of a separate MECA ID:
+    //  1. Members must supply the full vehicle (the modal requires it — this
+    //     backs that client rule server-side). Admin creation may omit it for
+    //     data-entry edge cases.
+    //  2. The vehicle must DIFFER from the master's vehicle and from every
+    //     sibling secondary's vehicle — matched by license plate, or by the
+    //     full make/model/color combination when plates are absent.
+    if (!opts.isAdmin) {
+      if (
+        !dto.vehicleMake?.trim() ||
+        !dto.vehicleModel?.trim() ||
+        !dto.vehicleColor?.trim() ||
+        !dto.vehicleLicensePlate?.trim()
+      ) {
+        throw new BadRequestException(
+          'Vehicle information (make, model, color, and license plate) is required for a secondary membership',
+        );
+      }
+    }
+    const normPlate = (v?: string) => (v ?? '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const normTuple = (v: { vehicleMake?: string; vehicleModel?: string; vehicleColor?: string }) =>
+      [v.vehicleMake, v.vehicleModel, v.vehicleColor].map((s) => (s ?? '').trim().toLowerCase()).join('|');
+    const newPlate = normPlate(dto.vehicleLicensePlate);
+    const newTuple = normTuple(dto);
+    const hasNewTuple = !!dto.vehicleMake?.trim() && !!dto.vehicleModel?.trim();
+    for (const existing of [masterMembership, ...masterMembership.secondaryMemberships.getItems()]) {
+      const label = existing.id === masterMembership.id
+        ? 'the primary membership'
+        : `${existing.competitorName || 'another secondary member'}'s membership`;
+      if (newPlate && newPlate === normPlate(existing.vehicleLicensePlate)) {
+        throw new BadRequestException(
+          `That license plate is already registered to ${label}. Each membership must have a different vehicle.`,
+        );
+      }
+      if (hasNewTuple && newTuple === normTuple(existing)) {
+        throw new BadRequestException(
+          `That vehicle (make, model, and color) is already registered to ${label}. Each membership must have a different vehicle.`,
+        );
+      }
     }
 
     // Validate email if creating login
@@ -1017,6 +1062,9 @@ export class MasterSecondaryService {
     if (data.competitorName !== undefined && secondary.relationshipToMaster !== 'self') {
       secondary.competitorName = data.competitorName.trim();
     }
+    // Vehicle lock: fill-if-empty is fine, changing an existing value is
+    // admin-only (members go through a support ticket).
+    assertVehicleChangeAllowed(secondary, data, opts.isAdmin === true);
     if (data.vehicleMake !== undefined) {
       secondary.vehicleMake = data.vehicleMake;
     }

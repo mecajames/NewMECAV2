@@ -58,6 +58,10 @@ export interface Profile {
   is_public?: boolean;
   vehicle_info?: string;
   car_audio_system?: string;
+  // Structured audio system + per-section public visibility opt-ins
+  audio_system?: import('@newmeca/shared').AudioSystem | null;
+  vehicle_public?: boolean;
+  audio_system_public?: boolean;
   // Computed field (from AuthContext)
   full_name?: string;
   // Permission fields

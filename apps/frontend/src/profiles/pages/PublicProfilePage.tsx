@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Car, Music, Eye, EyeOff, Loader2, Save, ArrowLeft, Users } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { profilesApi, Profile as ProfileType } from '@/profiles';
+import { AUDIO_SYSTEM_COMPONENT_FIELDS, type AudioSystem } from '@newmeca/shared';
 import { membershipsApi, ControlledMecaId, Membership, RELATIONSHIP_TYPES } from '@/memberships';
 import { MecaIdSwitcher } from '@/shared/components/MecaIdSwitcher';
 import ProfileViewSelector from '@/profiles/components/ProfileViewSelector';
@@ -27,7 +28,12 @@ export default function PublicProfilePage() {
 
   // Form state - Profile fields (gallery managed on its own page)
   const [isPublic, setIsPublic] = useState(false);
-  const [carAudioSystem, setCarAudioSystem] = useState('');
+  // Per-section visibility opt-ins (default private)
+  const [vehiclePublic, setVehiclePublic] = useState(false);
+  const [audioPublic, setAudioPublic] = useState(false);
+  // Structured audio system components (legacy free-text car_audio_system is
+  // folded into the description field the first time it's edited here)
+  const [audioSystem, setAudioSystem] = useState<AudioSystem>({});
 
   // Competitor name (per membership/MECA ID)
   const [competitorName, setCompetitorName] = useState('');
@@ -56,21 +62,33 @@ export default function PublicProfilePage() {
     loadControlledMecaIds();
   }, [profile?.id]);
 
+  // Seed the structured audio editor from a profile: prefer the structured
+  // column; fall back to folding the legacy free-text description in.
+  const seedAudioSystem = (p: ProfileType) => {
+    if (p.audio_system && Object.values(p.audio_system).some((v) => v)) {
+      setAudioSystem(p.audio_system);
+    } else {
+      setAudioSystem(p.car_audio_system ? { description: p.car_audio_system } : {});
+    }
+  };
+
   // Initialize form data when profile loads or changes
   useEffect(() => {
     if (profile && !isViewingSecondary) {
       setIsPublic(profile.is_public || false);
-      setCarAudioSystem(profile.car_audio_system || '');
+      setVehiclePublic(profile.vehicle_public || false);
+      setAudioPublic(profile.audio_system_public || false);
+      seedAudioSystem(profile);
     }
   }, [profile, isViewingSecondary]);
 
-  // Auto-resize audio system textarea when content changes
+  // Auto-resize the description textarea when content changes
   useEffect(() => {
     if (audioSystemRef.current) {
       audioSystemRef.current.style.height = 'auto';
       audioSystemRef.current.style.height = audioSystemRef.current.scrollHeight + 'px';
     }
-  }, [carAudioSystem]);
+  }, [audioSystem.description]);
 
   // Handle switching between profiles
   const handleProfileSwitch = async (_mecaId: number, membershipId: string, profileId: string, _competitorName: string) => {
@@ -104,7 +122,9 @@ export default function PublicProfilePage() {
 
       // Initialize form with secondary's data
       setIsPublic(secondaryProfile.is_public || false);
-      setCarAudioSystem(secondaryProfile.car_audio_system || '');
+      setVehiclePublic(secondaryProfile.vehicle_public || false);
+      setAudioPublic(secondaryProfile.audio_system_public || false);
+      seedAudioSystem(secondaryProfile);
       setCompetitorName(membership.competitorName || selectedMecaInfo?.competitorName || `${secondaryProfile.first_name || ''} ${secondaryProfile.last_name || ''}`.trim());
       // Get relationshipToMaster from controlled MECA IDs data
       setRelationshipToMaster(selectedMecaInfo?.relationshipToMaster || '');
@@ -137,10 +157,17 @@ export default function PublicProfilePage() {
     setSuccess(null);
 
     try {
-      // Save profile public data (gallery fields are managed on the dedicated gallery page)
+      // Save profile public data (gallery fields are managed on the dedicated
+      // gallery page). Empty component strings are dropped so the stored JSON
+      // stays clean.
+      const cleanedAudio: AudioSystem = Object.fromEntries(
+        Object.entries(audioSystem).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
+      );
       await profilesApi.update(targetProfile.id, {
         is_public: isPublic,
-        car_audio_system: carAudioSystem,
+        vehicle_public: vehiclePublic,
+        audio_system_public: audioPublic,
+        audio_system: cleanedAudio,
       });
 
       // Competitor name is LOCKED — it's the member's name in results/standings and
@@ -393,13 +420,35 @@ export default function PublicProfilePage() {
           {/* Vehicle Information - Display from membership data */}
           {(primaryMembership || (isViewingSecondary && selectedMembership)) && (
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <Car className="h-5 w-5 text-blue-500" />
+              <div className="flex items-center justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <Car className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
+                    <p className="text-gray-400 text-sm">
+                      Changes require a support ticket. {vehiclePublic
+                        ? 'Shown on the public profile (license plate is never shown).'
+                        : 'Only you and MECA staff can see this.'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Vehicle Information</h2>
-                  <p className="text-gray-400 text-sm">Edit in your Profile settings</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-gray-400">{vehiclePublic ? 'Public' : 'Private'}</span>
+                  <button
+                    onClick={() => setVehiclePublic(!vehiclePublic)}
+                    className={`relative w-12 h-7 rounded-full transition-colors ${
+                      vehiclePublic ? 'bg-orange-600' : 'bg-slate-600'
+                    }`}
+                    aria-label="Toggle vehicle visibility"
+                  >
+                    <div
+                      className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        vehiclePublic ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 
@@ -432,27 +481,73 @@ export default function PublicProfilePage() {
             </div>
           )}
 
-          {/* Car Audio System */}
+          {/* Car Audio System — structured components */}
           <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                <Music className="h-5 w-5 text-green-500" />
+            <div className="flex items-center justify-between gap-3 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <Music className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Car Audio System</h2>
+                  <p className="text-gray-400 text-sm">
+                    {audioPublic
+                      ? 'Shown on the public profile.'
+                      : 'Only you and MECA staff can see this.'}
+                  </p>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-white">Car Audio System</h2>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-gray-400">{audioPublic ? 'Public' : 'Private'}</span>
+                <button
+                  onClick={() => setAudioPublic(!audioPublic)}
+                  className={`relative w-12 h-7 rounded-full transition-colors ${
+                    audioPublic ? 'bg-orange-600' : 'bg-slate-600'
+                  }`}
+                  aria-label="Toggle audio system visibility"
+                >
+                  <div
+                    className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                      audioPublic ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 mb-4">
+              {AUDIO_SYSTEM_COMPONENT_FIELDS.map((field) => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    {field.label}
+                  </label>
+                  <input
+                    type="text"
+                    value={audioSystem[field.key] || ''}
+                    onChange={(e) =>
+                      setAudioSystem((prev) => ({ ...prev, [field.key]: e.target.value }))
+                    }
+                    className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder={field.placeholder}
+                  />
+                </div>
+              ))}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                Describe your audio system (head unit, speakers, amps, subs, etc.)
+                Build Description
               </label>
               <textarea
                 ref={audioSystemRef}
-                value={carAudioSystem}
-                onChange={(e) => setCarAudioSystem(e.target.value)}
+                value={audioSystem.description || ''}
+                onChange={(e) =>
+                  setAudioSystem((prev) => ({ ...prev, description: e.target.value }))
+                }
                 rows={2}
                 className="w-full px-4 py-3 bg-slate-700 text-white rounded-lg border border-slate-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none resize-none overflow-hidden"
                 style={{ minHeight: '80px' }}
-                placeholder="e.g., Pioneer DMH-WT8600NEX head unit, JL Audio C3-650 components, Rockford Fosgate T1500-1bdCP amp..."
+                placeholder="Tell the story of your build — install details, goals, competition history..."
               />
             </div>
           </div>

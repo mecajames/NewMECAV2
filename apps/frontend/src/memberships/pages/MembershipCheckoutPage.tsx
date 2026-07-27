@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Newspaper,
+  Car,
 } from 'lucide-react';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { useTaxRate } from '@/hooks/useTaxRate';
@@ -28,7 +29,7 @@ import {
   MembershipTypeConfig,
   MembershipCategory,
 } from '@/membership-type-configs';
-// import { membershipsApi } from '../memberships.api-client';
+import { membershipsApi } from '../memberships.api-client';
 import { calculatePasswordStrength, MIN_PASSWORD_STRENGTH } from '@/utils/passwordUtils';
 import { PasswordStrengthIndicator } from '@/shared/components/PasswordStrengthIndicator';
 import { countries, getStatesForCountry, getStateLabel, getPostalCodeLabel } from '@/utils/countries';
@@ -213,6 +214,16 @@ export default function MembershipCheckoutPage() {
   //   'blocked'   — account that cannot log in (banned) → contact support
   const [existingAccount, setExistingAccount] = useState<'active' | 'renewable' | 'blocked' | null>(null);
 
+  // Vehicle already on the member's current membership. Prefilled fields are
+  // LOCKED at checkout — the vehicle attached to a MECA ID only changes via a
+  // support ticket (the backend enforces this too).
+  const [existingVehicle, setExistingVehicle] = useState<{
+    vehicleMake?: string;
+    vehicleModel?: string;
+    vehicleColor?: string;
+    vehicleLicensePlate?: string;
+  }>({});
+
   // Form state
   const [formData, setFormData] = useState<FormData>({
     email: '',
@@ -309,6 +320,31 @@ export default function MembershipCheckoutPage() {
             // Default competitor name to user's full name
             competitorName: fullName,
           }));
+
+          // Prefill + lock the vehicle from the member's current membership
+          // (renewals must keep the vehicle on file — changes go through a
+          // support ticket). No active membership → fields stay editable.
+          try {
+            const active = await membershipsApi.getUserActiveMembership(profile.id);
+            if (active) {
+              setExistingVehicle({
+                vehicleMake: active.vehicleMake || undefined,
+                vehicleModel: active.vehicleModel || undefined,
+                vehicleColor: active.vehicleColor || undefined,
+                vehicleLicensePlate: active.vehicleLicensePlate || undefined,
+              });
+              setFormData((prev) => ({
+                ...prev,
+                competitorName: active.competitorName || prev.competitorName,
+                vehicleMake: active.vehicleMake || prev.vehicleMake,
+                vehicleModel: active.vehicleModel || prev.vehicleModel,
+                vehicleColor: active.vehicleColor || prev.vehicleColor,
+                vehicleLicensePlate: active.vehicleLicensePlate || prev.vehicleLicensePlate,
+              }));
+            }
+          } catch {
+            // No active membership (or endpoint unavailable) — nothing to prefill.
+          }
         }
       } catch (err) {
         console.error('Error fetching membership:', err);
@@ -413,6 +449,21 @@ export default function MembershipCheckoutPage() {
       return false;
     }
 
+    // Competitor-specific validation: the vehicle attached to this membership.
+    // All four fields are required — the vehicle identifies the MECA ID at
+    // events and is locked after purchase (changes go through a support ticket).
+    if (membership?.category === MembershipCategory.COMPETITOR) {
+      if (
+        !formData.vehicleMake.trim() ||
+        !formData.vehicleModel.trim() ||
+        !formData.vehicleColor.trim() ||
+        !formData.vehicleLicensePlate.trim()
+      ) {
+        setError('Vehicle information (make, model, color, and license plate) is required for competitor memberships');
+        return false;
+      }
+    }
+
     // Required: the buyer must accept the Terms of Service and Privacy Policy.
     if (!formData.agreeToTerms) {
       setError('Please agree to the Terms of Service and Privacy Policy to continue.');
@@ -476,6 +527,10 @@ export default function MembershipCheckoutPage() {
             birthday: formData.birthday || undefined,
             tshirtSize: formData.tshirtSize || undefined,
             ringSize: formData.ringSize || undefined,
+            vehicleMake: formData.vehicleMake || undefined,
+            vehicleModel: formData.vehicleModel || undefined,
+            vehicleColor: formData.vehicleColor || undefined,
+            vehicleLicensePlate: formData.vehicleLicensePlate || undefined,
         });
 
         const { checkoutUrl } = response.data;
@@ -506,6 +561,11 @@ export default function MembershipCheckoutPage() {
           birthday: formData.birthday || undefined,
           tshirtSize: formData.tshirtSize || undefined,
           ringSize: formData.ringSize || undefined,
+          competitorName: formData.competitorName || undefined,
+          vehicleMake: formData.vehicleMake || undefined,
+          vehicleModel: formData.vehicleModel || undefined,
+          vehicleColor: formData.vehicleColor || undefined,
+          vehicleLicensePlate: formData.vehicleLicensePlate || undefined,
       });
 
       const { clientSecret: secret, stagingMode, message } = response.data;
@@ -1172,6 +1232,94 @@ export default function MembershipCheckoutPage() {
                     </div>
                   </div>
 
+                  {/* Vehicle Information — competitor memberships only. The
+                      vehicle is attached to the MECA ID and locked after
+                      purchase; changes require a support ticket. */}
+                  {membership?.category === MembershipCategory.COMPETITOR && (
+                    <div className="mb-8">
+                      <h3 className="text-lg font-semibold text-white mb-1 flex items-center">
+                        <Car className="h-5 w-5 mr-2 text-orange-500" />
+                        Vehicle Information
+                      </h3>
+                      <p className="text-xs text-gray-400 mb-4">
+                        Required for competitor memberships — this is the vehicle attached to your
+                        MECA ID for competition. Once your membership is active, the vehicle can only be
+                        changed by submitting a support ticket. Your license plate is never shown publicly.
+                      </p>
+                      {(existingVehicle.vehicleMake || existingVehicle.vehicleModel) && (
+                        <div className="mb-4 p-3 bg-slate-700/60 rounded-lg border border-slate-600 flex items-start gap-2">
+                          <Lock className="h-4 w-4 text-orange-400 shrink-0 mt-0.5" />
+                          <p className="text-gray-300 text-xs">
+                            This is the vehicle already on file for your membership. It carries over to
+                            your renewal — to change it, submit a support ticket after checkout.
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Vehicle Make *
+                          </label>
+                          <input
+                            type="text"
+                            name="vehicleMake"
+                            value={formData.vehicleMake}
+                            onChange={handleInputChange}
+                            disabled={!!existingVehicle.vehicleMake}
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder="e.g., Toyota, Honda, Ford"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Vehicle Model *
+                          </label>
+                          <input
+                            type="text"
+                            name="vehicleModel"
+                            value={formData.vehicleModel}
+                            onChange={handleInputChange}
+                            disabled={!!existingVehicle.vehicleModel}
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder="e.g., Camry, Civic, F-150"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Vehicle Color *
+                          </label>
+                          <input
+                            type="text"
+                            name="vehicleColor"
+                            value={formData.vehicleColor}
+                            onChange={handleInputChange}
+                            disabled={!!existingVehicle.vehicleColor}
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder="e.g., Blue, Red, Black"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            License Plate *
+                          </label>
+                          <input
+                            type="text"
+                            name="vehicleLicensePlate"
+                            value={formData.vehicleLicensePlate}
+                            onChange={handleInputChange}
+                            disabled={!!existingVehicle.vehicleLicensePlate}
+                            className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
+                            placeholder="e.g., ABC1234"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Address */}
                   <div className="mb-8">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
@@ -1533,6 +1681,11 @@ export default function MembershipCheckoutPage() {
                         teamDescription: formData.teamDescription || undefined,
                         businessName: formData.businessName || undefined,
                         businessWebsite: formData.businessWebsite || undefined,
+                        competitorName: formData.competitorName || undefined,
+                        vehicleMake: formData.vehicleMake || undefined,
+                        vehicleModel: formData.vehicleModel || undefined,
+                        vehicleColor: formData.vehicleColor || undefined,
+                        vehicleLicensePlate: formData.vehicleLicensePlate || undefined,
                       });
                       return result.paypalOrderId;
                     }}
@@ -1542,6 +1695,13 @@ export default function MembershipCheckoutPage() {
                       userId: user?.id || '',
                       billingFirstName: formData.firstName,
                       billingLastName: formData.lastName,
+                      // Vehicle attached to this membership — the capture-order
+                      // metadata is what payment fulfillment actually reads.
+                      ...(formData.competitorName ? { competitorName: formData.competitorName } : {}),
+                      ...(formData.vehicleMake ? { vehicleMake: formData.vehicleMake } : {}),
+                      ...(formData.vehicleModel ? { vehicleModel: formData.vehicleModel } : {}),
+                      ...(formData.vehicleColor ? { vehicleColor: formData.vehicleColor } : {}),
+                      ...(formData.vehicleLicensePlate ? { vehicleLicensePlate: formData.vehicleLicensePlate } : {}),
                     }}
                     onSuccess={(captureId) => handlePaymentSuccess(captureId)}
                     onError={(err) => setError(err)}

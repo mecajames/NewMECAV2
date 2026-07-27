@@ -25,6 +25,10 @@ export interface TicketViewer {
   typing: boolean;
 }
 
+/** Auto-close bookkeeping the backend sends on every ticket:
+ *  auto_close_at = staff-set per-reply countdown (overrides the global rule);
+ *  auto_close_warning_at = the global inactivity warning went out — the ticket
+ *  closes ~24h after this stamp unless the customer replies. */
 export interface Ticket {
   id: string;
   ticket_number: string;
@@ -43,6 +47,8 @@ export interface Ticket {
   event_id: string | null;
   resolved_at: string | null;
   closed_at: string | null;
+  auto_close_at?: string | null;
+  auto_close_warning_at?: string | null;
   customer_rating: number | null;
   customer_feedback: string | null;
   // Staff-only pointer to a recognised member behind a guest ticket (e.g. an

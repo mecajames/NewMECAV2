@@ -50,6 +50,7 @@ import {
 import { reportError } from './error-helper';
 import { useTicketCategoryLabels } from '../../category-labels';
 import { OPEN_LIFECYCLE_STATUSES, LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../../status-lifecycle';
+import { AutoCloseCountdown } from '../AutoCloseCountdown';
 
 // Map of icon names returned by the system-filters endpoint -> the
 // rendered React node. Only the icons we use are included so the
@@ -67,7 +68,7 @@ const SYSTEM_FILTER_ICONS: Record<string, React.ReactNode> = {
 // (Pending Customer vs In Progress vs Escalated, etc.) so the old separate
 // Waiting On column is gone — no more duplicated badges.
 const statusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
-  open: { label: 'New', className: 'bg-blue-500/10 text-blue-400 border-blue-500', icon: <AlertCircle className="w-4 h-4" /> },
+  open: { label: 'Open (New)', className: 'bg-blue-500/10 text-blue-400 border-blue-500', icon: <AlertCircle className="w-4 h-4" /> },
   in_progress: { label: 'In Progress', className: 'bg-orange-500/10 text-orange-400 border-orange-500', icon: <Clock className="w-4 h-4" /> },
   awaiting_response: { label: 'Pending Customer', className: 'bg-yellow-500/10 text-yellow-400 border-yellow-500', icon: <MessageSquare className="w-4 h-4" /> },
   pending_internal_review: { label: 'Pending Internal Review', className: 'bg-indigo-500/10 text-indigo-400 border-indigo-500', icon: <MessageSquare className="w-4 h-4" /> },
@@ -1205,6 +1206,10 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                       {subStatus && (
                         <p className="text-[11px] text-gray-400 mt-1">{subStatus}</p>
                       )}
+                      {/* "About to auto-close" flag with the time remaining. */}
+                      <div className="mt-1">
+                        <AutoCloseCountdown ticket={ticket} />
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityBadge.className}`}>

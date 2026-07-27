@@ -201,6 +201,86 @@ export interface ReconciliationReport {
   checks: ReconCheck[];
 }
 
+/** Result of GET /api/billing/trace — the chargeback/payment lookup tool. */
+export interface PaymentTraceResult {
+  query: string;
+  detectedType: string;
+  stripe: {
+    paymentIntent?: any;
+    charge?: any;
+    invoice?: any;
+    customer?: any;
+    subscriptionDetails?: any;
+    subscriptions?: any[];
+    recentCharges?: any[];
+  } | null;
+  profiles: Array<{
+    id: string;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string | null;
+    meca_id: string | null;
+    membership_status: string | null;
+    role: string | null;
+    login_banned: boolean | null;
+    can_login: boolean | null;
+  }>;
+  memberships: Array<{
+    id: string;
+    mecaId: number | null;
+    competitorName: string | null;
+    userId: string | null;
+    userEmail: string | null;
+    userName: string | null;
+    membershipType: string | null;
+    paymentStatus: string;
+    startDate: string;
+    endDate: string | null;
+    stripeSubscriptionId: string | null;
+    paypalSubscriptionId: string | null;
+    stripePaymentIntentId: string | null;
+    transactionId: string | null;
+    cancelledAt: string | null;
+    cancelAtPeriodEnd: boolean | null;
+    frozenAt: string | null;
+    freezeReason: string | null;
+    disputeId: string | null;
+  }>;
+  payments: Array<{
+    id: string;
+    paymentType: string;
+    paymentMethod: string;
+    paymentStatus: string;
+    amount: number;
+    currency: string;
+    transactionId: string | null;
+    stripePaymentIntentId: string | null;
+    stripeCustomerId: string | null;
+    externalPaymentId: string | null;
+    paypalOrderId: string | null;
+    paypalCaptureId: string | null;
+    userId: string | null;
+    userEmail: string | null;
+    membershipId: string | null;
+    orderId: string | null;
+    paidAt: string | null;
+    refundedAt: string | null;
+    amountRefunded: string;
+    dispute: any | null;
+    metadata: Record<string, any> | null;
+    createdAt: string;
+  }>;
+  invoices: any[];
+  orders: any[];
+  shopOrders: any[];
+  eventRegistrations: any[];
+  refunds: any[];
+  webhookEvents: any[];
+  relatedIdentifiers: string[];
+  notes: string[];
+}
+
 /**
  * Row shape returned by GET /api/billing/payments — every Stripe + PayPal
  * payment regardless of status. Drives the unified All Payments page.
@@ -730,6 +810,16 @@ export const billingApi = {
     const response = await axios.get('/api/billing/failed-payments', {
       params: windowDays ? { windowDays } : undefined,
     });
+    return response.data;
+  },
+
+  /**
+   * Payment trace / chargeback lookup: resolve ANY identifier — Stripe
+   * pi_/ch_/sub_/cus_/in_/re_, PayPal I-..., invoice/order number, MECA ID,
+   * or email — to the member and their full billing chain (local DB + Stripe).
+   */
+  tracePayment: async (q: string): Promise<PaymentTraceResult> => {
+    const response = await axios.get('/api/billing/trace', { params: { q } });
     return response.data;
   },
 

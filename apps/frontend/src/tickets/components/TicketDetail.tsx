@@ -68,6 +68,7 @@ import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
 import { TicketPresenceBanner } from './TicketPresenceBanner';
 import { TicketMergeModal } from './TicketMergeModal';
+import { AutoCloseCountdown, autoCloseTime } from './AutoCloseCountdown';
 import { useTicketCategoryLabels } from '../category-labels';
 import { LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../status-lifecycle';
 
@@ -75,7 +76,7 @@ import { LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../status-lifecycle';
 // no separate Waiting On badge anymore (it duplicated the status name).
 const adminStatusConfig: Record<TicketStatus, { label: string; className: string; icon: React.ReactNode }> = {
   open: {
-    label: 'New',
+    label: 'Open (New)',
     className: 'bg-blue-500/10 text-blue-400 border-blue-500',
     icon: <AlertCircle className="w-4 h-4" />,
   },
@@ -2097,6 +2098,17 @@ export function TicketDetail({
                 </span>
                 <span className="text-white text-sm">{formatDate(ticket.updated_at)}</span>
               </div>
+              {/* Auto-close track: staff-set reply timer or the global
+                  inactivity warning's 24h grace window. */}
+              {autoCloseTime(ticket) && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Auto-close
+                  </span>
+                  <AutoCloseCountdown ticket={ticket} />
+                </div>
+              )}
               {ticket.resolved_at && (
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400 flex items-center gap-2">

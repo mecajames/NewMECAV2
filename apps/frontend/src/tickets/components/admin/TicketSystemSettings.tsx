@@ -50,6 +50,42 @@ export function TicketSystemSettings() {
     }
   };
 
+  // Auto-close live check: what the sweep sees right now (read-only), plus a
+  // "run sweep now" trigger. Answers "is auto-close actually working?" with
+  // real data instead of waiting for the hourly cron.
+  const [autoCloseChecking, setAutoCloseChecking] = useState(false);
+  const [autoClosePreview, setAutoClosePreview] = useState<any | null>(null);
+  const [autoCloseError, setAutoCloseError] = useState<string | null>(null);
+
+  const checkAutoClose = async () => {
+    setAutoCloseChecking(true);
+    setAutoCloseError(null);
+    try {
+      const res = await axios.get('/api/tickets/admin/auto-close/preview');
+      setAutoClosePreview(res.data);
+    } catch (err: any) {
+      setAutoCloseError(err?.response?.data?.message || err?.message || 'Check failed.');
+    } finally {
+      setAutoCloseChecking(false);
+    }
+  };
+
+  const runAutoCloseSweep = async () => {
+    if (!window.confirm('Run the auto-close sweep NOW?\n\nAny ticket past its warning grace window or staff-set timer will be closed, and newly-stale tickets get their 24h warning email.')) return;
+    setAutoCloseChecking(true);
+    setAutoCloseError(null);
+    try {
+      const res = await axios.post('/api/tickets/admin/auto-close/run');
+      setAutoCloseError(null);
+      setAutoClosePreview(null);
+      window.alert(`Sweep complete: ${res.data.warned} warning(s) sent, ${res.data.closed} ticket(s) closed.`);
+    } catch (err: any) {
+      setAutoCloseError(err?.response?.data?.message || err?.message || 'Sweep failed.');
+    } finally {
+      setAutoCloseChecking(false);
+    }
+  };
+
   // Owner-only staff/routing/custom-field setup tool (applies ticket-staff-seed).
   const [staffSetupRunning, setStaffSetupRunning] = useState(false);
   const [staffSetupReport, setStaffSetupReport] = useState<any | null>(null);
@@ -346,6 +382,66 @@ export function TicketSystemSettings() {
               className="w-24 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <span className="text-gray-400">days awaiting customer reply</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Note: a staff-set reply timer (24/48/96h on "Reply &amp; auto-close") overrides this rule
+            for that ticket. Total time to close under this rule = the days above <strong>plus the
+            24-hour warning window</strong>.
+          </p>
+
+          {/* Live status check — proves what the sweep would do right now. */}
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={checkAutoClose}
+                disabled={autoCloseChecking}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 text-gray-200 text-sm rounded-lg hover:bg-slate-600 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${autoCloseChecking ? 'animate-spin' : ''}`} />
+                Check auto-close status
+              </button>
+              <button
+                onClick={runAutoCloseSweep}
+                disabled={autoCloseChecking}
+                className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-500 disabled:opacity-50 transition-colors"
+              >
+                <Clock className="w-4 h-4" />
+                Run sweep now
+              </button>
+            </div>
+            {autoCloseError && <p className="text-sm text-red-400 mt-2">{autoCloseError}</p>}
+            {autoClosePreview && (
+              <div className="mt-3 space-y-2 text-sm">
+                <p className="text-gray-300">
+                  Feature: {autoClosePreview.enabled
+                    ? <span className="text-green-400">enabled ({autoClosePreview.inactive_days} day{autoClosePreview.inactive_days === 1 ? '' : 's'} + 24h warning)</span>
+                    : <span className="text-red-400">disabled (days set to 0)</span>}
+                </p>
+                <div>
+                  <p className="text-gray-400">Would get a warning email on the next sweep: {autoClosePreview.would_warn_now.length === 0 && <span className="text-gray-500">none</span>}</p>
+                  {autoClosePreview.would_warn_now.map((t: any) => (
+                    <p key={t.ticket_number} className="text-gray-300 pl-3">• {t.ticket_number} — {t.title}</p>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-gray-400">Warned — closing after the 24h grace window: {autoClosePreview.warned_grace_window.length === 0 && <span className="text-gray-500">none</span>}</p>
+                  {autoClosePreview.warned_grace_window.map((t: any) => (
+                    <p key={t.ticket_number} className="text-gray-300 pl-3">• {t.ticket_number} — {t.title} <span className="text-amber-400">(closes {new Date(t.closes_at).toLocaleString()})</span></p>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-gray-400">Staff-set reply timers pending: {autoClosePreview.staff_timers.length === 0 && <span className="text-gray-500">none</span>}</p>
+                  {autoClosePreview.staff_timers.map((t: any) => (
+                    <p key={t.ticket_number} className="text-gray-300 pl-3">
+                      • {t.ticket_number} — {t.title}{' '}
+                      <span className={t.overdue ? 'text-red-400' : 'text-amber-400'}>
+                        ({t.overdue ? 'overdue — closes on next sweep' : `closes ${new Date(t.closes_at).toLocaleString()}`})
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

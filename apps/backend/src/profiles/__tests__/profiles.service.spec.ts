@@ -146,21 +146,21 @@ describe('ProfilesService', () => {
   // ============================================
 
   describe('create', () => {
-    it('should auto-generate MECA ID when not provided', async () => {
-      // generateNextMecaId delegates to the unified get_next_meca_id() DB function
-      mockConnection.execute.mockResolvedValueOnce([{ id: 701503 }]);
-
+    it('does NOT mint a MECA ID when none is provided (policy 2026-07-27: IDs come from membership creation)', async () => {
       const profileData: Partial<Profile> = {
         id: 'new-user-id',
         email: 'new@example.com',
         full_name: 'New User',
       };
 
-      mockEm.create.mockReturnValue({ ...profileData, meca_id: '701503' } as any);
+      mockEm.create.mockReturnValue({ ...profileData } as any);
 
       const result = await service.create(profileData);
 
-      expect(mockConnection.execute).toHaveBeenCalledWith('SELECT get_next_meca_id() AS id');
+      // The generator must NOT be consulted — profiles get their MECA ID
+      // only when a membership is created.
+      expect(mockConnection.execute).not.toHaveBeenCalledWith('SELECT get_next_meca_id() AS id');
+      expect(profileData.meca_id).toBeUndefined();
       expect(mockEm.create).toHaveBeenCalled();
       expect(mockEm.persistAndFlush).toHaveBeenCalled();
       expect(result).toBeDefined();
@@ -611,12 +611,15 @@ describe('ProfilesService', () => {
           orderBy: { last_name: 'ASC', first_name: 'ASC' },
         }),
       );
-      expect(result).toEqual({
-        profiles: publicProfiles,
-        total: 1,
-        page: 1,
-        limit: 50,
-      });
+      // Payload is shaped: private-by-default vehicle/audio (no opt-in on the
+      // mock profile → both display fields absent) and only directory fields.
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(50);
+      expect(result.profiles).toHaveLength(1);
+      expect(result.profiles[0]).toMatchObject({ id: 'pub-1' });
+      expect(result.profiles[0].vehicle_info).toBeUndefined();
+      expect(result.profiles[0].car_audio_system).toBeUndefined();
     });
 
     it('should use default page and limit when not provided', async () => {
@@ -648,7 +651,7 @@ describe('ProfilesService', () => {
             { first_name: { $ilike: '%smith%' } },
             { last_name: { $ilike: '%smith%' } },
             { meca_id: { $ilike: '%smith%' } },
-            { vehicle_info: { $ilike: '%smith%' } },
+            { car_audio_system: { $ilike: '%smith%' } },
           ],
         }),
         expect.any(Object),

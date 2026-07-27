@@ -26,6 +26,7 @@ import { TicketStaffSetupService } from './ticket-staff-setup.service';
 import { TicketCustomFieldsService } from './ticket-custom-fields.service';
 import { TicketPurchasesService } from './ticket-purchases.service';
 import { TicketPresenceService } from './ticket-presence.service';
+import { TicketAutoCloseService } from './ticket-auto-close.service';
 import { Ticket } from './ticket.entity';
 import { TicketComment } from './ticket-comment.entity';
 import { TicketAttachment } from './ticket-attachment.entity';
@@ -51,6 +52,7 @@ export class TicketsController {
     private readonly customFieldsService: TicketCustomFieldsService,
     private readonly purchasesService: TicketPurchasesService,
     private readonly presenceService: TicketPresenceService,
+    private readonly autoCloseService: TicketAutoCloseService,
     private readonly supabaseAdmin: SupabaseAdminService,
     private readonly em: EntityManager,
   ) {}
@@ -342,6 +344,25 @@ export class TicketsController {
   ): Promise<void> {
     await this.requireAdmin(authHeader);
     return this.ticketsService.delete(id);
+  }
+
+  /**
+   * Read-only diagnostic: what the auto-close sweep sees right now — tickets
+   * that would be warned, warned tickets in their 24h grace window (with close
+   * times), and pending staff-set timers. Admin-only; writes nothing.
+   */
+  @Get('admin/auto-close/preview')
+  async previewAutoClose(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.autoCloseService.preview();
+  }
+
+  /** Force an auto-close sweep right now instead of waiting for the hourly cron. */
+  @Post('admin/auto-close/run')
+  @HttpCode(HttpStatus.OK)
+  async runAutoClose(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.autoCloseService.run();
   }
 
   // Ticket Status Actions

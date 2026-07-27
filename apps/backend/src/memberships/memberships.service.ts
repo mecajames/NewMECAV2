@@ -33,6 +33,7 @@ import { InvoiceItem } from '../invoices/invoice-items.entity';
 import { Payment } from '../payments/payments.entity';
 import { EventRegistration } from '../event-registrations/event-registrations.entity';
 import { MecaIdHistory } from './meca-id-history.entity';
+import { assertVehicleChangeAllowed } from './vehicle-lock.util';
 import { MembershipRenewalToken } from './membership-renewal-token.entity';
 import { MembershipComp } from '../membership-comps/membership-comp.entity';
 import { Team } from '../teams/team.entity';
@@ -868,11 +869,29 @@ export class MembershipsService {
       // renewal or a "w/Team" upgrade that skips the vehicle form). Without this
       // a renewed membership comes through blank even though we have the
       // competitor name, vehicle, and plate on the prior membership.
-      newMembership.competitorName = data.competitorName || mostRecent?.competitorName || undefined;
-      newMembership.vehicleLicensePlate = data.vehicleLicensePlate || mostRecent?.vehicleLicensePlate || undefined;
-      newMembership.vehicleColor = data.vehicleColor || mostRecent?.vehicleColor || undefined;
-      newMembership.vehicleMake = data.vehicleMake || mostRecent?.vehicleMake || undefined;
-      newMembership.vehicleModel = data.vehicleModel || mostRecent?.vehicleModel || undefined;
+      //
+      // LOCK RULE: when the prior membership is a live renewal source (active
+      // or within the self-service window — same test computeRenewalEndDate
+      // uses for continuing the term), its vehicle and competitor name WIN
+      // over whatever the checkout form sent. The vehicle attached to a MECA
+      // ID only changes through a support ticket (admin edit); without this a
+      // renewal purchase could silently swap the vehicle. A fresh start (past
+      // the window → new MECA ID) takes the newly entered vehicle.
+      const priorIsRenewalSource = !!mostRecent?.endDate &&
+        mostRecent.endDate.getTime() + selfServiceWindow * 24 * 60 * 60 * 1000 >= startDate.getTime();
+      if (priorIsRenewalSource) {
+        newMembership.competitorName = mostRecent?.competitorName || data.competitorName || undefined;
+        newMembership.vehicleLicensePlate = mostRecent?.vehicleLicensePlate || data.vehicleLicensePlate || undefined;
+        newMembership.vehicleColor = mostRecent?.vehicleColor || data.vehicleColor || undefined;
+        newMembership.vehicleMake = mostRecent?.vehicleMake || data.vehicleMake || undefined;
+        newMembership.vehicleModel = mostRecent?.vehicleModel || data.vehicleModel || undefined;
+      } else {
+        newMembership.competitorName = data.competitorName || mostRecent?.competitorName || undefined;
+        newMembership.vehicleLicensePlate = data.vehicleLicensePlate || mostRecent?.vehicleLicensePlate || undefined;
+        newMembership.vehicleColor = data.vehicleColor || mostRecent?.vehicleColor || undefined;
+        newMembership.vehicleMake = data.vehicleMake || mostRecent?.vehicleMake || undefined;
+        newMembership.vehicleModel = data.vehicleModel || mostRecent?.vehicleModel || undefined;
+      }
 
       // Team add-on (for competitors) or included team (for retailer/manufacturer)
       // Also check if membership type config includes team automatically
@@ -1609,7 +1628,11 @@ export class MembershipsService {
   }
 
   /**
-   * Update vehicle info for a membership
+   * Update vehicle info for a membership.
+   *
+   * Members can FILL empty vehicle fields but never change existing values —
+   * the vehicle attached to a MECA ID only changes through a support ticket,
+   * actioned by an admin (opts.isAdmin bypasses the lock).
    */
   async updateVehicleInfo(
     membershipId: string,
@@ -1618,7 +1641,8 @@ export class MembershipsService {
       vehicleColor?: string;
       vehicleMake?: string;
       vehicleModel?: string;
-    }
+    },
+    opts: { isAdmin?: boolean } = {},
   ): Promise<Membership> {
     const em = this.em.fork();
     const membership = await em.findOne(Membership, { id: membershipId });
@@ -1626,6 +1650,8 @@ export class MembershipsService {
     if (!membership) {
       throw new NotFoundException('Membership not found');
     }
+
+    assertVehicleChangeAllowed(membership, vehicleInfo, opts.isAdmin === true);
 
     if (vehicleInfo.vehicleLicensePlate !== undefined) {
       membership.vehicleLicensePlate = vehicleInfo.vehicleLicensePlate;
@@ -3992,12 +4018,36 @@ export class MembershipsService {
 
     await em.flush();
 
+    // Also cancel the billing subscription — without this an "immediately
+    // cancelled" membership (e.g. after a chargeback) kept auto-renewing at
+    // the gateway. Best-effort: the subscription may already be gone (Stripe
+    // auto-cancels on some disputes), and a gateway hiccup must not undo the
+    // local cancellation.
+    let subscriptionNote = '';
+    if (membership.stripeSubscriptionId) {
+      try {
+        await this.stripeService.cancelSubscription(membership.stripeSubscriptionId, true);
+        subscriptionNote = ` Stripe subscription ${membership.stripeSubscriptionId} cancelled.`;
+      } catch (err) {
+        subscriptionNote = ` WARNING: Stripe subscription ${membership.stripeSubscriptionId} could not be cancelled (${err instanceof Error ? err.message : err}) — check it in the Stripe dashboard.`;
+        this.logger.error(`cancelMembershipImmediately: Stripe sub cancel failed for ${membershipId}: ${err}`);
+      }
+    } else if (membership.paypalSubscriptionId) {
+      try {
+        await this.paypalService.cancelSubscription(membership.paypalSubscriptionId, `Membership cancelled by admin: ${reason}`);
+        subscriptionNote = ` PayPal subscription ${membership.paypalSubscriptionId} cancelled.`;
+      } catch (err) {
+        subscriptionNote = ` WARNING: PayPal subscription ${membership.paypalSubscriptionId} could not be cancelled (${err instanceof Error ? err.message : err}) — check it in the PayPal dashboard.`;
+        this.logger.error(`cancelMembershipImmediately: PayPal sub cancel failed for ${membershipId}: ${err}`);
+      }
+    }
+
     // Sync profile membership status
     if (membership.user) {
       await this.membershipSyncService.syncProfileMembershipStatus(membership.user.id);
     }
 
-    this.logger.log(`Membership ${membershipId} cancelled immediately by admin ${adminId}. Reason: ${reason}`);
+    this.logger.log(`Membership ${membershipId} cancelled immediately by admin ${adminId}. Reason: ${reason}${subscriptionNote}`);
 
     // Audit log
     this.adminAuditService.logAction({
@@ -4019,7 +4069,177 @@ export class MembershipsService {
     return {
       success: true,
       membership,
-      message: 'Membership cancelled and deactivated immediately',
+      message: `Membership cancelled and deactivated immediately.${subscriptionNote}`,
+    };
+  }
+
+  /**
+   * CHARGEBACK FREEZE. A dispute opened at the gateway → immediately:
+   *  1. cancel the billing subscription (ALWAYS — a disputing member never
+   *     keeps auto-renew),
+   *  2. freeze the membership (frozen_at/freeze_reason/dispute_id — stays
+   *     PAID so a won dispute can be cleanly unfrozen),
+   *  3. disable the member's login (profile.can_login=false — the global
+   *     guard then blocks every authenticated request, killing live sessions).
+   * Resolution order: explicit membership → payment-intent match → the
+   * user's most recent PAID membership. Idempotent per dispute id.
+   */
+  async freezeForChargeback(opts: {
+    membershipId?: string;
+    paymentIntentId?: string;
+    userId?: string;
+    disputeId: string;
+    reason?: string;
+  }): Promise<{ membership: Membership | null; actions: string[] }> {
+    const em = this.em.fork();
+    const actions: string[] = [];
+
+    let membership: Membership | null = null;
+    if (opts.membershipId) {
+      membership = await em.findOne(Membership, { id: opts.membershipId }, { populate: ['user'] });
+    }
+    if (!membership && opts.paymentIntentId) {
+      membership = await em.findOne(Membership, {
+        $or: [
+          { stripePaymentIntentId: opts.paymentIntentId },
+          { transactionId: opts.paymentIntentId },
+        ],
+      }, { populate: ['user'] });
+    }
+    if (!membership && opts.userId) {
+      membership = await em.findOne(Membership, {
+        user: opts.userId,
+        paymentStatus: PaymentStatus.PAID,
+      }, { populate: ['user'], orderBy: { endDate: 'DESC' } });
+    }
+
+    if (!membership) {
+      this.logger.warn(`freezeForChargeback: no membership resolved for dispute ${opts.disputeId}`);
+      return { membership: null, actions: ['No membership could be resolved — investigate manually.'] };
+    }
+
+    if (membership.disputeId === opts.disputeId && membership.frozenAt) {
+      return { membership, actions: ['Already frozen for this dispute (duplicate webhook).'] };
+    }
+
+    // 1. Kill the billing subscription — always, immediately.
+    if (membership.stripeSubscriptionId) {
+      try {
+        await this.stripeService.cancelSubscription(membership.stripeSubscriptionId, true);
+        actions.push(`Stripe subscription ${membership.stripeSubscriptionId} cancelled.`);
+      } catch (err) {
+        actions.push(`WARNING: could not cancel Stripe subscription ${membership.stripeSubscriptionId}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    if (membership.paypalSubscriptionId) {
+      try {
+        await this.paypalService.cancelSubscription(membership.paypalSubscriptionId, `Chargeback dispute ${opts.disputeId}`);
+        actions.push(`PayPal subscription ${membership.paypalSubscriptionId} cancelled.`);
+      } catch (err) {
+        actions.push(`WARNING: could not cancel PayPal subscription ${membership.paypalSubscriptionId}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+
+    // 2. Freeze the membership (NOT cancelled — reversible if we win).
+    membership.frozenAt = new Date();
+    membership.freezeReason = opts.reason || `Chargeback dispute ${opts.disputeId} — under investigation`;
+    membership.disputeId = opts.disputeId;
+    actions.push(`Membership ${membership.mecaId ?? membership.id} frozen.`);
+
+    // 3. Lock the member out of the app entirely.
+    if (membership.user) {
+      (membership.user as Profile).can_login = false;
+      actions.push(`Login disabled for ${(membership.user as Profile).email}.`);
+    }
+
+    await em.flush();
+    this.clearAdminMembershipsListCache();
+    this.logger.warn(`CHARGEBACK FREEZE: dispute ${opts.disputeId} → ${actions.join(' ')}`);
+
+    this.adminAuditService.logAction({
+      adminUserId: 'system',
+      action: 'membership_chargeback_freeze',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      description: `Chargeback dispute ${opts.disputeId}: ${actions.join(' ')}`,
+    });
+
+    return { membership, actions };
+  }
+
+  /**
+   * Dispute LOST or accepted by us → the freeze becomes a terminal
+   * cancellation. Login stays disabled; the subscription was already
+   * cancelled at freeze time.
+   */
+  async finalizeChargebackLoss(disputeId: string): Promise<Membership | null> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { disputeId }, { populate: ['user'] });
+    if (!membership) {
+      this.logger.warn(`finalizeChargebackLoss: no frozen membership for dispute ${disputeId}`);
+      return null;
+    }
+    if (membership.paymentStatus === PaymentStatus.CANCELLED) return membership;
+
+    membership.paymentStatus = PaymentStatus.CANCELLED;
+    membership.cancelledAt = new Date();
+    membership.cancellationReason = `Chargeback dispute ${disputeId} lost/accepted — membership revoked`;
+    membership.cancelledBy = 'system';
+    membership.cancelAtPeriodEnd = false;
+    await em.flush();
+
+    if (membership.user) {
+      await this.membershipSyncService.syncProfileMembershipStatus((membership.user as Profile).id);
+    }
+    this.clearAdminMembershipsListCache();
+    this.logger.warn(`Chargeback dispute ${disputeId} lost/accepted: membership ${membership.id} cancelled.`);
+
+    this.adminAuditService.logAction({
+      adminUserId: 'system',
+      action: 'membership_chargeback_cancel',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      description: `Chargeback dispute ${disputeId} lost/accepted — membership cancelled, login remains disabled.`,
+    });
+    return membership;
+  }
+
+  /**
+   * Admin unfreeze (e.g. dispute won, or freeze was a mistake): clears the
+   * freeze fields and re-enables login (unless the account is hard-banned).
+   * The billing subscription is NOT resurrected — the member must resubscribe.
+   */
+  async unfreezeMembership(membershipId: string, adminId: string): Promise<{ success: boolean; message: string }> {
+    const em = this.em.fork();
+    const membership = await em.findOne(Membership, { id: membershipId }, { populate: ['user'] });
+    if (!membership) throw new NotFoundException('Membership not found');
+    if (!membership.frozenAt) throw new BadRequestException('This membership is not frozen');
+
+    const disputeId = membership.disputeId;
+    membership.frozenAt = undefined;
+    membership.freezeReason = undefined;
+    membership.disputeId = undefined;
+
+    let loginNote = '';
+    const profile = membership.user as Profile | undefined;
+    if (profile && !profile.login_banned) {
+      profile.can_login = true;
+      loginNote = ` Login re-enabled for ${profile.email}.`;
+    }
+    await em.flush();
+    this.clearAdminMembershipsListCache();
+
+    this.adminAuditService.logAction({
+      adminUserId: adminId,
+      action: 'membership_chargeback_unfreeze',
+      resourceType: 'membership',
+      resourceId: membership.id,
+      description: `Unfroze membership (dispute ${disputeId ?? 'n/a'}).${loginNote} Subscription NOT restored — member must resubscribe.`,
+    });
+
+    return {
+      success: true,
+      message: `Membership unfrozen.${loginNote} The billing subscription was not restored — the member must resubscribe for auto-renewal.`,
     };
   }
 
@@ -4063,6 +4283,30 @@ export class MembershipsService {
 
     await em.flush();
 
+    // Cancelling the MEMBERSHIP always ends the billing subscription too —
+    // previously this method only set local flags, so a member who cancelled
+    // was still auto-charged by Stripe/PayPal at renewal. Period-end cancel:
+    // no further charge, membership runs out its paid term. Best-effort — a
+    // gateway hiccup must not undo the local cancellation.
+    let subscriptionNote = '';
+    if (membership.stripeSubscriptionId) {
+      try {
+        await this.stripeService.cancelSubscription(membership.stripeSubscriptionId, false);
+        subscriptionNote = ` Auto-renewal (Stripe subscription) has been cancelled — no further charges.`;
+      } catch (err) {
+        subscriptionNote = ` WARNING: Stripe subscription ${membership.stripeSubscriptionId} could not be cancelled (${err instanceof Error ? err.message : err}) — check the Stripe dashboard.`;
+        this.logger.error(`cancelMembershipAtRenewal: Stripe sub cancel failed for ${membershipId}: ${err}`);
+      }
+    } else if (membership.paypalSubscriptionId) {
+      try {
+        await this.paypalService.cancelSubscription(membership.paypalSubscriptionId, `Membership cancelled: ${reason}`);
+        subscriptionNote = ` Auto-renewal (PayPal subscription) has been cancelled — no further charges.`;
+      } catch (err) {
+        subscriptionNote = ` WARNING: PayPal subscription ${membership.paypalSubscriptionId} could not be cancelled (${err instanceof Error ? err.message : err}) — check the PayPal dashboard.`;
+        this.logger.error(`cancelMembershipAtRenewal: PayPal sub cancel failed for ${membershipId}: ${err}`);
+      }
+    }
+
     const endDateStr = membership.endDate
       ? membership.endDate.toLocaleDateString('en-US', {
           year: 'numeric',
@@ -4083,11 +4327,29 @@ export class MembershipsService {
       newValues: { cancelAtPeriodEnd: true, cancellationReason: reason },
     });
 
+    // In-app confirmation to the member (fires for both member self-cancel
+    // and admin-initiated cancel — the member should know either way).
+    try {
+      const userId = (membership.user as Profile | undefined)?.id;
+      if (userId) {
+        await this.notificationsService.createForUser({
+          userId,
+          title: 'Membership cancelled',
+          message: `Your membership remains active until ${endDateStr}, then it ends and will not renew.` +
+            (subscriptionNote.includes('Auto-renewal') ? ' Your auto-renewal payment has also been cancelled.' : ''),
+          type: 'info',
+          link: '/dashboard/membership',
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Cancel-at-renewal member notification failed (non-critical): ${err}`);
+    }
+
     this.clearAdminMembershipsListCache();
     return {
       success: true,
       membership,
-      message: `Membership scheduled for cancellation. Will be deactivated on ${endDateStr}`,
+      message: `Membership scheduled for cancellation. Will be deactivated on ${endDateStr}.${subscriptionNote}`,
     };
   }
 
@@ -4858,6 +5120,29 @@ export class MembershipsService {
       throw new NotFoundException(`Membership ${membershipId} not found`);
     }
 
+    // PayPal auto-renewal: cancel at PayPal. The BILLING.SUBSCRIPTION.CANCELLED
+    // webhook then detaches the subscription from the membership and emails
+    // the member — the membership itself stays PAID through endDate.
+    if (!membership.stripeSubscriptionId && membership.paypalSubscriptionId) {
+      try {
+        await this.paypalService.cancelSubscription(
+          membership.paypalSubscriptionId,
+          reason || 'Auto-renewal disabled',
+        );
+      } catch (error) {
+        this.logger.error(`Failed to cancel PayPal subscription for membership ${membershipId}:`, error);
+        throw new BadRequestException('Failed to cancel subscription in PayPal');
+      }
+      const endStr = membership.endDate ? membership.endDate.toLocaleDateString() : 'the end of the current term';
+      this.logger.log(`PayPal auto-renewal cancelled for membership ${membershipId} by ${cancelledBy}. Reason: ${reason}`);
+      await this.notifyAutoRenewalCancelled(membership);
+      return {
+        success: true,
+        message: `Auto-renewal has been disabled. The membership will remain active until ${endStr}.`,
+        membership,
+      };
+    }
+
     // If there's no Stripe subscription, just update the membership status
     if (!membership.stripeSubscriptionId) {
       // Check if this was a legacy subscription
@@ -4899,6 +5184,7 @@ export class MembershipsService {
         : `Auto-renewal has been disabled. The membership will remain active until ${new Date(cancelledSubscription.current_period_end * 1000).toLocaleDateString()}.`;
 
       this.logger.log(`Auto-renewal cancelled for membership ${membershipId} by ${cancelledBy}. Reason: ${reason}`);
+      await this.notifyAutoRenewalCancelled(membership);
 
       return {
         success: true,
@@ -4908,6 +5194,31 @@ export class MembershipsService {
     } catch (error) {
       this.logger.error(`Failed to cancel Stripe subscription for membership ${membershipId}:`, error);
       throw new BadRequestException('Failed to cancel subscription in Stripe');
+    }
+  }
+
+  /**
+   * In-app confirmation for a cancelled auto-renewal: makes explicit that the
+   * MEMBERSHIP is untouched — it runs through endDate, then must be renewed
+   * manually (the expiration-warning cron sends the reminders).
+   */
+  private async notifyAutoRenewalCancelled(membership: Membership): Promise<void> {
+    try {
+      const userId = (membership.user as Profile | undefined)?.id;
+      if (!userId) return;
+      const endStr = membership.endDate
+        ? membership.endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : 'your expiration date';
+      await this.notificationsService.createForUser({
+        userId,
+        title: 'Auto-renewal cancelled',
+        message: `Your membership stays active until ${endStr} — only the automatic payment was cancelled. ` +
+          `We'll remind you before it expires so you can renew manually or turn auto-renewal back on.`,
+        type: 'info',
+        link: '/dashboard/membership',
+      });
+    } catch (err) {
+      this.logger.error(`notifyAutoRenewalCancelled failed (non-critical): ${err}`);
     }
   }
 

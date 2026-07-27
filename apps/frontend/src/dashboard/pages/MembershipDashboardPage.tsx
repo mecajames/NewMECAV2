@@ -621,6 +621,7 @@ export default function MembershipDashboardPage() {
           membershipId={activeMembership.id}
           membershipType={activeMembership.membershipTypeConfig?.name || 'Membership'}
           endDate={activeMembership.endDate}
+          hasActiveSubscription={subscriptionStatus?.autoRenewalStatus === 'on'}
         />
       )}
 

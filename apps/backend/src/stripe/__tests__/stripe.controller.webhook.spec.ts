@@ -19,6 +19,7 @@ import { EmailService } from '../../email/email.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { WorldFinalsService } from '../../world-finals/world-finals.service';
 import { PaymentFulfillmentService } from '../../payments/payment-fulfillment.service';
+import { RefundService } from '../../payments/refund.service';
 import { Membership } from '../../memberships/memberships.entity';
 import { StripePaymentType } from '@newmeca/shared';
 import {
@@ -64,6 +65,8 @@ describe('StripeController - Webhook Handler', () => {
     mockMembershipsService = {
       createMembership: jest.fn(),
       applyTeamUpgrade: jest.fn(),
+      freezeForChargeback: jest.fn().mockResolvedValue({ membership: null, actions: [] }),
+      finalizeChargebackLoss: jest.fn().mockResolvedValue(null),
     };
 
     mockQuickBooksService = {
@@ -156,6 +159,7 @@ describe('StripeController - Webhook Handler', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: WorldFinalsService, useValue: mockWorldFinalsService },
         { provide: PaymentFulfillmentService, useValue: mockPaymentFulfillmentService },
+        { provide: RefundService, useValue: { issueRefund: jest.fn().mockResolvedValue(undefined) } },
         { provide: 'EntityManager', useValue: mockEm },
       ],
     }).compile();
