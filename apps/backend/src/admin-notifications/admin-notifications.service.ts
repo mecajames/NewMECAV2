@@ -593,6 +593,32 @@ export class AdminNotificationsService {
   }
 
   /**
+   * Dispute closed in OUR favor. The membership stays FROZEN (login disabled,
+   * subscription already cancelled) until an admin decides: unfreeze via the
+   * Payment Lookup tool, or cancel it anyway.
+   */
+  async notifyDisputeWon(args: {
+    disputeId: string;
+    amountCents: number;
+    paymentIntentId: string;
+    customerEmail?: string | null;
+  }): Promise<void> {
+    try {
+      const amount = (args.amountCents / 100).toFixed(2);
+      const ctx = await this.lookupMemberContext({ customerEmail: args.customerEmail });
+      const memberStr = ctx?.fullName ? ` — ${ctx.fullName}${ctx.mecaId ? ` (MECA ID: ${ctx.mecaId})` : ''}` : '';
+      await this.notifyAllAdmins(
+        'CHARGEBACK WON',
+        `Dispute ${args.disputeId} closed in OUR favor ($${amount}).${memberStr} The membership is still FROZEN — ` +
+        `use Payment Lookup to unfreeze (restores login; subscription stays cancelled) or cancel it.`,
+        '/admin/billing/lookup',
+      );
+    } catch (error) {
+      this.logger.error(`Failed to send dispute-won admin notification: ${error}`);
+    }
+  }
+
+  /**
    * Alert admins that Stripe fired events that never reached our backend —
    * config is correct but events still aren't being processed (handler crash,
    * endpoint 5xx, signature mismatch, app outage). Detected by the hourly

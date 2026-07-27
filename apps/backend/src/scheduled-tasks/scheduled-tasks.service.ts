@@ -422,9 +422,11 @@ export class ScheduledTasksService {
       {
         endDate: { $gte: startOfDay, $lte: endOfDay },
         paymentStatus: PaymentStatus.PAID,
-        // Exclude members with active auto-renewal (Stripe will extend them)
+        // Exclude members with active auto-renewal (the gateway will extend
+        // them). Both gateways count — checking only Stripe used to send
+        // "renew manually" nags to PayPal auto-renewing members.
         $or: [
-          { stripeSubscriptionId: null },
+          { stripeSubscriptionId: null, paypalSubscriptionId: null },
           { cancelAtPeriodEnd: true },
         ],
       },

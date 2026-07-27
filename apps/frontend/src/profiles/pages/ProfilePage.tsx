@@ -281,9 +281,15 @@ export default function ProfilePage() {
       }
 
       setIsEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error);
-      alert('Failed to save profile. Please try again.');
+      // Surface the backend's actual reason (e.g. the vehicle-lock message
+      // directing the member to a support ticket), not a generic failure.
+      const backendMessage = error?.response?.data?.message;
+      alert(
+        (Array.isArray(backendMessage) ? backendMessage.join(' ') : backendMessage) ||
+          'Failed to save profile. Please try again.',
+      );
     } finally {
       setSaving(false);
     }
@@ -631,6 +637,15 @@ export default function ProfilePage() {
                   <p className="text-orange-300 text-sm">
                     Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
                     Your MECA ID will not be activated until this information is complete.
+                    {' '}Once set, vehicle details are locked —{' '}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/tickets')}
+                      className="underline text-orange-200 hover:text-white"
+                    >
+                      submit a support ticket
+                    </button>{' '}
+                    to request a change.
                   </p>
                 </div>
 
@@ -645,7 +660,9 @@ export default function ProfilePage() {
                           type="text"
                           value={vehicleFormData.vehicleMake}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleMake: e.target.value }))}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          disabled={!!selectedMembership?.vehicleMake}
+                          title={selectedMembership?.vehicleMake ? 'Locked — submit a support ticket to change' : undefined}
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                           placeholder="e.g., Toyota, Honda, Ford"
                         />
                       </>
@@ -671,7 +688,9 @@ export default function ProfilePage() {
                           type="text"
                           value={vehicleFormData.vehicleModel}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleModel: e.target.value }))}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          disabled={!!selectedMembership?.vehicleModel}
+                          title={selectedMembership?.vehicleModel ? 'Locked — submit a support ticket to change' : undefined}
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                           placeholder="e.g., Camry, Civic, F-150"
                         />
                       </>
@@ -697,7 +716,9 @@ export default function ProfilePage() {
                           type="text"
                           value={vehicleFormData.vehicleColor}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleColor: e.target.value }))}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          disabled={!!selectedMembership?.vehicleColor}
+                          title={selectedMembership?.vehicleColor ? 'Locked — submit a support ticket to change' : undefined}
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                           placeholder="e.g., Blue, Red, Black"
                         />
                       </>
@@ -723,7 +744,9 @@ export default function ProfilePage() {
                           type="text"
                           value={vehicleFormData.vehicleLicensePlate}
                           onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleLicensePlate: e.target.value }))}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                          disabled={!!selectedMembership?.vehicleLicensePlate}
+                          title={selectedMembership?.vehicleLicensePlate ? 'Locked — submit a support ticket to change' : undefined}
+                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                           placeholder="e.g., ABC1234"
                         />
                       </>
@@ -1303,6 +1326,15 @@ export default function ProfilePage() {
                 <p className="text-orange-300 text-sm">
                   Vehicle make, model, and license plate are required for all competitors to participate in MECA events.
                   Your MECA ID will not be activated until this information is complete.
+                  {' '}Once set, vehicle details are locked —{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/tickets')}
+                    className="underline text-orange-200 hover:text-white"
+                  >
+                    submit a support ticket
+                  </button>{' '}
+                  to request a change.
                 </p>
               </div>
 
@@ -1317,7 +1349,9 @@ export default function ProfilePage() {
                         type="text"
                         value={vehicleFormData.vehicleMake}
                         onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleMake: e.target.value }))}
-                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!!primaryMembership?.vehicleMake}
+                        title={primaryMembership?.vehicleMake ? 'Locked — submit a support ticket to change' : undefined}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         placeholder="e.g., Toyota, Honda, Ford"
                       />
                     </>
@@ -1343,7 +1377,9 @@ export default function ProfilePage() {
                         type="text"
                         value={vehicleFormData.vehicleModel}
                         onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleModel: e.target.value }))}
-                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!!primaryMembership?.vehicleModel}
+                        title={primaryMembership?.vehicleModel ? 'Locked — submit a support ticket to change' : undefined}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         placeholder="e.g., Camry, Civic, F-150"
                       />
                     </>
@@ -1369,7 +1405,9 @@ export default function ProfilePage() {
                         type="text"
                         value={vehicleFormData.vehicleColor}
                         onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleColor: e.target.value }))}
-                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!!primaryMembership?.vehicleColor}
+                        title={primaryMembership?.vehicleColor ? 'Locked — submit a support ticket to change' : undefined}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-60 disabled:cursor-not-allowed"
                         placeholder="e.g., Blue, Red, Black"
                       />
                     </>
@@ -1395,7 +1433,9 @@ export default function ProfilePage() {
                         type="text"
                         value={vehicleFormData.vehicleLicensePlate}
                         onChange={(e) => setVehicleFormData(prev => ({ ...prev, vehicleLicensePlate: e.target.value }))}
-                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                        disabled={!!primaryMembership?.vehicleLicensePlate}
+                        title={primaryMembership?.vehicleLicensePlate ? 'Locked — submit a support ticket to change' : undefined}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono disabled:opacity-60 disabled:cursor-not-allowed"
                         placeholder="e.g., ABC1234"
                       />
                     </>

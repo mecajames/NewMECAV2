@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { UserRole, MembershipStatus, UserRoleSchema, MembershipStatusSchema } from './enums.schema.js';
+import { AudioSystemSchema } from './audio-system.schema.js';
 
 // Create Profile DTO
 export const CreateProfileSchema = z.object({
@@ -22,6 +23,13 @@ export const CreateProfileSchema = z.object({
   postal_code: z.string().optional(),
   country: z.string().optional(),
   is_public: z.boolean().optional().default(false),
+  // Vehicle & audio-system visibility (member-controlled; default private)
+  vehicle_public: z.boolean().optional().default(false),
+  audio_system_public: z.boolean().optional().default(false),
+  // Structured audio system (see audio-system.schema.ts); car_audio_system is
+  // the legacy free-text description kept as a display fallback.
+  audio_system: AudioSystemSchema.nullable().optional(),
+  car_audio_system: z.string().nullable().optional(),
 });
 export type CreateProfileDto = z.infer<typeof CreateProfileSchema>;
 
@@ -46,6 +54,10 @@ export const ProfileSchema = z.object({
   postal_code: z.string().nullable(),
   country: z.string().nullable(),
   is_public: z.boolean(),
+  vehicle_public: z.boolean().optional(),
+  audio_system_public: z.boolean().optional(),
+  audio_system: AudioSystemSchema.nullable().optional(),
+  car_audio_system: z.string().nullable().optional(),
   member_since: z.coerce.date(),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { AUDIO_SYSTEM_COMPONENT_FIELDS, hasAudioSystemContent, type AudioSystem } from '@newmeca/shared';
 import { Profile } from '../../types';
 import { usePermissions } from '@/auth';
 import { profilesApi, ActivityItem, UpcomingEvent } from '@/profiles';
@@ -3177,6 +3178,48 @@ function PersonalInfoTab({ member, onUpdate, availableRoles }: { member: Profile
             </div>
           ) : (
             <div className="text-gray-400">No primary address on file</div>
+          )}
+        </div>
+
+        {/* Audio system + visibility — entered by the member on their profile.
+            Read-only here: the structured components live on the profile row
+            (audio_system), with the legacy free-text car_audio_system as
+            fallback. The membership's vehicle is shown/edited in the
+            Memberships tab. */}
+        <div className="border-t border-slate-700 pt-6">
+          <h3 className="text-lg font-semibold text-white mb-1">Car Audio System</h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Entered by the member (Profile Settings → Public Profile).
+            Vehicle visibility: {(member as any).vehicle_public ? 'public' : 'private'} ·
+            Audio visibility: {(member as any).audio_system_public ? 'public' : 'private'}
+          </p>
+          {hasAudioSystemContent((member as any).audio_system as AudioSystem) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {AUDIO_SYSTEM_COMPONENT_FIELDS
+                .filter((f) => ((member as any).audio_system as AudioSystem)?.[f.key])
+                .map((f) => (
+                  <div key={f.key}>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">{f.label}</label>
+                    <div className="px-4 py-2 bg-slate-700 rounded-lg text-white">
+                      {((member as any).audio_system as AudioSystem)[f.key]}
+                    </div>
+                  </div>
+                ))}
+              {((member as any).audio_system as AudioSystem)?.description && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Build Description</label>
+                  <div className="px-4 py-2 bg-slate-700 rounded-lg text-white whitespace-pre-wrap">
+                    {((member as any).audio_system as AudioSystem).description}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (member as any).car_audio_system ? (
+            <div className="px-4 py-2 bg-slate-700 rounded-lg text-white whitespace-pre-wrap">
+              {(member as any).car_audio_system}
+            </div>
+          ) : (
+            <div className="text-gray-400">No audio system on file</div>
           )}
         </div>
 

@@ -76,6 +76,15 @@ interface CreateMembershipPaymentIntentDto {
   birthday?: string; // YYYY-MM-DD
   tshirtSize?: string;
   ringSize?: string;
+  // Competitor info — the vehicle attached to this membership/MECA ID.
+  // Collected at checkout for competitor memberships and persisted on the
+  // membership row at fulfillment (payment-fulfillment.service reads these
+  // metadata keys).
+  competitorName?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
 }
 
 interface CreateEventRegistrationPaymentIntentDto {
@@ -303,6 +312,11 @@ export class StripeController {
     if (data.birthday) metadata.birthday = data.birthday;
     if (data.tshirtSize) metadata.tshirtSize = data.tshirtSize;
     if (data.ringSize) metadata.ringSize = data.ringSize;
+    if (data.competitorName) metadata.competitorName = data.competitorName;
+    if (data.vehicleMake) metadata.vehicleMake = data.vehicleMake;
+    if (data.vehicleModel) metadata.vehicleModel = data.vehicleModel;
+    if (data.vehicleColor) metadata.vehicleColor = data.vehicleColor;
+    if (data.vehicleLicensePlate) metadata.vehicleLicensePlate = data.vehicleLicensePlate;
 
     // Create the payment intent
     return this.stripeService.createPaymentIntent({
@@ -774,6 +788,11 @@ export class StripeController {
       birthday?: string; // YYYY-MM-DD
       tshirtSize?: string;
       ringSize?: string;
+      // Vehicle attached to this membership (competitor plans)
+      vehicleMake?: string;
+      vehicleModel?: string;
+      vehicleColor?: string;
+      vehicleLicensePlate?: string;
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     // Override client-sent userId with JWT-verified userId to prevent spoofing
@@ -859,6 +878,10 @@ export class StripeController {
     if (data.birthday) metadata.birthday = data.birthday;
     if (data.tshirtSize) metadata.tshirtSize = data.tshirtSize;
     if (data.ringSize) metadata.ringSize = data.ringSize;
+    if (data.vehicleMake) metadata.vehicleMake = data.vehicleMake;
+    if (data.vehicleModel) metadata.vehicleModel = data.vehicleModel;
+    if (data.vehicleColor) metadata.vehicleColor = data.vehicleColor;
+    if (data.vehicleLicensePlate) metadata.vehicleLicensePlate = data.vehicleLicensePlate;
 
     // Create checkout session
     const session = await this.stripeService.createSubscriptionCheckoutSession({
@@ -1481,6 +1504,15 @@ export class StripeController {
     if (dispute.status === 'lost') {
       console.error(`[CRITICAL] Dispute LOST: ${dispute.id}, Amount: $${dispute.amount / 100}`);
 
+      // Lost (or accepted by us) → the freeze becomes a terminal cancel:
+      // membership CANCELLED, login stays disabled, subscription was already
+      // cancelled at freeze time.
+      try {
+        await this.membershipsService.finalizeChargebackLoss(dispute.id);
+      } catch (err) {
+        console.error(`[CHARGEBACK] finalizeChargebackLoss failed for ${dispute.id}: ${err}`);
+      }
+
       this.adminNotificationsService.notifyDisputeLost({
         disputeId: dispute.id,
         amountCents: dispute.amount,
@@ -1494,6 +1526,18 @@ export class StripeController {
       });
     } else if (dispute.status === 'won') {
       console.log(`Dispute WON: ${dispute.id}, Amount: $${dispute.amount / 100}`);
+      // The membership stays FROZEN — an admin decides whether to unfreeze
+      // (restore login; subscription is NOT restored) or cancel it anyway.
+      // Payment Lookup (/admin/billing/lookup) shows the frozen row with an
+      // Unfreeze action.
+      this.adminNotificationsService.notifyDisputeWon({
+        disputeId: dispute.id,
+        amountCents: dispute.amount,
+        paymentIntentId,
+        customerEmail: (payment?.paymentMetadata as any)?.email || null,
+      }).catch((err) => {
+        console.error(`Failed to notify admins of won dispute: ${err}`);
+      });
     }
   }
 
@@ -1658,10 +1702,11 @@ export class StripeController {
 
     const em = this.em.fork();
 
-    // Find the payment record
+    // Find the payment record (with member + membership so the freeze below
+    // can resolve its target without guessing)
     const payment = await em.findOne(Payment, {
       stripePaymentIntentId: paymentIntentId,
-    });
+    }, { populate: ['user', 'membership'] });
 
     if (payment) {
       // Store dispute info in payment metadata
@@ -1677,6 +1722,25 @@ export class StripeController {
       };
       await em.flush();
       console.log(`Payment ${payment.id} flagged with dispute ${dispute.id}`);
+    }
+
+    // CHARGEBACK POLICY (2026-07-27): a dispute immediately cancels the
+    // billing subscription (always) and FREEZES the membership — login
+    // disabled, no app access — while admins investigate. Dispute won →
+    // admin unfreezes; lost/accepted → terminal cancel (handleDisputeClosed).
+    try {
+      const { actions } = await this.membershipsService.freezeForChargeback({
+        membershipId: payment?.membership?.id,
+        paymentIntentId,
+        userId: payment?.user?.id,
+        disputeId: dispute.id,
+        reason: `Chargeback dispute ${dispute.id} (${dispute.reason || 'no reason given'}) on charge ${chargeId} — under investigation`,
+      });
+      console.error(`[CHARGEBACK] Freeze actions for dispute ${dispute.id}: ${actions.join(' ')}`);
+    } catch (freezeErr) {
+      // The freeze must never make the webhook fail — the dispute metadata
+      // and the admin notification below still go out.
+      console.error(`[CHARGEBACK] Freeze FAILED for dispute ${dispute.id}: ${freezeErr}`);
     }
 
     // Log critical alert for admin attention
@@ -1703,8 +1767,6 @@ export class StripeController {
     }).catch((err) => {
       console.error(`Failed to notify admins of new dispute: ${err}`);
     });
-
-    // TODO: Consider freezing associated membership until dispute is resolved
   }
 
   /**
@@ -2134,12 +2196,13 @@ export class StripeController {
       membership.billingPostalCode = billing.postalCode || previousMembership?.billingPostalCode;
       membership.billingCountry = billing.country || previousMembership?.billingCountry || 'USA';
 
-      // The subscription checkout form doesn't collect vehicle info, so a
-      // renewal would otherwise come through blank.
-      membership.vehicleMake = previousMembership?.vehicleMake;
-      membership.vehicleModel = previousMembership?.vehicleModel;
-      membership.vehicleColor = previousMembership?.vehicleColor;
-      membership.vehicleLicensePlate = previousMembership?.vehicleLicensePlate;
+      // Vehicle: prefer what the checkout form collected (in the session
+      // metadata); fall back to the previous membership so a renewal doesn't
+      // come through blank.
+      membership.vehicleMake = metadata.vehicleMake || previousMembership?.vehicleMake;
+      membership.vehicleModel = metadata.vehicleModel || previousMembership?.vehicleModel;
+      membership.vehicleColor = metadata.vehicleColor || previousMembership?.vehicleColor;
+      membership.vehicleLicensePlate = metadata.vehicleLicensePlate || previousMembership?.vehicleLicensePlate;
 
       // Assign MECA ID — self-service window applies (keep within 120/30, else new).
       const mecaId = await this.mecaIdService.assignMecaIdToMembership(

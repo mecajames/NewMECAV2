@@ -1,4 +1,5 @@
 import axios from '@/lib/axios';
+import type { AudioSystem } from '@newmeca/shared';
 
 export interface Profile {
   id: string;
@@ -36,7 +37,15 @@ export interface Profile {
   // Public profile fields
   is_public?: boolean;
   vehicle_info?: string;
+  // Legacy free-text audio description (fallback display for audio_system)
   car_audio_system?: string;
+  // Structured audio system + per-section public visibility opt-ins
+  audio_system?: AudioSystem | null;
+  vehicle_public?: boolean;
+  audio_system_public?: boolean;
+  // Attached by GET /api/profiles/public/:id when the member opted in —
+  // vehicle from the active membership (make/model/color; never the plate)
+  public_vehicle?: { make?: string; model?: string; color?: string } | null;
   profile_images?: string[];
   cover_image_position?: { x: number; y: number };
   force_password_change?: boolean;

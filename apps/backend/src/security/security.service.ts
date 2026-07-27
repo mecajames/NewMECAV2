@@ -234,6 +234,92 @@ export class SecurityService {
   }
 
   /**
+   * Release MECA IDs stranded on profiles with ZERO memberships.
+   *
+   * Background (2026-07-27): signup/ensureProfile used to mint a real
+   * 7015xx-series MECA ID for every new account, so accounts that never
+   * bought anything (event-registration signups, abandoned checkouts, OAuth
+   * callbacks) hold competitor-pool numbers. Those minting paths are now
+   * removed; this releases the numbers already burned so the gap-fill
+   * generator can reuse them.
+   *
+   * A profile's ID is NEVER released when:
+   *  - competition results reference the number (retired ID — releasing it
+   *    would let the generator hand it to someone else and corrupt results
+   *    attribution; this is the intentional 'retired_results' delete outcome);
+   *  - meca_id_history references the profile or the number (role
+   *    assignments, takeovers, retired renewals);
+   *  - the profile is staff/admin or holds a role-assigned ID
+   *    (event_director / judge / admin);
+   *  - the account is a protected super-admin account.
+   */
+  async releaseOrphanedMecaIds(opts: { dryRun: boolean }): Promise<{
+    dryRun: boolean;
+    releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: Date }>;
+    kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }>;
+    released: number;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    type Row = {
+      id: string;
+      meca_id: string;
+      email: string | null;
+      role: string | null;
+      is_staff: boolean | null;
+      account_type: string | null;
+      created_at: Date;
+      history_count: string;
+      results_count: string;
+    };
+    const rows: Row[] = await conn.execute(
+      `SELECT p."id", p."meca_id", p."email", p."role", p."is_staff", p."account_type", p."created_at",
+              (SELECT COUNT(*)::int FROM "public"."meca_id_history" h
+                WHERE h."profile_id" = p."id" OR h."meca_id"::text = p."meca_id"::text)::text AS history_count,
+              (SELECT COUNT(*)::int FROM "public"."competition_results" cr
+                WHERE TRIM(cr."meca_id"::text) = TRIM(p."meca_id"::text))::text AS results_count
+       FROM "public"."profiles" p
+       WHERE p."meca_id" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "public"."memberships" m WHERE m."user_id" = p."id")
+       ORDER BY p."created_at"`,
+    );
+
+    const releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: Date }> = [];
+    const kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }> = [];
+
+    for (const r of rows) {
+      const reasons: string[] = [];
+      if (parseInt(r.results_count, 10) > 0) reasons.push('competition results reference this ID (retired)');
+      if (parseInt(r.history_count, 10) > 0) reasons.push('meca_id_history references this ID/profile');
+      if (r.is_staff === true || r.account_type === 'admin') reasons.push('staff/admin account');
+      if (['event_director', 'judge', 'admin'].includes(r.role || '')) reasons.push(`role-assigned ID (${r.role})`);
+      if (isProtectedAccount({ meca_id: r.meca_id, email: r.email } as any)) reasons.push('protected account');
+
+      if (reasons.length > 0) {
+        kept.push({ id: r.id, meca_id: r.meca_id, email: r.email, reasons });
+      } else {
+        releasable.push({ id: r.id, meca_id: r.meca_id, email: r.email, created_at: r.created_at });
+      }
+    }
+
+    let released = 0;
+    if (!opts.dryRun && releasable.length > 0) {
+      released = await em.nativeUpdate(
+        Profile,
+        { id: { $in: releasable.map((r) => r.id) } },
+        { meca_id: null } as any,
+      );
+      this.logger.warn(
+        `Released ${released} orphaned MECA IDs (zero-membership profiles): ` +
+        releasable.map((r) => `${r.meca_id} (${r.email})`).join(', '),
+      );
+    }
+
+    return { dryRun: opts.dryRun, releasable, kept, released };
+  }
+
+  /**
    * Provision a profile that has zero memberships into one of three states.
    * The audit page already filters down to that case before calling this, but
    * we re-check here so direct API calls can't bypass it.

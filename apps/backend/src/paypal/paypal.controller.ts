@@ -61,6 +61,12 @@ interface CreateMembershipOrderDto {
   businessName?: string;
   businessWebsite?: string;
   userId?: string;
+  // Competitor info — vehicle attached to this membership (competitor plans)
+  competitorName?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  vehicleColor?: string;
+  vehicleLicensePlate?: string;
 }
 
 interface CreateEventRegistrationOrderDto {
@@ -205,6 +211,11 @@ export class PayPalController {
     if (data.teamDescription) metadata.teamDescription = data.teamDescription;
     if (data.businessName) metadata.businessName = data.businessName;
     if (data.businessWebsite) metadata.businessWebsite = data.businessWebsite;
+    if (data.competitorName) metadata.competitorName = data.competitorName;
+    if (data.vehicleMake) metadata.vehicleMake = data.vehicleMake;
+    if (data.vehicleModel) metadata.vehicleModel = data.vehicleModel;
+    if (data.vehicleColor) metadata.vehicleColor = data.vehicleColor;
+    if (data.vehicleLicensePlate) metadata.vehicleLicensePlate = data.vehicleLicensePlate;
 
     const order = await this.paypalService.createOrder({
       amount: totalAmount,
@@ -748,6 +759,105 @@ export class PayPalController {
                 });
               }
             }
+          }
+          webhookRecord.processingResult = 'success';
+          break;
+        }
+        case 'CUSTOMER.DISPUTE.CREATED': {
+          // CHARGEBACK POLICY (2026-07-27): mirror the Stripe dispute flow —
+          // cancel the billing subscription immediately, freeze the
+          // membership (login disabled), notify admins to investigate.
+          const disputeId = event.resource?.dispute_id || event.resource?.id || eventId;
+          const captureId = event.resource?.disputed_transactions?.[0]?.seller_transaction_id;
+          const buyerEmail = event.resource?.disputed_transactions?.[0]?.buyer?.email
+            || event.resource?.buyer?.email
+            || null;
+          this.logger.error(`[CRITICAL] PayPal dispute created: ${disputeId} (capture ${captureId || 'unknown'})`);
+
+          let payment: Payment | null = null;
+          if (captureId) {
+            payment = await em.findOne(Payment, {
+              $or: [
+                { paypalCaptureId: captureId },
+                { transactionId: captureId },
+                { paypalOrderId: captureId },
+              ],
+            }, { populate: ['user', 'membership'] });
+            if (payment) {
+              payment.paymentMetadata = {
+                ...payment.paymentMetadata,
+                dispute: { id: disputeId, gateway: 'paypal', captureId, created: new Date().toISOString() },
+              };
+              await em.flush();
+            }
+          }
+
+          try {
+            const { actions } = await this.membershipsService.freezeForChargeback({
+              membershipId: payment?.membership?.id,
+              paymentIntentId: captureId,
+              userId: payment?.user?.id,
+              disputeId,
+              reason: `PayPal chargeback dispute ${disputeId} on capture ${captureId || 'unknown'} — under investigation`,
+            });
+            this.logger.error(`[CHARGEBACK] PayPal freeze actions for ${disputeId}: ${actions.join(' ')}`);
+          } catch (freezeErr) {
+            this.logger.error(`[CHARGEBACK] PayPal freeze FAILED for ${disputeId}: ${freezeErr}`);
+          }
+
+          this.adminNotificationsService.notifyDisputeCreated({
+            disputeId,
+            amountCents: event.resource?.dispute_amount?.value
+              ? Math.round(parseFloat(event.resource.dispute_amount.value) * 100)
+              : 0,
+            reason: event.resource?.reason || 'PayPal dispute',
+            paymentIntentId: captureId || 'unknown',
+            evidenceDueBy: event.resource?.seller_response_due_date
+              ? new Date(event.resource.seller_response_due_date)
+              : null,
+            customerEmail: buyerEmail || (payment?.paymentMetadata as any)?.email || null,
+            customerName: null,
+            paymentType: payment?.paymentType || null,
+          }).catch((err) => {
+            this.logger.error(`Failed to notify admins of PayPal dispute: ${err}`);
+          });
+          webhookRecord.processingResult = 'success';
+          break;
+        }
+        case 'CUSTOMER.DISPUTE.RESOLVED': {
+          const disputeId = event.resource?.dispute_id || event.resource?.id || eventId;
+          const outcome = event.resource?.dispute_outcome?.outcome_code
+            || event.resource?.dispute_outcome
+            || 'unknown';
+          this.logger.warn(`PayPal dispute ${disputeId} resolved: ${JSON.stringify(outcome)}`);
+          if (String(outcome).toUpperCase().includes('BUYER')) {
+            // Buyer won → we lost the money → terminal cancel (mirrors Stripe 'lost')
+            try {
+              await this.membershipsService.finalizeChargebackLoss(disputeId);
+            } catch (err) {
+              this.logger.error(`[CHARGEBACK] PayPal finalizeChargebackLoss failed for ${disputeId}: ${err}`);
+            }
+            this.adminNotificationsService.notifyDisputeLost({
+              disputeId,
+              amountCents: event.resource?.dispute_amount?.value
+                ? Math.round(parseFloat(event.resource.dispute_amount.value) * 100)
+                : 0,
+              reason: 'PayPal dispute resolved in buyer favor',
+              paymentIntentId: disputeId,
+              customerEmail: null,
+              customerName: null,
+              paymentType: null,
+            }).catch((err) => this.logger.error(`Failed to notify admins of lost PayPal dispute: ${err}`));
+          } else {
+            // Seller favor (or unknown) → membership stays frozen; admin decides.
+            this.adminNotificationsService.notifyDisputeWon({
+              disputeId,
+              amountCents: event.resource?.dispute_amount?.value
+                ? Math.round(parseFloat(event.resource.dispute_amount.value) * 100)
+                : 0,
+              paymentIntentId: disputeId,
+              customerEmail: null,
+            }).catch((err) => this.logger.error(`Failed to notify admins of won PayPal dispute: ${err}`));
           }
           webhookRecord.processingResult = 'success';
           break;

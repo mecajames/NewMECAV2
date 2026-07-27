@@ -61,6 +61,12 @@ export const MembershipSchema = z.object({
   teamDescription: z.string().nullable(),
   businessName: z.string().nullable(),
   businessWebsite: z.string().nullable(),
+  // Vehicle attached to this membership / MECA ID (competitor memberships).
+  // Set once at purchase; changes go through a support ticket (admin edit).
+  vehicleMake: z.string().nullable().optional(),
+  vehicleModel: z.string().nullable().optional(),
+  vehicleColor: z.string().nullable().optional(),
+  vehicleLicensePlate: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });

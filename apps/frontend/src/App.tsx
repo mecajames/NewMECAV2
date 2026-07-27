@@ -213,6 +213,7 @@ const FailedPaymentsPage = lazy(() => import('@/admin/billing/pages/FailedPaymen
 const AllPaymentsPage = lazy(() => import('@/admin/billing/pages/AllPaymentsPage'));
 const SubscriptionsPage = lazy(() => import('@/admin/billing/pages/SubscriptionsPage'));
 const ReconciliationPage = lazy(() => import('@/admin/billing/pages/ReconciliationPage'));
+const PaymentLookupPage = lazy(() => import('@/admin/billing/pages/PaymentLookupPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -421,6 +422,7 @@ function App() {
               <Route path="/admin/billing/payments" element={<L><AllPaymentsPage /></L>} />
               <Route path="/admin/billing/subscriptions" element={<L><SubscriptionsPage /></L>} />
               <Route path="/admin/billing/reconciliation" element={<L><ReconciliationPage /></L>} />
+              <Route path="/admin/billing/lookup" element={<L><PaymentLookupPage /></L>} />
 
               {/* Shop Routes */}
               <Route path="/shop" element={<ShopPage />} />

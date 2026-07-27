@@ -16,7 +16,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { SecurityService, ProvisionMode, StaffRoleAssignment } from './security.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
 
 @Controller('api/admin/security')
 export class SecurityController {
@@ -122,6 +122,24 @@ export class SecurityController {
   ) {
     await this.requireAdmin(authHeader);
     return this.securityService.deleteProfile(profileId);
+  }
+
+  /**
+   * Release MECA IDs stranded on zero-membership profiles (the signup-minting
+   * bug). Dry-run is admin; applying the release is super-admin only.
+   */
+  @Post('release-orphaned-meca-ids')
+  @HttpCode(HttpStatus.OK)
+  async releaseOrphanedMecaIds(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { dryRun?: boolean },
+  ) {
+    const { profile } = await this.requireAdmin(authHeader);
+    const dryRun = body?.dryRun !== false; // default true — applying must be explicit
+    if (!dryRun && !isSuperAdmin(profile)) {
+      throw new ForbiddenException('Releasing MECA IDs requires super-admin access');
+    }
+    return this.securityService.releaseOrphanedMecaIds({ dryRun });
   }
 
   @Get('enforcement')

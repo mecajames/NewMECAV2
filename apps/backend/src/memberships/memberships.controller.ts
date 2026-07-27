@@ -38,6 +38,7 @@ import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembersh
 import { MembershipSyncService } from './membership-sync.service';
 import { MembershipRenewalTokenService } from './membership-renewal-token.service';
 import { Public } from '../auth/public.decorator';
+import { assertVehicleChangeAllowed } from './vehicle-lock.util';
 import { Throttle } from '@nestjs/throttler';
 
 @Controller('api/memberships')
@@ -80,15 +81,16 @@ export class MembershipsController {
    * endpoints so a member can't create/enumerate secondaries under someone else's
    * account. Throws Unauthorized/NotFound/Forbidden as appropriate.
    */
-  private async requireMasterOwnerOrAdmin(masterMembershipId: string, authHeader?: string): Promise<void> {
+  private async requireMasterOwnerOrAdmin(masterMembershipId: string, authHeader?: string): Promise<{ isAdmin: boolean }> {
     const { user, profile } = await this.getAuthenticatedUser(authHeader);
-    if (isAdminUser(profile)) return;
+    if (isAdminUser(profile)) return { isAdmin: true };
     const em = this.em.fork();
     const master = await em.findOne(Membership, { id: masterMembershipId }, { populate: ['user'] });
     if (!master) throw new NotFoundException('Membership not found');
     if (master.user?.id !== user.id) {
       throw new ForbiddenException('You do not have permission to manage this membership');
     }
+    return { isAdmin: false };
   }
 
   /**
@@ -573,6 +575,11 @@ export class MembershipsController {
     if ('competitorName' in data && !isAdminUser(profile)) {
       delete (data as any).competitorName;
     }
+    // Vehicle lock: this generic update path must not let an owner change an
+    // already-set vehicle (that goes through a support ticket → admin edit).
+    if (!isAdminUser(profile)) {
+      assertVehicleChangeAllowed(membership, data, false);
+    }
     return this.membershipsService.update(id, data);
   }
 
@@ -650,10 +657,13 @@ export class MembershipsController {
   }
 
   /**
-   * Update vehicle info for a membership
+   * Update vehicle info for a membership. Owner (or the master of a secondary)
+   * may FILL empty fields; changing an existing value is admin-only — members
+   * request changes through a support ticket.
    */
   @Put(':id/vehicle')
   async updateVehicleInfo(
+    @Headers('authorization') authHeader: string,
     @Param('id') id: string,
     @Body() vehicleData: {
       vehicleLicensePlate?: string;
@@ -662,7 +672,21 @@ export class MembershipsController {
       vehicleModel?: string;
     },
   ): Promise<Membership> {
-    return this.membershipsService.updateVehicleInfo(id, vehicleData);
+    const { user, profile } = await this.getAuthenticatedUser(authHeader);
+    const isAdmin = isAdminUser(profile);
+    if (!isAdmin) {
+      const em = this.em.fork();
+      const membership = await em.findOne(Membership, { id }, {
+        populate: ['user', 'masterMembership', 'masterMembership.user'],
+      });
+      if (!membership) throw new NotFoundException('Membership not found');
+      const isOwner = membership.user?.id === user.id;
+      const isMasterOwner = membership.masterMembership?.user?.id === user.id;
+      if (!isOwner && !isMasterOwner) {
+        throw new ForbiddenException('You can only update vehicle info on your own memberships');
+      }
+    }
+    return this.membershipsService.updateVehicleInfo(id, vehicleData, { isAdmin });
   }
 
   /**
@@ -834,11 +858,14 @@ export class MembershipsController {
     @Param('id') masterMembershipId: string,
     @Body() data: Omit<CreateSecondaryMembershipDto, 'masterMembershipId'>,
   ): Promise<Membership> {
-    await this.requireMasterOwnerOrAdmin(masterMembershipId, authHeader);
-    return this.masterSecondaryService.createSecondaryMembership({
-      ...data,
-      masterMembershipId,
-    });
+    const { isAdmin } = await this.requireMasterOwnerOrAdmin(masterMembershipId, authHeader);
+    return this.masterSecondaryService.createSecondaryMembership(
+      {
+        ...data,
+        masterMembershipId,
+      },
+      { isAdmin },
+    );
   }
 
   /**
@@ -1474,6 +1501,21 @@ export class MembershipsController {
       data.reason,
       profile?.id || 'unknown',
     );
+  }
+
+  /**
+   * Admin: unfreeze a chargeback-frozen membership (e.g. after winning the
+   * dispute, or a mistaken freeze). Restores login; does NOT restore the
+   * cancelled billing subscription — the member must resubscribe.
+   */
+  @Post(':id/admin/unfreeze')
+  @HttpCode(HttpStatus.OK)
+  async unfreezeMembership(
+    @Param('id') membershipId: string,
+    @Headers('authorization') authHeader: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const { profile } = await this.requireAdmin(authHeader);
+    return this.membershipsService.unfreezeMembership(membershipId, profile?.id || 'unknown');
   }
 
   /**

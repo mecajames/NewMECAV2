@@ -262,6 +262,23 @@ export class Membership {
   @Property({ type: 'text', nullable: true, fieldName: 'paypal_capture_id' })
   paypalCaptureId?: string;
 
+  // =============================================================================
+  // Chargeback Freeze (distinct from dunning suspension and cancellation)
+  // =============================================================================
+  // Set when a payment dispute/chargeback opens: the member's login is disabled
+  // (profile.can_login=false) and the billing subscription is cancelled, but the
+  // membership row stays PAID so a won dispute can be cleanly unfrozen. A lost
+  // or accepted dispute converts the freeze into a terminal CANCELLED.
+  @Property({ type: 'timestamptz', nullable: true, fieldName: 'frozen_at' })
+  frozenAt?: Date;
+
+  @Property({ type: 'text', nullable: true, fieldName: 'freeze_reason' })
+  freezeReason?: string;
+
+  // Gateway dispute id (Stripe dp_... / PayPal dispute id) that caused the freeze
+  @Property({ type: 'text', nullable: true, fieldName: 'dispute_id' })
+  disputeId?: string;
+
   /**
    * Check if this membership's MECA ID can be reactivated (within grace period)
    */

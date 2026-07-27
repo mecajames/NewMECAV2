@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Car, Music, ArrowLeft, Award, MapPin, Calendar, X, Move, Check, Trophy } from 'lucide-react';
 import { profilesApi, Profile } from '@/profiles';
-import { membershipsApi, Membership } from '@/memberships';
+import { AUDIO_SYSTEM_COMPONENT_FIELDS, hasAudioSystemContent } from '@newmeca/shared';
 import { useAuth } from '@/auth/contexts/AuthContext';
 import { AchievementsGallery } from '@/achievements';
 
@@ -12,7 +12,6 @@ export default function MemberProfilePage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [membership, setMembership] = useState<Membership | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
@@ -42,17 +41,11 @@ export default function MemberProfilePage() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
+      // The public payload includes public_vehicle (make/model/color from the
+      // active membership, only when the member opted in) and the audio
+      // system when opted in — no separate auth-gated membership call needed.
       const data = await profilesApi.getPublicProfileById(id!);
       setProfile(data);
-
-      // Fetch active membership for vehicle info
-      try {
-        const membershipData = await membershipsApi.getUserActiveMembership(id!);
-        setMembership(membershipData);
-      } catch (err) {
-        // User may not have a membership, that's ok
-        console.log('No active membership found');
-      }
     } catch (err: any) {
       console.error('Error fetching profile:', err);
       setError('Profile not found or is not public');
@@ -317,8 +310,9 @@ export default function MemberProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Vehicle Information - from membership */}
-          {membership && (membership.vehicleMake || membership.vehicleModel) && (
+          {/* Vehicle — attached by the public endpoint when the member opted
+              in (make/model/color only; the license plate is never public) */}
+          {profile.public_vehicle && (profile.public_vehicle.make || profile.public_vehicle.model) && (
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
@@ -327,30 +321,31 @@ export default function MemberProfilePage() {
                 <h2 className="text-xl font-bold text-white">Vehicle</h2>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {membership.vehicleMake && (
+                {profile.public_vehicle.make && (
                   <div>
                     <p className="text-gray-400 text-xs mb-1">Make</p>
-                    <p className="text-white font-medium">{membership.vehicleMake}</p>
+                    <p className="text-white font-medium">{profile.public_vehicle.make}</p>
                   </div>
                 )}
-                {membership.vehicleModel && (
+                {profile.public_vehicle.model && (
                   <div>
                     <p className="text-gray-400 text-xs mb-1">Model</p>
-                    <p className="text-white font-medium">{membership.vehicleModel}</p>
+                    <p className="text-white font-medium">{profile.public_vehicle.model}</p>
                   </div>
                 )}
-                {membership.vehicleColor && (
+                {profile.public_vehicle.color && (
                   <div>
                     <p className="text-gray-400 text-xs mb-1">Color</p>
-                    <p className="text-white font-medium">{membership.vehicleColor}</p>
+                    <p className="text-white font-medium">{profile.public_vehicle.color}</p>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Audio System */}
-          {profile.car_audio_system && (
+          {/* Audio System — structured components, with the legacy free-text
+              description as fallback. Absent entirely unless the member opted in. */}
+          {(hasAudioSystemContent(profile.audio_system) || profile.car_audio_system) && (
             <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -358,7 +353,24 @@ export default function MemberProfilePage() {
                 </div>
                 <h2 className="text-xl font-bold text-white">Audio System</h2>
               </div>
-              <p className="text-gray-300 whitespace-pre-wrap">{profile.car_audio_system}</p>
+              {hasAudioSystemContent(profile.audio_system) ? (
+                <div className="space-y-3">
+                  {AUDIO_SYSTEM_COMPONENT_FIELDS.filter((f) => profile.audio_system?.[f.key]).map((f) => (
+                    <div key={f.key}>
+                      <p className="text-gray-400 text-xs mb-1">{f.label}</p>
+                      <p className="text-white font-medium">{profile.audio_system?.[f.key]}</p>
+                    </div>
+                  ))}
+                  {profile.audio_system?.description && (
+                    <div>
+                      <p className="text-gray-400 text-xs mb-1">About the Build</p>
+                      <p className="text-gray-300 whitespace-pre-wrap">{profile.audio_system.description}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-300 whitespace-pre-wrap">{profile.car_audio_system}</p>
+              )}
             </div>
           )}
         </div>

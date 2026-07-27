@@ -179,9 +179,10 @@ export class PaymentFulfillmentService {
         birthday: metadata.birthday,
         tshirtSize: metadata.tshirtSize,
         ringSize: metadata.ringSize,
-        // Vehicle info is never collected at the membership checkout (see the
-        // payment-intent DTO) — don't let the interactive-only validation block
-        // a paid fulfillment.
+        // Checkout now collects vehicle info for competitor plans (it arrives
+        // in the metadata keys above), but renewals/older payments may not
+        // carry it — never let validation block a PAID fulfillment; the
+        // carry-forward in createMembership fills renewal gaps.
         skipVehicleValidation: true,
       });
 

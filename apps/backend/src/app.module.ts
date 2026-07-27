@@ -45,6 +45,7 @@ import { RecurringInvoicesModule } from './recurring-invoices/recurring-invoices
 import { MembershipCompsModule } from './membership-comps/membership-comps.module';
 import { BillingModule } from './billing/billing.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { PaymentTraceModule } from './payment-trace/payment-trace.module';
 import { JudgesModule } from './judges/judges.module';
 import { EventDirectorsModule } from './event-directors/event-directors.module';
 import { RatingsModule } from './ratings/ratings.module';
@@ -133,6 +134,7 @@ import { SecurityModule } from './security/security.module';
     MembershipCompsModule,
     BillingModule,
     ReconciliationModule,
+    PaymentTraceModule,
     JudgesModule,
     EventDirectorsModule,
     RatingsModule,

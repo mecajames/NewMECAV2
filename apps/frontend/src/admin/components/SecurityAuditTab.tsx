@@ -76,6 +76,45 @@ export default function SecurityAuditTab() {
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const [provisionResult, setProvisionResult] = useState<string | null>(null);
 
+  const [releasingIds, setReleasingIds] = useState(false);
+
+  // Release MECA IDs stranded on zero-membership profiles (the signup-minting
+  // bug, fixed 2026-07-27). Dry-run first, show exactly what will change,
+  // then apply (server enforces super-admin for the apply step).
+  const releaseOrphanedIds = async () => {
+    setReleasingIds(true);
+    try {
+      const preview = await securityApi.releaseOrphanedMecaIds(true);
+      if (preview.releasable.length === 0) {
+        alert(
+          preview.kept.length === 0
+            ? 'No orphaned MECA IDs found.'
+            : `No releasable MECA IDs. ${preview.kept.length} orphaned ID(s) are intentionally kept ` +
+              `(retired IDs with results/history, role-assigned, or staff).`,
+        );
+        return;
+      }
+      const sample = preview.releasable
+        .slice(0, 10)
+        .map((r) => `${r.meca_id} — ${r.email ?? 'no email'}`)
+        .join('\n');
+      const confirmed = window.confirm(
+        `Release ${preview.releasable.length} MECA ID(s) from profiles with zero memberships?\n\n` +
+        `${sample}${preview.releasable.length > 10 ? `\n…and ${preview.releasable.length - 10} more` : ''}\n\n` +
+        `${preview.kept.length} other orphaned ID(s) will be KEPT (results/history/role protected).\n\n` +
+        `Released numbers return to the pool and can be assigned to future members.`,
+      );
+      if (!confirmed) return;
+      const result = await securityApi.releaseOrphanedMecaIds(false);
+      alert(`Released ${result.released} MECA ID(s). ${result.kept.length} kept.`);
+      await loadAll();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to release MECA IDs');
+    } finally {
+      setReleasingIds(false);
+    }
+  };
+
   const loadAll = async () => {
     setLoading(true);
     setError(null);
@@ -341,8 +380,17 @@ export default function SecurityAuditTab() {
             </button>
           ))}
           <button
+            onClick={releaseOrphanedIds}
+            disabled={releasingIds}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-amber-900/50 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 disabled:opacity-50"
+            title="Null out MECA IDs stranded on zero-membership profiles (IDs with results/history are kept retired)"
+          >
+            {releasingIds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+            Release Orphaned MECA IDs
+          </button>
+          <button
             onClick={loadAll}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600 text-gray-300"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-slate-700 hover:bg-slate-600 text-gray-300"
             title="Refresh"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Refresh

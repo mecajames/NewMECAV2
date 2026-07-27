@@ -243,3 +243,6 @@ apps/frontend/.env.example
 apps/frontend/.env.example
 .gstack/
 AGENT-HANDOFF.md
+
+# claude-flow tool daemon state/metrics — local telemetry, never app code
+.claude-flow/

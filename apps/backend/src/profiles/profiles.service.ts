@@ -10,7 +10,7 @@ import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { isAdminUser, isProtectedAccount } from '../auth/is-admin.helper';
 import { EmailService } from '../email/email.service';
 import { generateSecurePassword, validatePassword, MIN_PASSWORD_STRENGTH } from '../utils/password-generator';
-import { AccountType } from '@newmeca/shared';
+import { AccountType, PaymentStatus, summarizeAudioSystem } from '@newmeca/shared';
 import { AdminAuditService } from '../user-activity/admin-audit.service';
 
 export interface EnsureProfileDto {
@@ -216,10 +216,12 @@ export class ProfilesService {
   }
 
   async create(data: Partial<Profile>): Promise<Profile> {
-    // Auto-generate MECA ID if not provided
-    if (!data.meca_id) {
-      data.meca_id = await this.generateNextMecaId();
-    }
+    // POLICY (2026-07-27): a MECA ID is NEVER minted at profile creation —
+    // IDs come from the competitor pool and are assigned when a MEMBERSHIP is
+    // created (MecaIdService mirrors the number onto the profile). Auto-
+    // minting here burned real 7015xx-series IDs for accounts that never
+    // bought anything (the "no membership but has a MECA ID" audit rows).
+    // An explicitly provided meca_id (admin data entry) is still honored.
 
     // Ensure full_name is set
     if (!data.full_name) {
@@ -275,9 +277,11 @@ export class ProfilesService {
       }
     }
 
-    // Generate MECA ID
-    const mecaId = await this.generateNextMecaId();
-
+    // NO MECA ID here (policy 2026-07-27): ensureProfile runs on every
+    // OAuth/email-confirm callback and a 30-minute backfill cron — minting
+    // here handed a real competitor-pool ID to every account that merely
+    // signed up (zero memberships). The ID is assigned when a membership is
+    // created; MecaIdService mirrors it onto the profile.
     const now = new Date();
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || email;
 
@@ -289,7 +293,6 @@ export class ProfilesService {
       full_name: fullName,
       role: 'user',
       membership_status: 'none',
-      meca_id: mecaId,
       account_type: AccountType.MEMBER,
       is_staff: false,
       force_password_change: false,
@@ -306,7 +309,7 @@ export class ProfilesService {
 
     await em.persistAndFlush(profile);
 
-    this.logger.log(`Created profile for user ${userId} (${email}) with MECA ID ${mecaId}`);
+    this.logger.log(`Created profile for user ${userId} (${email}) — no MECA ID (assigned at membership creation)`);
     return profile;
   }
 
@@ -444,6 +447,9 @@ export class ProfilesService {
         data.profile_images !== undefined ||
         data.vehicle_info !== undefined ||
         data.car_audio_system !== undefined ||
+        data.audio_system !== undefined ||
+        data.vehicle_public !== undefined ||
+        data.audio_system_public !== undefined ||
         data.city !== undefined ||
         data.state !== undefined
       ) {
@@ -510,7 +516,7 @@ export class ProfilesService {
         { first_name: { $ilike: term } },
         { last_name: { $ilike: term } },
         { [raw(`"meca_id"::text`)]: { $ilike: term } },
-        { vehicle_info: { $ilike: term } },
+        { car_audio_system: { $ilike: term } },
       ];
     }
 
@@ -519,21 +525,62 @@ export class ProfilesService {
         'id', 'first_name', 'last_name', 'meca_id',
         'city', 'state', 'membership_status',
         'profile_picture_url', 'profile_images', 'cover_image_position',
-        'vehicle_info', 'car_audio_system',
+        'car_audio_system', 'audio_system', 'vehicle_public', 'audio_system_public',
       ],
       orderBy: { last_name: 'ASC', first_name: 'ASC' },
       limit,
       offset: (page - 1) * limit,
     });
 
-    const result = { profiles, total, page, limit };
+    // Attach the vehicle from each opted-in member's active membership
+    // (profiles.vehicle_info is a dead column — the real vehicle lives on the
+    // membership row). Batch query so the directory stays one extra query.
+    const optedInIds = profiles.filter((p) => (p as any).vehicle_public).map((p) => p.id);
+    const vehicleByUser = new Map<string, string>();
+    if (optedInIds.length > 0) {
+      const activeMemberships = await em.find(Membership, {
+        user: { $in: optedInIds },
+        paymentStatus: PaymentStatus.PAID,
+        endDate: { $gte: new Date() },
+      }, { orderBy: { endDate: 'ASC' } });
+      for (const m of activeMemberships) {
+        const desc = [m.vehicleColor, m.vehicleMake, m.vehicleModel].filter(Boolean).join(' ');
+        const ownerId = (m.user as any)?.id ?? (m.user as any);
+        if (desc && ownerId) vehicleByUser.set(ownerId, desc); // latest endDate wins
+      }
+    }
+
+    // Shape the payload: honor the per-section visibility opt-ins (private by
+    // default) and reuse vehicle_info/car_audio_system as the display fields
+    // the directory already renders.
+    const shaped = profiles.map((p) => {
+      const pub = p as any;
+      return {
+        id: p.id,
+        first_name: pub.first_name,
+        last_name: pub.last_name,
+        meca_id: pub.meca_id,
+        city: pub.city,
+        state: pub.state,
+        membership_status: pub.membership_status,
+        profile_picture_url: pub.profile_picture_url,
+        profile_images: pub.profile_images,
+        cover_image_position: pub.cover_image_position,
+        vehicle_info: pub.vehicle_public ? vehicleByUser.get(p.id) || undefined : undefined,
+        car_audio_system: pub.audio_system_public
+          ? summarizeAudioSystem(pub.audio_system) || pub.car_audio_system || undefined
+          : undefined,
+      } as Partial<Profile>;
+    });
+
+    const result = { profiles: shaped, total, page, limit };
     if (cacheKey) {
       this.setCache(cacheKey, result);
     }
     return result;
   }
 
-  async findPublicById(id: string): Promise<Profile> {
+  async findPublicById(id: string): Promise<Partial<Profile>> {
     const em = this.em.fork();
     const resolved = await resolveSlugToId(em.getConnection(), 'profiles', id);
     if (!resolved) {
@@ -552,7 +599,56 @@ export class ProfilesService {
     if (!profile) {
       throw new NotFoundException(`Public profile with ID ${id} not found`);
     }
-    return profile;
+
+    // Shape the PUBLIC payload instead of returning the raw entity: strip
+    // private contact/billing details, honor the audio opt-in, and attach the
+    // active membership's vehicle (make/model/color — NEVER the plate) when
+    // the member opted in. This is also what fixes "vehicle never shows up":
+    // the viewer page previously fetched the membership through an
+    // auth-gated endpoint that silently failed for most viewers.
+    const result: any = { ...profile };
+    delete result.email;
+    delete result.phone;
+    delete result.birthday;
+    delete result.tshirt_size;
+    delete result.ring_size;
+    delete result.address;
+    delete result.postal_code;
+    delete result.billing_street;
+    delete result.billing_city;
+    delete result.billing_state;
+    delete result.billing_zip;
+    delete result.billing_country;
+    delete result.shipping_street;
+    delete result.shipping_city;
+    delete result.shipping_state;
+    delete result.shipping_zip;
+    delete result.shipping_country;
+    delete result.force_password_change;
+    delete result.secondary_profiles;
+
+    if (!profile.audio_system_public) {
+      delete result.audio_system;
+      delete result.car_audio_system;
+    }
+
+    result.public_vehicle = null;
+    if (profile.vehicle_public) {
+      const activeMembership = await em.findOne(Membership, {
+        user: profile.id,
+        paymentStatus: PaymentStatus.PAID,
+        endDate: { $gte: new Date() },
+      }, { orderBy: { endDate: 'DESC' } });
+      if (activeMembership && (activeMembership.vehicleMake || activeMembership.vehicleModel || activeMembership.vehicleColor)) {
+        result.public_vehicle = {
+          make: activeMembership.vehicleMake || null,
+          model: activeMembership.vehicleModel || null,
+          color: activeMembership.vehicleColor || null,
+        };
+      }
+    }
+
+    return result;
   }
 
   /**

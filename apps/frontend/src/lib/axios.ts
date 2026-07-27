@@ -88,6 +88,23 @@ axios.interceptors.response.use(
         }
       }
     }
+    // ACCOUNT ACCESS REVOKED mid-session. The backend's login guard 403s
+    // every authenticated request when can_login=false (e.g. a chargeback
+    // freeze) or the account is banned. Without this branch the member stays
+    // "logged in" on a page where every call fails with generic errors. Only
+    // the guard's specific messages trigger the signout — ordinary permission
+    // 403s (admin-only endpoints etc.) must pass through untouched.
+    const backendMessage = String(error?.response?.data?.message || '');
+    const accessRevoked =
+      status === 403 &&
+      hadAuth &&
+      (backendMessage.includes('login is currently disabled') ||
+        backendMessage.includes('Your account has been disabled'));
+    if (accessRevoked && !handlingSessionExpiry) {
+      handlingSessionExpiry = true;
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      window.location.href = '/login?reason=disabled';
+    }
     return Promise.reject(error);
   }
 );

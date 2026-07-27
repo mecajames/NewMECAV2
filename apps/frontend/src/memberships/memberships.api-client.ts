@@ -1090,6 +1090,17 @@ export const membershipsApi = {
   },
 
   /**
+   * Unfreeze a chargeback-frozen membership (dispute won / mistaken freeze).
+   * Restores login; the cancelled billing subscription is NOT restored.
+   */
+  adminUnfreeze: async (
+    membershipId: string,
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await axios.post(`/api/memberships/${membershipId}/admin/unfreeze`);
+    return response.data;
+  },
+
+  /**
    * Admin: Schedule a membership to be cancelled at the end of its current period.
    * The membership remains active until the end date.
    */
@@ -1210,7 +1221,34 @@ export const membershipsApi = {
     } | null;
   }> => {
     const response = await axios.get(`/api/memberships/${membershipId}/subscription-status`);
-    return response.data;
+    // The backend returns a FLAT shape with `autoRenewStatus` — this mapping
+    // is what makes the Membership Dashboard's auto-renewal panel render.
+    // (Before 2026-07-27 the raw response was returned and every
+    // `autoRenewalStatus` check was undefined, so the Disable Auto-Renewal
+    // button and subscription panel never showed.)
+    const d = response.data as {
+      autoRenewStatus?: 'on' | 'legacy' | 'off';
+      autoRenewalStatus?: 'on' | 'legacy' | 'off';
+      stripeSubscriptionId: string | null;
+      hadLegacySubscription: boolean;
+      stripeSubscriptionStatus?: string | null;
+      currentPeriodEnd?: string | null;
+      cancelAtPeriodEnd?: boolean | null;
+      stripeSubscription?: { status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean } | null;
+    };
+    return {
+      autoRenewalStatus: d.autoRenewalStatus ?? d.autoRenewStatus ?? 'off',
+      stripeSubscriptionId: d.stripeSubscriptionId ?? null,
+      hadLegacySubscription: !!d.hadLegacySubscription,
+      stripeSubscription: d.stripeSubscription
+        ?? (d.stripeSubscriptionStatus
+          ? {
+              status: d.stripeSubscriptionStatus,
+              currentPeriodEnd: d.currentPeriodEnd ?? '',
+              cancelAtPeriodEnd: !!d.cancelAtPeriodEnd,
+            }
+          : null),
+    };
   },
 
   /**

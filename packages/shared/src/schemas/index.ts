@@ -7,6 +7,7 @@ export * from "./payments.schema.js";
 export * from "./events.schema.js";
 export * from "./event-registrations.schema.js";
 export * from "./profiles.schema.js";
+export * from "./audio-system.schema.js";
 export * from "./event-hosting-requests.schema.js";
 export * from "./competition-results.schema.js";
 export * from "./stripe.schema.js";

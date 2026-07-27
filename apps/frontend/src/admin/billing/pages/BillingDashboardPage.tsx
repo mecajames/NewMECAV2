@@ -710,6 +710,20 @@ export default function BillingDashboardPage() {
               Verifies our records against Stripe &amp; PayPal and flags real discrepancies.
             </p>
           </button>
+
+          <button
+            onClick={() => navigate('/admin/billing/lookup')}
+            className="bg-slate-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 text-left"
+          >
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 flex items-center justify-center mb-4">
+              <Search className="h-6 w-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Payment Lookup</h3>
+            <p className="text-gray-400 text-sm">
+              Chargeback tracing: paste any Stripe/PayPal id, invoice number, MECA ID, or email
+              and walk the chain back to the member — then cancel their membership.
+            </p>
+          </button>
         </div>
 
         {/* Recent Activity */}

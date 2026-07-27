@@ -49,6 +49,11 @@ export const paypalApi = {
     businessName?: string;
     businessWebsite?: string;
     userId?: string;
+    competitorName?: string;
+    vehicleMake?: string;
+    vehicleModel?: string;
+    vehicleColor?: string;
+    vehicleLicensePlate?: string;
   }): Promise<CreateOrderResponse> {
     const response = await axios.post('/api/paypal/create-order', data);
     return response.data;

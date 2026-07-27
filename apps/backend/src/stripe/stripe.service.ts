@@ -472,6 +472,87 @@ export class StripeService implements OnApplicationBootstrap {
   }
 
   /**
+   * List customers matching an email — READ-ONLY (findOrCreateCustomer would
+   * mint one). Empty array on failure. Used by the admin payment-trace tool.
+   */
+  async listCustomersByEmail(email: string): Promise<Stripe.Customer[]> {
+    if (!email) return [];
+    const stripe = this.getStripeClient();
+    try {
+      const customers = await stripe.customers.list({ email, limit: 10 });
+      return customers.data;
+    } catch (error) {
+      this.logger.warn(`Stripe listCustomersByEmail(${email}) failed: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Retrieve a Charge with its payment intent, invoice, and customer expanded.
+   * Returns null on not-found — used by the admin payment-trace tool where a
+   * miss is a normal answer, not an error.
+   */
+  async retrieveCharge(chargeId: string): Promise<Stripe.Charge | null> {
+    if (!chargeId) return null;
+    const stripe = this.getStripeClient();
+    try {
+      return await stripe.charges.retrieve(chargeId, {
+        expand: ['payment_intent', 'invoice', 'customer'],
+      });
+    } catch (error) {
+      this.logger.warn(`Stripe retrieveCharge(${chargeId}) failed: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Retrieve a Stripe Invoice (in_...) with subscription/payment_intent/customer
+   * expanded. Returns null on not-found (payment-trace tool).
+   */
+  async retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice | null> {
+    if (!invoiceId) return null;
+    const stripe = this.getStripeClient();
+    try {
+      return await stripe.invoices.retrieve(invoiceId, {
+        expand: ['subscription', 'payment_intent', 'customer'],
+      });
+    } catch (error) {
+      this.logger.warn(`Stripe retrieveInvoice(${invoiceId}) failed: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * List a customer's subscriptions (all statuses). Empty array on failure.
+   */
+  async listSubscriptionsForCustomer(customerId: string): Promise<Stripe.Subscription[]> {
+    if (!customerId) return [];
+    const stripe = this.getStripeClient();
+    try {
+      const subs = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 20 });
+      return subs.data;
+    } catch (error) {
+      this.logger.warn(`Stripe listSubscriptionsForCustomer(${customerId}) failed: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * List a customer's recent charges (most recent first). Empty array on failure.
+   */
+  async listChargesForCustomer(customerId: string, limit = 25): Promise<Stripe.Charge[]> {
+    if (!customerId) return [];
+    const stripe = this.getStripeClient();
+    try {
+      const charges = await stripe.charges.list({ customer: customerId, limit });
+      return charges.data;
+    } catch (error) {
+      this.logger.warn(`Stripe listChargesForCustomer(${customerId}) failed: ${error}`);
+      return [];
+    }
+  }
+
+  /**
    * Construct and verify a Stripe webhook event
    */
   constructWebhookEvent(payload: Buffer, signature: string): Stripe.Event {
