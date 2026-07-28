@@ -274,7 +274,12 @@ export class PaymentFulfillmentService {
    *   3. brand new                          → create auth user (random password,
    *      member sets it via "Forgot Password") + profile
    */
-  private async resolveOrProvisionUserId(
+  // Public: also used by the subscription-checkout webhook
+  // (stripe.controller handleCheckoutSessionCompleted) so a GUEST who starts
+  // an auto-renew subscription is provisioned exactly like a guest one-time
+  // buyer — previously that path dropped the buyer entirely (money taken,
+  // subscription live, no account/membership → chargebacks).
+  async resolveOrProvisionUserId(
     email: string,
     metadata: Record<string, string>,
   ): Promise<string> {
