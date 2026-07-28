@@ -2126,13 +2126,31 @@ export class StripeController {
     // Find or create user
     let profile = userId ? await em.findOne(Profile, { id: userId }) : null;
     if (!profile) {
-      profile = await em.findOne(Profile, { email: email.toLowerCase() });
+      // Case-insensitive — profile emails are stored as entered.
+      profile = await em.findOne(Profile, { email: { $ilike: email.toLowerCase() } });
     }
 
     if (!profile) {
-      console.error('No user found for subscription checkout. Email:', email);
-      // TODO: Create a pending membership or send invitation email
-      return;
+      // GUEST subscription checkout — the buyer has no account yet. This used
+      // to console.error and RETURN: money taken, subscription live, NO
+      // account, NO membership (produced the 2×$40 double-subscribe
+      // chargebacks of 2026-07-16 — the buyer paid and could never log in).
+      // Provision exactly like the guest one-time path: link an existing auth
+      // user or create one (random password + branded set-password email),
+      // then continue creating the membership below. Throw on failure so the
+      // webhook records an ERROR and reconciliation surfaces it — never a
+      // silent success with kept money.
+      const provisionedId = await this.paymentFulfillmentService.resolveOrProvisionUserId(
+        email,
+        (metadata || {}) as Record<string, string>,
+      );
+      profile = await em.findOne(Profile, { id: provisionedId });
+      if (!profile) {
+        throw new Error(
+          `Subscription checkout ${session.id}: provisioned account ${provisionedId} for ${email} but no profile row exists — investigate immediately (subscription ${subscriptionId} is live).`,
+        );
+      }
+      console.log(`Provisioned/linked account ${provisionedId} for guest subscription checkout (${email})`);
     }
 
     try {

@@ -116,6 +116,30 @@ export class PaymentTraceService {
             typeof (pi as any).latest_charge === 'string' ? (pi as any).latest_charge : (pi as any).latest_charge?.id,
           );
           if ((pi as any).receipt_email) emails.add(String((pi as any).receipt_email).toLowerCase());
+
+          // SUBSCRIPTION-BILLING PIs: Stripe mints renewal payment intents
+          // itself with EMPTY metadata — the member is only reachable via
+          // PI → invoice → subscription. Follow that chain automatically so
+          // a chargeback traced by bare pi_ still lands on the member (our
+          // ledger + memberships key subscription renewals on the sub id).
+          const piInvoiceId = typeof (pi as any).invoice === 'string'
+            ? (pi as any).invoice
+            : (pi as any).invoice?.id;
+          if (piInvoiceId) {
+            addStripeIds(piInvoiceId);
+            const inv = await this.stripeService.retrieveInvoice(piInvoiceId);
+            if (inv) {
+              stripe.invoice = this.summarizeStripeInvoice(inv);
+              addStripeIds(
+                typeof (inv as any).subscription === 'string' ? (inv as any).subscription : (inv as any).subscription?.id,
+                typeof inv.customer === 'string' ? inv.customer : (inv.customer as any)?.id,
+              );
+              const invEmail = inv.customer_email
+                || (typeof inv.customer === 'object' ? (inv.customer as any)?.email : null);
+              if (invEmail) emails.add(String(invEmail).toLowerCase());
+              notes.push('This payment intent is SUBSCRIPTION billing (auto-renewal) — traced through its invoice to the subscription and customer.');
+            }
+          }
         } catch {
           notes.push(`Stripe has no payment intent ${query} (or the API is unavailable).`);
         }
@@ -125,16 +149,33 @@ export class PaymentTraceService {
         const charge = await this.stripeService.retrieveCharge(query);
         if (charge) {
           stripe.charge = this.summarizeCharge(charge);
+          const chargeInvoiceId = typeof charge.invoice === 'string' ? charge.invoice : (charge.invoice as any)?.id;
           addStripeIds(
             typeof charge.payment_intent === 'string' ? charge.payment_intent : (charge.payment_intent as any)?.id,
             typeof charge.customer === 'string' ? charge.customer : (charge.customer as any)?.id,
-            typeof charge.invoice === 'string' ? charge.invoice : (charge.invoice as any)?.id,
+            chargeInvoiceId,
           );
           const email =
             charge.billing_details?.email ||
             (typeof charge.customer === 'object' ? (charge.customer as any)?.email : null) ||
             charge.receipt_email;
           if (email) emails.add(String(email).toLowerCase());
+
+          // Same subscription-billing chain as the pi_ path: charge → invoice
+          // → subscription id + customer email.
+          if (chargeInvoiceId) {
+            const inv = charge.invoice && typeof charge.invoice === 'object'
+              ? (charge.invoice as any)
+              : await this.stripeService.retrieveInvoice(chargeInvoiceId);
+            if (inv) {
+              stripe.invoice = this.summarizeStripeInvoice(inv);
+              addStripeIds(
+                typeof inv.subscription === 'string' ? inv.subscription : inv.subscription?.id,
+              );
+              if (inv.customer_email) emails.add(String(inv.customer_email).toLowerCase());
+              notes.push('This charge is SUBSCRIPTION billing (auto-renewal) — traced through its invoice to the subscription.');
+            }
+          }
         } else {
           notes.push(`Stripe has no charge ${query} (or the API is unavailable).`);
         }
@@ -379,6 +420,9 @@ export class PaymentTraceService {
       currency: pi.currency,
       customerId: typeof pi.customer === 'string' ? pi.customer : pi.customer?.id ?? null,
       latestChargeId: typeof pi.latest_charge === 'string' ? pi.latest_charge : pi.latest_charge?.id ?? null,
+      // Set on subscription-billing PIs — the road to the member when
+      // metadata is empty (Stripe mints renewal PIs without metadata).
+      invoiceId: typeof pi.invoice === 'string' ? pi.invoice : pi.invoice?.id ?? null,
       receiptEmail: pi.receipt_email ?? null,
       created: pi.created ? new Date(pi.created * 1000) : null,
       metadata: pi.metadata ?? {},
