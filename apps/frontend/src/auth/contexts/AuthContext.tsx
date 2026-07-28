@@ -22,7 +22,7 @@ interface AuthContextType {
   updatePassword: (currentPassword: string, newPassword: string) => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
   clearForcePasswordChange: () => Promise<void>;
-  ensureProfileExists: (user: User) => Promise<void>;
+  ensureProfileExists: (user: User) => Promise<Profile>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -216,6 +216,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setForcePasswordChange(profileData.force_password_change === true);
     setRestrictedToBilling((profileData as any).restricted_to_billing === true);
     setProfile(profileData);
+    // Returned so the OAuth callback can gate on it (no-membership kick-out).
+    return profileData;
   };
 
   const signOut = async (logoutReason?: string) => {

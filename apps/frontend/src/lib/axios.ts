@@ -105,6 +105,19 @@ axios.interceptors.response.use(
       await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
       window.location.href = '/login?reason=disabled';
     }
+    // NO-MEMBERSHIP account (membership-required login enforcement): someone
+    // authenticated (e.g. via Google) but has zero memberships. Kick the
+    // session and land them on the "purchase a membership" login message —
+    // never leave them on a half-broken member page.
+    const noMembership =
+      status === 403 &&
+      hadAuth &&
+      backendMessage.includes('no membership on file');
+    if (noMembership && !handlingSessionExpiry) {
+      handlingSessionExpiry = true;
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+      window.location.href = '/login?reason=no-membership';
+    }
     return Promise.reject(error);
   }
 );

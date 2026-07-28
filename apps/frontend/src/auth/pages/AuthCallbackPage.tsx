@@ -37,10 +37,34 @@ export default function AuthCallbackPage() {
 
     const completeSignIn = async (user: import('@supabase/supabase-js').User) => {
       try {
-        await Promise.race([
+        const profileData: any = await Promise.race([
           ensureProfileRef.current(user),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
         ]);
+
+        // NO ACCOUNT WITHOUT A MEMBERSHIP. Google OAuth creates an auth user
+        // for anyone who taps "Sign in with Google" — Supabase can't tell
+        // sign-in from sign-up. If the resulting profile has no membership at
+        // all (status 'none') and no privileged role, sign them straight out
+        // and route to the login page's "purchase a membership" message.
+        // (Since 2026-07-27 these profiles get NO MECA ID either; the backend
+        // enforcement guard independently blocks their API access.) Exempt:
+        // staff/admin/ED/judge accounts and pay-to-activate (billing-
+        // restricted) accounts, which legitimately exist pre-payment.
+        const privilegedRole = ['admin', 'event_director', 'judge'].includes(profileData?.role || '');
+        const isBillingRestricted = profileData?.restricted_to_billing === true;
+        if (
+          profileData &&
+          (profileData.membership_status === 'none' || !profileData.membership_status) &&
+          !profileData.is_staff &&
+          !privilegedRole &&
+          !isBillingRestricted
+        ) {
+          await supabase.auth.signOut();
+          doRedirect('/login?reason=no-membership');
+          return;
+        }
+
         doRedirect(resolveRedirect());
       } catch (err) {
         console.error('Profile setup during callback failed:', err);

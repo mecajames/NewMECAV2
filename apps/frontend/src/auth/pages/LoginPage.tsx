@@ -21,7 +21,13 @@ export default function LoginPage() {
   const siteLogo = useSiteLogo();
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get('redirect');
-  const timeoutReason = searchParams.get('reason') === 'timeout';
+  const reason = searchParams.get('reason');
+  const timeoutReason = reason === 'timeout';
+  // Signed in (e.g. with Google) but has no MECA account/membership — the
+  // backend rejected them and we bounced the session here.
+  const noMembershipReason = reason === 'no-membership';
+  // Account access disabled (ban / chargeback freeze).
+  const disabledReason = reason === 'disabled';
 
   // Resolve redirect: query param > sessionStorage (from timeout) > /dashboard
   const resolveRedirect = (): string => {
@@ -172,6 +178,34 @@ export default function LoginPage() {
             <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500 rounded-lg flex items-start gap-3">
               <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-amber-500 text-sm">Your session has expired due to inactivity. Please sign in again.</p>
+            </div>
+          )}
+
+          {noMembershipReason && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500 rounded-lg">
+              <p className="text-amber-500 text-sm font-medium mb-2">
+                You don't have a MECA account yet.
+              </p>
+              <p className="text-amber-500/90 text-sm mb-3">
+                MECA accounts are created with a membership. Purchase a membership to get your
+                account and your MECA ID — then sign in here.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/membership')}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                Purchase a Membership
+              </button>
+            </div>
+          )}
+
+          {disabledReason && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500 rounded-lg">
+              <p className="text-red-500 text-sm">
+                Your account access is currently disabled. If you believe this is an error,
+                please contact MECA support.
+              </p>
             </div>
           )}
 
