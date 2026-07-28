@@ -15,7 +15,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { EntityManager } from '@mikro-orm/core';
+import { EntityManager, raw } from '@mikro-orm/core';
 import {
   CreateOrderDto,
   CreateOrderSchema,
@@ -1218,7 +1218,14 @@ export class BillingController {
     const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
     const where: any = { createdAt: { $gte: since } };
-    if (statusParam) where.paymentStatus = statusParam;
+    if (statusParam === 'disputed') {
+      // "Disputed" isn't a payment_status value — the dispute webhooks stamp
+      // payment_metadata.dispute (a payment can be paid AND disputed). Filter
+      // on the stamp's presence.
+      where[raw(`"payment_metadata"->'dispute'`) as any] = { $ne: null };
+    } else if (statusParam) {
+      where.paymentStatus = statusParam;
+    }
     if (methodParam) where.paymentMethod = methodParam;
     if (typeParam) where.paymentType = typeParam;
 
@@ -1268,6 +1275,9 @@ export class BillingController {
         description: p.description ?? null,
         paidAt: p.paidAt ?? null,
         refundedAt: p.refundedAt ?? null,
+        // Chargeback stamp written by the dispute webhooks — drives the
+        // DISPUTED chip + filter in the All Payments UI.
+        dispute: (p.paymentMetadata as any)?.dispute ?? null,
         member: {
           id: p.user?.id ?? null,
           name: name || null,

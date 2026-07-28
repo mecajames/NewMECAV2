@@ -16,6 +16,24 @@ import { AchievementsService } from '../achievements/achievements.service';
 import { PointsConfigurationService } from '../points-configuration/points-configuration.service';
 import { PointsConfiguration } from '../points-configuration/points-configuration.entity';
 import { ResultTeamsService } from '../result-teams/result-teams.service';
+import { isValidTeamName } from '../memberships/memberships.service';
+
+/**
+ * Competitor names are PEOPLE, never teams. Reuses the same team-word matcher
+ * as the team-name fields (catches TEAM, T3@M, backwards, spaced-out
+ * variants) but inverted: a competitor name containing a team word is
+ * rejected. Applied at the create/update chokepoints so it covers ED entry,
+ * admin entry, and file imports alike.
+ */
+function assertCompetitorNameIsNotATeam(name: string | undefined | null): void {
+  if (!name) return;
+  if (!isValidTeamName(name)) {
+    throw new BadRequestException(
+      `"${name}" looks like a TEAM name, not a competitor. The competitor name field must be the person's real name — ` +
+      `team names are entered separately on the membership/team record.`,
+    );
+  }
+}
 
 @Injectable()
 export class CompetitionResultsService {
@@ -807,6 +825,12 @@ export class CompetitionResultsService {
     if ((data as any).competitor_name !== undefined) {
       transformedData.competitorName = (data as any).competitor_name;
       delete transformedData.competitor_name;
+      // A competitor name is a PERSON's name — never a team. "TEAM RF RAMEY"
+      // entered by an ED surfaced on the public leaderboard as a competitor.
+      // Same team-word matcher the team-name fields use (TEAM, T3@M,
+      // backwards, spaced-out variants). create/update are the write
+      // chokepoints for manual entry AND file imports.
+      assertCompetitorNameIsNotATeam(transformedData.competitorName);
     }
     if ((data as any).meca_id !== undefined) {
       // Normalize a stray leading/trailing space in an imported/entered meca_id
@@ -1047,6 +1071,12 @@ export class CompetitionResultsService {
     if ((data as any).competitor_name !== undefined) {
       transformedData.competitorName = (data as any).competitor_name;
       delete transformedData.competitor_name;
+      // A competitor name is a PERSON's name — never a team. "TEAM RF RAMEY"
+      // entered by an ED surfaced on the public leaderboard as a competitor.
+      // Same team-word matcher the team-name fields use (TEAM, T3@M,
+      // backwards, spaced-out variants). create/update are the write
+      // chokepoints for manual entry AND file imports.
+      assertCompetitorNameIsNotATeam(transformedData.competitorName);
     }
     if ((data as any).meca_id !== undefined) {
       // Normalize a stray leading/trailing space in an imported/entered meca_id
@@ -1355,7 +1385,15 @@ export class CompetitionResultsService {
       // visible row count. Now every unique competitor in the filtered
       // result set appears; 0-point entries naturally sink to the bottom
       // under either sort mode (points or best score).
+      //
+      // MEMBERS ONLY (James, 2026-07-28): guests (no MECA ID / 999999) are
+      // excluded from the public leaderboard entirely. Points ranking buried
+      // them anyway (guests earn 0 points), but rank-by-score put
+      // "Non Member" rows at the top of Highest SPL Scores. Their results
+      // stay in the event results pages — they just don't rank on the
+      // leaderboard.
       let entries = Array.from(competitorMap.values())
+        .filter(e => !e.is_guest)
         .map(e => ({
           competitor_id: e.competitor_id,
           competitor_name: e.competitor_name,

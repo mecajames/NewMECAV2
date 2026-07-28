@@ -513,10 +513,13 @@ export class AdminNotificationsService {
       const memberStr = memberName
         ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}`
         : '';
+      // Link straight into Payment Lookup with the trace pre-run — the orders
+      // page has no dispute concept, and a guest chargeback has no order row.
+      const lookupPath = `/admin/billing/lookup?q=${encodeURIComponent(args.paymentIntentId)}`;
       await this.notifyAllAdmins(
         'CHARGEBACK OPENED',
         `Dispute ${args.disputeId} - $${amount} (${args.reason}). Evidence due ${dueByStr}.${memberStr}`,
-        '/admin/billing/orders',
+        lookupPath,
       );
 
       const fields: Array<{ label: string; value: string }> = [
@@ -536,8 +539,8 @@ export class AdminNotificationsService {
         title: `[URGENT] Chargeback Opened: $${amount}`,
         subtitle: `${memberName ? `${memberName} · ` : ''}Reason: ${args.reason || 'Not specified'} - Evidence due ${dueByStr}`,
         fields,
-        dashboardPath: '/admin/billing/orders',
-        dashboardLabel: 'View Orders',
+        dashboardPath: lookupPath,
+        dashboardLabel: 'Trace This Payment',
       });
     } catch (error) {
       this.logger.error(`Failed to send dispute-created admin notification: ${error}`);
@@ -562,10 +565,11 @@ export class AdminNotificationsService {
       const baseUrl = process.env.FRONTEND_URL || 'https://mecacaraudio.com';
 
       const memberStr = memberName ? ` — ${memberName}${mecaId ? ` (MECA ID: ${mecaId})` : ''}` : '';
+      const lookupPath = `/admin/billing/lookup?q=${encodeURIComponent(args.paymentIntentId)}`;
       await this.notifyAllAdmins(
         'CHARGEBACK LOST',
         `Dispute ${args.disputeId} closed as LOST - $${amount} debited.${memberStr}`,
-        '/admin/billing/orders',
+        lookupPath,
       );
 
       const fields: Array<{ label: string; value: string }> = [
@@ -584,8 +588,8 @@ export class AdminNotificationsService {
         title: `[URGENT] Chargeback LOST: $${amount}`,
         subtitle: `${memberName ? `${memberName} · ` : ''}Funds have been debited from your account`,
         fields,
-        dashboardPath: '/admin/billing/orders',
-        dashboardLabel: 'View Orders',
+        dashboardPath: lookupPath,
+        dashboardLabel: 'Trace This Payment',
       });
     } catch (error) {
       this.logger.error(`Failed to send dispute-lost admin notification: ${error}`);
@@ -611,7 +615,7 @@ export class AdminNotificationsService {
         'CHARGEBACK WON',
         `Dispute ${args.disputeId} closed in OUR favor ($${amount}).${memberStr} The membership is still FROZEN — ` +
         `use Payment Lookup to unfreeze (restores login; subscription stays cancelled) or cancel it.`,
-        '/admin/billing/lookup',
+        `/admin/billing/lookup?q=${encodeURIComponent(args.paymentIntentId)}`,
       );
     } catch (error) {
       this.logger.error(`Failed to send dispute-won admin notification: ${error}`);
