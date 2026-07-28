@@ -253,7 +253,13 @@ export class SecurityService {
    *    (event_director / judge / admin);
    *  - the account is a protected super-admin account.
    */
-  async releaseOrphanedMecaIds(opts: { dryRun: boolean }): Promise<{
+  async releaseOrphanedMecaIds(opts: {
+    dryRun: boolean;
+    // When provided on apply, release ONLY these profile ids. The selection is
+    // intersected with the freshly recomputed releasable set — a kept/ineligible
+    // id in the list is silently skipped, never released.
+    profileIds?: string[];
+  }): Promise<{
     dryRun: boolean;
     releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: Date }>;
     kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }>;
@@ -304,19 +310,178 @@ export class SecurityService {
     }
 
     let released = 0;
-    if (!opts.dryRun && releasable.length > 0) {
-      released = await em.nativeUpdate(
-        Profile,
-        { id: { $in: releasable.map((r) => r.id) } },
-        { meca_id: null } as any,
-      );
-      this.logger.warn(
-        `Released ${released} orphaned MECA IDs (zero-membership profiles): ` +
-        releasable.map((r) => `${r.meca_id} (${r.email})`).join(', '),
-      );
+    if (!opts.dryRun) {
+      // Selective release: intersect the admin's selection with the freshly
+      // recomputed releasable set (kept ids can never sneak through).
+      const toRelease = opts.profileIds
+        ? releasable.filter((r) => opts.profileIds!.includes(r.id))
+        : releasable;
+      if (toRelease.length > 0) {
+        released = await em.nativeUpdate(
+          Profile,
+          { id: { $in: toRelease.map((r) => r.id) } },
+          { meca_id: null } as any,
+        );
+        this.logger.warn(
+          `Released ${released} orphaned MECA IDs (zero-membership profiles): ` +
+          toRelease.map((r) => `${r.meca_id} (${r.email})`).join(', '),
+        );
+      }
     }
 
     return { dryRun: opts.dryRun, releasable, kept, released };
+  }
+
+  /**
+   * One-click forensics for the "MECA ID with zero memberships" class of
+   * problem (the 2026-07-27 signup-minting bug). Returns:
+   *  - auth.users trigger audit: prod has a trigger that auto-provisions
+   *    profiles rows; if its function body calls the MECA ID generator it
+   *    keeps leaking IDs no matter what the app code does. We read the
+   *    trigger bodies from the pg catalogs and flag any that mint.
+   *  - orphan analysis: every profile holding a meca_id with no membership,
+   *    with the evidence counts (history/payments/results/event regs), the
+   *    likely ORIGIN of the mint, and whether the release tool will free it.
+   */
+  async getMecaIdDiagnostics(): Promise<{
+    trigger: {
+      readable: boolean;
+      verdict: string;
+      triggers: Array<{ name: string; mintsMecaId: boolean; body: string }>;
+    };
+    orphans: Array<{
+      id: string;
+      meca_id: string;
+      email: string | null;
+      role: string | null;
+      created_at: Date;
+      origin: string;
+      releasable: boolean;
+      keep_reasons: string[];
+      history_count: number;
+      payment_count: number;
+      results_count: number;
+      event_registrations: number;
+      auth_provider: string | null;
+    }>;
+  }> {
+    const em = this.em.fork();
+    const conn = em.getConnection();
+
+    // ---- auth.users trigger audit --------------------------------------
+    let trigger: { readable: boolean; verdict: string; triggers: Array<{ name: string; mintsMecaId: boolean; body: string }> } = {
+      readable: false,
+      verdict: 'Could not read auth.users triggers (insufficient DB privileges on this environment).',
+      triggers: [],
+    };
+    try {
+      const rows: Array<{ trigger_name: string; function_body: string }> = await conn.execute(
+        `SELECT t.tgname AS trigger_name, pg_get_functiondef(t.tgfoid) AS function_body
+         FROM pg_trigger t
+         JOIN pg_proc pr ON pr.oid = t.tgfoid
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'auth' AND c.relname = 'users' AND NOT t.tgisinternal`,
+      );
+      const triggers = (rows || []).map((r) => ({
+        name: r.trigger_name,
+        body: r.function_body,
+        mintsMecaId: /generate_meca_id|get_next_meca_id/i.test(r.function_body || ''),
+      }));
+      const minting = triggers.filter((t) => t.mintsMecaId);
+      trigger = {
+        readable: true,
+        triggers,
+        verdict:
+          triggers.length === 0
+            ? 'No custom triggers on auth.users — nothing minting MECA IDs at the database level.'
+            : minting.length > 0
+              ? `WARNING: trigger(s) ${minting.map((t) => t.name).join(', ')} call the MECA ID generator — every new auth user still burns a competitor-pool ID until the trigger function is edited (remove meca_id from its INSERT).`
+              : 'Trigger(s) found on auth.users but none call the MECA ID generator — no database-level minting.',
+      };
+    } catch (err) {
+      this.logger.warn(`auth.users trigger audit failed: ${err}`);
+    }
+
+    // ---- orphan analysis ------------------------------------------------
+    type Row = {
+      id: string;
+      meca_id: string;
+      email: string | null;
+      role: string | null;
+      is_staff: boolean | null;
+      account_type: string | null;
+      member_since: Date | null;
+      force_password_change: boolean | null;
+      created_at: Date;
+      history_count: string;
+      results_count: string;
+      payment_count: string;
+      event_regs: string;
+      auth_provider: string | null;
+    };
+    const rows: Row[] = await conn.execute(
+      `SELECT p."id", p."meca_id", p."email", p."role", p."is_staff", p."account_type",
+              p."member_since", p."force_password_change", p."created_at",
+              (SELECT COUNT(*)::int FROM "public"."meca_id_history" h
+                WHERE h."profile_id" = p."id" OR h."meca_id"::text = p."meca_id"::text)::text AS history_count,
+              (SELECT COUNT(*)::int FROM "public"."competition_results" cr
+                WHERE TRIM(cr."meca_id"::text) = TRIM(p."meca_id"::text))::text AS results_count,
+              (SELECT COUNT(*)::int FROM "public"."payments" pay
+                WHERE pay."user_id" = p."id")::text AS payment_count,
+              (SELECT COUNT(*)::int FROM "public"."event_registrations" er
+                WHERE LOWER(er."email") = LOWER(p."email"))::text AS event_regs,
+              au."raw_app_meta_data"->>'provider' AS auth_provider
+       FROM "public"."profiles" p
+       LEFT JOIN "auth"."users" au ON au."id" = p."id"
+       WHERE p."meca_id" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "public"."memberships" m WHERE m."user_id" = p."id")
+       ORDER BY p."created_at"`,
+    );
+
+    const orphans = rows.map((r) => {
+      // Same keep rules as releaseOrphanedMecaIds — keep them in sync.
+      const keepReasons: string[] = [];
+      if (parseInt(r.results_count, 10) > 0) keepReasons.push('competition results reference this ID (retired — never release)');
+      if (parseInt(r.history_count, 10) > 0) keepReasons.push('meca_id_history references this ID/profile');
+      if (r.is_staff === true || r.account_type === 'admin') keepReasons.push('staff/admin account');
+      if (['event_director', 'judge', 'admin'].includes(r.role || '')) keepReasons.push(`role-assigned ID (${r.role})`);
+      if (isProtectedAccount({ meca_id: r.meca_id, email: r.email } as any)) keepReasons.push('protected account');
+
+      // Likely origin of the mint (forensics for "how did this happen")
+      let origin: string;
+      if (['event_director', 'judge', 'admin'].includes(r.role || '')) {
+        origin = 'Role assignment (intentional — EDs/judges/admins get IDs without memberships)';
+      } else if (parseInt(r.results_count, 10) > 0) {
+        origin = 'Retired ID — membership deleted but results keep the number reserved';
+      } else if (r.force_password_change === true && r.role && r.role !== 'user') {
+        origin = 'Admin wizard — user created but membership creation failed';
+      } else if (r.auth_provider === 'google' || r.member_since !== null) {
+        origin = 'OAuth/ensureProfile mint (signup-minting bug, fixed 2026-07-27)';
+      } else if (parseInt(r.event_regs, 10) > 0) {
+        origin = 'Event-registration signup mint (signup-minting bug, fixed 2026-07-27)';
+      } else {
+        origin = 'Frontend signup mint (signup-minting bug, fixed 2026-07-27)';
+      }
+
+      return {
+        id: r.id,
+        meca_id: r.meca_id,
+        email: r.email,
+        role: r.role,
+        created_at: r.created_at,
+        origin,
+        releasable: keepReasons.length === 0,
+        keep_reasons: keepReasons,
+        history_count: parseInt(r.history_count, 10),
+        payment_count: parseInt(r.payment_count, 10),
+        results_count: parseInt(r.results_count, 10),
+        event_registrations: parseInt(r.event_regs, 10),
+        auth_provider: r.auth_provider,
+      };
+    });
+
+    return { trigger, orphans };
   }
 
   /**

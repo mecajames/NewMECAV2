@@ -125,6 +125,16 @@ export class SecurityController {
   }
 
   /**
+   * One-click forensics: auth.users trigger audit (is the DB still minting
+   * MECA IDs?) + full orphaned-ID analysis with origins and release verdicts.
+   */
+  @Get('meca-id-diagnostics')
+  async getMecaIdDiagnostics(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.securityService.getMecaIdDiagnostics();
+  }
+
+  /**
    * Release MECA IDs stranded on zero-membership profiles (the signup-minting
    * bug). Dry-run is admin; applying the release is super-admin only.
    */
@@ -132,14 +142,17 @@ export class SecurityController {
   @HttpCode(HttpStatus.OK)
   async releaseOrphanedMecaIds(
     @Headers('authorization') authHeader: string,
-    @Body() body: { dryRun?: boolean },
+    @Body() body: { dryRun?: boolean; profileIds?: string[] },
   ) {
     const { profile } = await this.requireAdmin(authHeader);
     const dryRun = body?.dryRun !== false; // default true — applying must be explicit
     if (!dryRun && !isSuperAdmin(profile)) {
       throw new ForbiddenException('Releasing MECA IDs requires super-admin access');
     }
-    return this.securityService.releaseOrphanedMecaIds({ dryRun });
+    return this.securityService.releaseOrphanedMecaIds({
+      dryRun,
+      profileIds: Array.isArray(body?.profileIds) ? body.profileIds : undefined,
+    });
   }
 
   @Get('enforcement')
