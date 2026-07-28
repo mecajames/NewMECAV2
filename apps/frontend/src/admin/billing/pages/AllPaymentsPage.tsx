@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Clock,
   XCircle,
+  ShieldAlert,
 } from 'lucide-react';
 import { billingApi, AllPaymentRow } from '../../../api-client/billing.api-client';
 
@@ -33,6 +34,9 @@ const STATUS_BADGE: Record<string, { cls: string; icon: typeof CheckCircle; labe
   pending: { cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30', icon: Clock, label: 'Pending' },
   cancelled: { cls: 'bg-gray-500/15 text-gray-300 border-gray-500/30', icon: XCircle, label: 'Cancelled' },
   inactive: { cls: 'bg-gray-500/15 text-gray-300 border-gray-500/30', icon: XCircle, label: 'Inactive' },
+  // Not a payment_status value — a chargeback stamp from the dispute
+  // webhooks; a payment can be Paid AND Disputed at once.
+  disputed: { cls: 'bg-rose-600/20 text-rose-300 border-rose-500/40', icon: ShieldAlert, label: 'Disputed' },
 };
 
 const METHOD_BADGE: Record<string, string> = {
@@ -119,6 +123,8 @@ export default function AllPaymentsPage() {
     for (const r of rows) {
       counts[r.paymentStatus] = (counts[r.paymentStatus] ?? 0) + 1;
       if (r.paymentStatus === 'paid') totalAmount += Number(r.amount);
+      // Disputed is a cross-cutting stamp, not a payment_status.
+      if ((r as any).dispute) counts.disputed = (counts.disputed ?? 0) + 1;
     }
     return { counts, totalAmount };
   }, [rows]);
@@ -178,6 +184,7 @@ export default function AllPaymentsPage() {
               <option value="refunded">Refunded</option>
               <option value="pending">Pending</option>
               <option value="cancelled">Cancelled</option>
+              <option value="disputed">Disputed (chargebacks)</option>
             </select>
             <select
               value={methodFilter}
@@ -208,8 +215,8 @@ export default function AllPaymentsPage() {
         </div>
 
         {/* KPIs at a glance */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          {['paid', 'failed', 'refunded', 'pending', 'cancelled'].map((s) => (
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6">
+          {['paid', 'failed', 'refunded', 'pending', 'cancelled', 'disputed'].map((s) => (
             <button
               key={s}
               onClick={() => updateParam('status', statusFilter === s ? '' : s)}
@@ -292,7 +299,19 @@ export default function AllPaymentsPage() {
                         )}
                       </td>
                       <td className="p-3"><MethodBadge method={r.paymentMethod} /></td>
-                      <td className="p-3"><StatusBadge status={r.paymentStatus} /></td>
+                      <td className="p-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <StatusBadge status={r.paymentStatus} />
+                          {(r as any).dispute && (
+                            <Link
+                              to={`/admin/billing/lookup?q=${encodeURIComponent(r.stripePaymentIntentId || r.transactionId || '')}`}
+                              title={`Dispute ${(r as any).dispute.id ?? ''}${(r as any).dispute.status ? ` — ${(r as any).dispute.status}` : ''} — click to trace`}
+                            >
+                              <StatusBadge status="disputed" />
+                            </Link>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3 text-right font-mono text-white">
                         ${Number(r.amount).toFixed(2)}
                         <div className="text-[10px] text-gray-500">{r.currency}</div>

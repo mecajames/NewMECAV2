@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Search, Loader2, AlertTriangle, User, CreditCard, FileText,
   ExternalLink, XCircle, ShieldAlert, Receipt,
@@ -40,11 +40,25 @@ function fmtMoney(n: number | string | null | undefined): string {
  */
 export default function PaymentLookupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<PaymentTraceResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelBusy, setCancelBusy] = useState<string | null>(null);
+
+  // Deep link: /admin/billing/lookup?q=pi_... — the chargeback notifications
+  // link here with the payment intent prefilled so one click on the bell
+  // lands on the finished trace.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    const q = (searchParams.get('q') || '').trim();
+    if (q && !autoRan.current) {
+      autoRan.current = true;
+      runTrace(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const runTrace = async (q?: string) => {
     const term = (q ?? query).trim();

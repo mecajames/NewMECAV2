@@ -300,6 +300,9 @@ export interface AllPaymentRow {
   description: string | null;
   paidAt: string | null;
   refundedAt: string | null;
+  // Chargeback stamp from the dispute webhooks (id/status/reason/amount) —
+  // present regardless of paymentStatus; drives the DISPUTED chip + filter.
+  dispute: { id?: string; status?: string; reason?: string; amount?: number } | null;
   member: {
     id: string | null;
     name: string | null;
