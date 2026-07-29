@@ -59,6 +59,29 @@ export interface ProvisionPayload {
   note?: string;
 }
 
+export interface MecaIdDiagnostics {
+  trigger: {
+    readable: boolean;
+    verdict: string;
+    triggers: Array<{ name: string; mintsMecaId: boolean; body: string }>;
+  };
+  orphans: Array<{
+    id: string;
+    meca_id: string;
+    email: string | null;
+    role: string | null;
+    created_at: string;
+    origin: string;
+    releasable: boolean;
+    keep_reasons: string[];
+    history_count: number;
+    payment_count: number;
+    results_count: number;
+    event_registrations: number;
+    auth_provider: string | null;
+  }>;
+}
+
 export const securityApi = {
   async getSummary(): Promise<SecuritySummary> {
     const { data } = await axios.get('/api/admin/security/summary');
@@ -103,13 +126,18 @@ export const securityApi = {
     return data;
   },
 
-  async releaseOrphanedMecaIds(dryRun: boolean): Promise<{
+  async getMecaIdDiagnostics(): Promise<MecaIdDiagnostics> {
+    const { data } = await axios.get('/api/admin/security/meca-id-diagnostics');
+    return data;
+  },
+
+  async releaseOrphanedMecaIds(dryRun: boolean, profileIds?: string[]): Promise<{
     dryRun: boolean;
     releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: string }>;
     kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }>;
     released: number;
   }> {
-    const { data } = await axios.post('/api/admin/security/release-orphaned-meca-ids', { dryRun });
+    const { data } = await axios.post('/api/admin/security/release-orphaned-meca-ids', { dryRun, profileIds });
     return data;
   },
 

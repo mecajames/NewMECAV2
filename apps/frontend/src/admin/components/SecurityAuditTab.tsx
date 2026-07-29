@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   securityApi, ProfileAuditRow, AuthOrphanRow, SecuritySummary,
-  ProvisionMode, StaffRoleAssignment,
+  ProvisionMode, StaffRoleAssignment, MecaIdDiagnostics,
 } from '@/api-client/security.api-client';
 import {
   membershipTypeConfigsApi, MembershipTypeConfig,
@@ -77,42 +77,71 @@ export default function SecurityAuditTab() {
   const [provisionResult, setProvisionResult] = useState<string | null>(null);
 
   const [releasingIds, setReleasingIds] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<MecaIdDiagnostics | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
 
-  // Release MECA IDs stranded on zero-membership profiles (the signup-minting
-  // bug, fixed 2026-07-27). Dry-run first, show exactly what will change,
-  // then apply (server enforces super-admin for the apply step).
+  // One click = the whole forensic picture: is the DB trigger still minting
+  // MECA IDs, and where did every orphaned ID come from.
+  const runDiagnostics = async () => {
+    setDiagBusy(true);
+    try {
+      setDiagnostics(await securityApi.getMecaIdDiagnostics());
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Diagnostics failed');
+    } finally {
+      setDiagBusy(false);
+    }
+  };
+
+  // Release flow: dry-run → full-list modal with per-row checkboxes (the
+  // admin picks exactly which IDs to free; kept IDs are shown with their
+  // reasons) → apply releases only the selected ids (server re-validates and
+  // enforces super-admin).
+  const [releaseModal, setReleaseModal] = useState<{
+    releasable: Array<{ id: string; meca_id: string; email: string | null; created_at: string }>;
+    kept: Array<{ id: string; meca_id: string; email: string | null; reasons: string[] }>;
+  } | null>(null);
+  const [selectedReleaseIds, setSelectedReleaseIds] = useState<Set<string>>(new Set());
+
   const releaseOrphanedIds = async () => {
     setReleasingIds(true);
     try {
       const preview = await securityApi.releaseOrphanedMecaIds(true);
-      if (preview.releasable.length === 0) {
-        alert(
-          preview.kept.length === 0
-            ? 'No orphaned MECA IDs found.'
-            : `No releasable MECA IDs. ${preview.kept.length} orphaned ID(s) are intentionally kept ` +
-              `(retired IDs with results/history, role-assigned, or staff).`,
-        );
+      if (preview.releasable.length === 0 && preview.kept.length === 0) {
+        alert('No orphaned MECA IDs found.');
         return;
       }
-      const sample = preview.releasable
-        .slice(0, 10)
-        .map((r) => `${r.meca_id} — ${r.email ?? 'no email'}`)
-        .join('\n');
-      const confirmed = window.confirm(
-        `Release ${preview.releasable.length} MECA ID(s) from profiles with zero memberships?\n\n` +
-        `${sample}${preview.releasable.length > 10 ? `\n…and ${preview.releasable.length - 10} more` : ''}\n\n` +
-        `${preview.kept.length} other orphaned ID(s) will be KEPT (results/history/role protected).\n\n` +
-        `Released numbers return to the pool and can be assigned to future members.`,
-      );
-      if (!confirmed) return;
-      const result = await securityApi.releaseOrphanedMecaIds(false);
-      alert(`Released ${result.released} MECA ID(s). ${result.kept.length} kept.`);
+      setSelectedReleaseIds(new Set(preview.releasable.map((r) => r.id)));
+      setReleaseModal({ releasable: preview.releasable, kept: preview.kept });
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Failed to load orphaned MECA IDs');
+    } finally {
+      setReleasingIds(false);
+    }
+  };
+
+  const applyRelease = async () => {
+    if (selectedReleaseIds.size === 0) return;
+    setReleasingIds(true);
+    try {
+      const result = await securityApi.releaseOrphanedMecaIds(false, [...selectedReleaseIds]);
+      alert(`Released ${result.released} MECA ID(s). ${result.kept.length} kept (protected).`);
+      setReleaseModal(null);
       await loadAll();
     } catch (err: any) {
       alert(err?.response?.data?.message || err?.message || 'Failed to release MECA IDs');
     } finally {
       setReleasingIds(false);
     }
+  };
+
+  const toggleReleaseId = (id: string) => {
+    setSelectedReleaseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const loadAll = async () => {
@@ -380,9 +409,18 @@ export default function SecurityAuditTab() {
             </button>
           ))}
           <button
+            onClick={runDiagnostics}
+            disabled={diagBusy}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-cyan-900/50 hover:bg-cyan-800/60 text-cyan-200 border border-cyan-700/50 disabled:opacity-50"
+            title="Audit the auth.users trigger for MECA ID minting + analyze every orphaned MECA ID (origin, evidence, releasable verdict)"
+          >
+            {diagBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+            MECA ID Diagnostics
+          </button>
+          <button
             onClick={releaseOrphanedIds}
             disabled={releasingIds}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-amber-900/50 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-amber-900/50 hover:bg-amber-800/60 text-amber-200 border border-amber-700/50 disabled:opacity-50"
             title="Null out MECA IDs stranded on zero-membership profiles (IDs with results/history are kept retired)"
           >
             {releasingIds ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
@@ -407,6 +445,208 @@ export default function SecurityAuditTab() {
           {filtered.length} profile{filtered.length !== 1 ? 's' : ''} matching filters (of {profiles.length} total)
         </p>
       </div>
+
+      {/* MECA ID Diagnostics panel — trigger audit + orphan forensics */}
+      {diagnostics && (
+        <div className="bg-slate-800 rounded-xl border border-cyan-700/40 p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-cyan-400" /> MECA ID Diagnostics
+            </h3>
+            <button onClick={() => setDiagnostics(null)} className="text-gray-400 hover:text-white text-sm">
+              Close
+            </button>
+          </div>
+
+          {/* auth.users trigger audit */}
+          <div className={`rounded-lg p-3 border text-sm ${
+            diagnostics.trigger.triggers.some(t => t.mintsMecaId)
+              ? 'bg-red-900/30 border-red-700/50 text-red-200'
+              : diagnostics.trigger.readable
+                ? 'bg-emerald-900/20 border-emerald-700/40 text-emerald-200'
+                : 'bg-amber-900/20 border-amber-700/40 text-amber-200'
+          }`}>
+            <p className="font-medium mb-1">Database trigger audit (auth.users)</p>
+            <p>{diagnostics.trigger.verdict}</p>
+            {diagnostics.trigger.triggers.map((t) => (
+              <details key={t.name} className="mt-2">
+                <summary className="cursor-pointer text-xs opacity-80">
+                  {t.name} {t.mintsMecaId ? '— ⚠ MINTS MECA IDs (function body below; remove meca_id from its INSERT)' : '— clean'}
+                </summary>
+                <pre className="mt-1 p-2 bg-slate-900/70 rounded text-[11px] whitespace-pre-wrap break-all max-h-64 overflow-y-auto">
+                  {t.body}
+                </pre>
+              </details>
+            ))}
+          </div>
+
+          {/* Orphan analysis */}
+          <div>
+            <p className="text-sm text-gray-300 mb-2">
+              {diagnostics.orphans.length} profile(s) hold a MECA ID with zero memberships —{' '}
+              <span className="text-emerald-300">{diagnostics.orphans.filter(o => o.releasable).length} releasable</span>
+              {' · '}
+              <span className="text-amber-300">{diagnostics.orphans.filter(o => !o.releasable).length} kept</span>
+              {' '}(use "Release Orphaned MECA IDs" to free the releasable ones)
+            </p>
+            {diagnostics.orphans.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-400 border-b border-slate-700 text-xs uppercase tracking-wide">
+                      <th className="py-2 pr-3">MECA ID</th>
+                      <th className="py-2 pr-3">Email</th>
+                      <th className="py-2 pr-3">Origin (how it was minted)</th>
+                      <th className="py-2 pr-3">Evidence</th>
+                      <th className="py-2">Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diagnostics.orphans.map((o) => (
+                      <tr key={o.id} className="border-b border-slate-700/50 text-gray-300">
+                        <td className="py-2 pr-3 font-mono text-orange-300">{o.meca_id}</td>
+                        <td className="py-2 pr-3">{o.email ?? '—'}</td>
+                        <td className="py-2 pr-3 text-xs">{o.origin}</td>
+                        <td className="py-2 pr-3 text-xs text-gray-400">
+                          {[
+                            o.results_count > 0 ? `${o.results_count} results` : null,
+                            o.history_count > 0 ? `${o.history_count} history` : null,
+                            o.payment_count > 0 ? `${o.payment_count} payments` : null,
+                            o.event_registrations > 0 ? `${o.event_registrations} event regs` : null,
+                            o.auth_provider ? `auth: ${o.auth_provider}` : null,
+                          ].filter(Boolean).join(' · ') || 'none'}
+                        </td>
+                        <td className="py-2">
+                          {o.releasable ? (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 text-xs border border-emerald-700/50">RELEASABLE</span>
+                          ) : (
+                            <span
+                              className="px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 text-xs border border-amber-700/50"
+                              title={o.keep_reasons.join('; ')}
+                            >
+                              KEEP
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Release Orphaned MECA IDs — full-list selection modal */}
+      {releaseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !releasingIds && setReleaseModal(null)} />
+          <div className="relative bg-slate-800 rounded-xl border border-slate-700 shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <KeyRound className="h-5 w-5 text-amber-400" /> Release Orphaned MECA IDs
+              </h3>
+              <button
+                onClick={() => setReleaseModal(null)}
+                disabled={releasingIds}
+                className="text-gray-400 hover:text-white text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-5">
+              {/* Releasable — checkbox selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-white">
+                    Releasable ({releaseModal.releasable.length}) — uncheck any you want to keep
+                  </p>
+                  <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedReleaseIds.size === releaseModal.releasable.length && releaseModal.releasable.length > 0}
+                      onChange={(e) =>
+                        setSelectedReleaseIds(e.target.checked
+                          ? new Set(releaseModal.releasable.map((r) => r.id))
+                          : new Set())
+                      }
+                      className="h-4 w-4 text-orange-500 bg-slate-700 border-slate-600 rounded"
+                    />
+                    Select all
+                  </label>
+                </div>
+                {releaseModal.releasable.length === 0 ? (
+                  <p className="text-sm text-gray-400">None — every orphaned ID is protected (see below).</p>
+                ) : (
+                  <div className="border border-slate-700 rounded-lg divide-y divide-slate-700/60">
+                    {releaseModal.releasable.map((r) => (
+                      <label key={r.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-700/40">
+                        <input
+                          type="checkbox"
+                          checked={selectedReleaseIds.has(r.id)}
+                          onChange={() => toggleReleaseId(r.id)}
+                          className="h-4 w-4 text-orange-500 bg-slate-700 border-slate-600 rounded shrink-0"
+                        />
+                        <span className="font-mono text-orange-300 text-sm w-20 shrink-0">{r.meca_id}</span>
+                        <span className="text-gray-200 text-sm truncate flex-1">{r.email ?? '(no email)'}</span>
+                        <span className="text-gray-500 text-xs shrink-0">
+                          {new Date(r.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Kept — protected, shown with reasons */}
+              {releaseModal.kept.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-amber-300 mb-2">
+                    Kept — protected, will NOT be released ({releaseModal.kept.length})
+                  </p>
+                  <div className="border border-amber-700/40 bg-amber-900/10 rounded-lg divide-y divide-slate-700/60">
+                    {releaseModal.kept.map((k) => (
+                      <div key={k.id} className="px-3 py-2 flex items-start gap-3">
+                        <span className="font-mono text-amber-300 text-sm w-20 shrink-0">{k.meca_id}</span>
+                        <div className="min-w-0">
+                          <p className="text-gray-200 text-sm truncate">{k.email ?? '(no email)'}</p>
+                          <p className="text-amber-400/80 text-xs">{k.reasons.join(' · ')}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Released numbers return to the pool and can be assigned to future paying members.
+                Kept IDs are protected because competition results / history reference them, or
+                they belong to role/staff/protected accounts.
+              </p>
+            </div>
+
+            <div className="p-5 border-t border-slate-700 flex justify-end gap-3">
+              <button
+                onClick={() => setReleaseModal(null)}
+                disabled={releasingIds}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyRelease}
+                disabled={releasingIds || selectedReleaseIds.size === 0}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {releasingIds ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                Release {selectedReleaseIds.size} Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Profiles table */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
