@@ -653,7 +653,7 @@ function StandingsContent({
           </li>
           <li className="flex items-start gap-2">
             <span className="text-orange-500">*</span>
-            <span>4X Events (SQ/Install): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16</span>
+            <span>4X Events (SQ/Install): 1st=30, 2nd=27, 3rd=24, 4th=21, 5th=18</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-orange-500">*</span>
