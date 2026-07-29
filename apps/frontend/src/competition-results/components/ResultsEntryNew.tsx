@@ -1218,7 +1218,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
                   {selectedEvent.points_multiplier === 4 ? (
-                    <>Points (Top 5 only): 1st=20, 2nd=19, 3rd=18, 4th=17, 5th=16</>
+                    <>Points (Top 5 only): 1st=30, 2nd=27, 3rd=24, 4th=21, 5th=18</>
                   ) : (
                     <>Points (Top 5 only): 1st={5 * selectedEvent.points_multiplier}, 2nd={4 * selectedEvent.points_multiplier}, 3rd={3 * selectedEvent.points_multiplier}, 4th={2 * selectedEvent.points_multiplier}, 5th={1 * selectedEvent.points_multiplier}</>
                   )}
