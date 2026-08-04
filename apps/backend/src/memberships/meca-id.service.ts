@@ -178,8 +178,25 @@ export class MecaIdService {
         ? parseInt(String(ownerProfile.meca_id), 10)
         : NaN;
       if (!isNaN(profileMecaId) && profileMecaId > 0 && profileMecaId !== 999999) {
-        const heldByMembership = await em.count(Membership, { mecaId: profileMecaId });
-        if (heldByMembership === 0) {
+        // The profile's number is blocked only while ANOTHER user's membership
+        // holds it, or while the owner still has a LIVE term on it (so a
+        // concurrent second-category purchase keeps minting a distinct id).
+        // The owner's own expired/dead rows must NOT block — counting them
+        // meant a category SWITCH (expired competitor buying retail, Kremer
+        // 2026-07) minted a needless new number instead of keeping the
+        // member's one id.
+        const now = new Date();
+        const heldByOther = await em.count(Membership, {
+          mecaId: profileMecaId,
+          user: { $ne: ownerId },
+        });
+        const heldByOwnLiveTerm = await em.count(Membership, {
+          mecaId: profileMecaId,
+          user: ownerId,
+          paymentStatus: { $in: [PaymentStatus.PAID, PaymentStatus.CANCELLED] },
+          $or: [{ endDate: null }, { endDate: { $gt: now } }],
+        });
+        if (heldByOther === 0 && heldByOwnLiveTerm === 0) {
           membership.mecaId = profileMecaId;
           membership.cardCreatedAt = new Date();
           await this.createHistoryRecord(profileMecaId, membership, em);
@@ -303,11 +320,18 @@ export class MecaIdService {
     category: MembershipCategory,
   ): Promise<Membership | null> {
     const em = this.em.fork();
+    // CANCELLED is included alongside PAID: the hourly Stripe sync marks
+    // legacy-subscription memberships payment_status='cancelled', and a
+    // PAID-only lookup made those members look brand-new on renewal — they
+    // were minted a fresh MECA ID instead of keeping their number (bypassing
+    // the retention/amnesty rules entirely). A cancelled row was still a paid
+    // term, so it must anchor both the keep-your-ID decision and the renewal
+    // date math. PENDING/FAILED/REFUNDED rows stay excluded.
     const memberships = await em.find(
       Membership,
       {
         user: userId,
-        paymentStatus: PaymentStatus.PAID,
+        paymentStatus: { $in: [PaymentStatus.PAID, PaymentStatus.CANCELLED] },
         membershipTypeConfig: { category },
       },
       {

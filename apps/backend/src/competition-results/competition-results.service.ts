@@ -35,6 +35,17 @@ function assertCompetitorNameIsNotATeam(name: string | undefined | null): void {
   }
 }
 
+/**
+ * Payment statuses that still count as a valid (paid-for) membership term when
+ * deciding points eligibility and member matching. CANCELLED is included
+ * because the hourly Stripe sync marks legacy-subscription memberships
+ * 'cancelled' when the external subscription is cancelled — the member paid
+ * for the term and it simply won't auto-renew, so they stay points-eligible
+ * until end_date passes. A PAID-only check silently zeroed such members'
+ * points mid-term (Levi Willis, 2026 season).
+ */
+const VALID_TERM_PAYMENT_STATUSES = [PaymentStatus.PAID, PaymentStatus.CANCELLED];
+
 @Injectable()
 export class CompetitionResultsService {
   private currentSessionId: string | null = null;
@@ -68,7 +79,7 @@ export class CompetitionResultsService {
     // Find the most recent paid membership carrying this MECA ID.
     const membership = await em.findOne(
       Membership,
-      { mecaId: mecaIdNum, paymentStatus: PaymentStatus.PAID },
+      { mecaId: mecaIdNum, paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES } },
       { orderBy: { endDate: 'DESC' } },
     );
     if (!membership?.endDate) return;
@@ -475,7 +486,7 @@ export class CompetitionResultsService {
 
     const memberships = await em.find(Membership, {
       mecaId: { $in: ids },
-      paymentStatus: PaymentStatus.PAID,
+      paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
     });
     const now = new Date();
     for (const m of memberships) {
@@ -1514,7 +1525,7 @@ export class CompetitionResultsService {
       Membership,
       {
         mecaId: { $ne: null },
-        paymentStatus: PaymentStatus.PAID,
+        paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
         membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
         $or: [{ endDate: null }, { endDate: { $gt: today } }],
       },
@@ -1593,7 +1604,7 @@ export class CompetitionResultsService {
     // Find most recent expired membership for this MECA ID (expired within the window)
     const membership = await em.findOne(Membership, {
       mecaId: mecaIdNum,
-      paymentStatus: PaymentStatus.PAID,
+      paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
       endDate: { $lt: now, $gte: graceCutoff },
     });
 
@@ -2458,7 +2469,7 @@ export class CompetitionResultsService {
       Membership,
       {
         mecaId: { $ne: null },
-        paymentStatus: PaymentStatus.PAID,
+        paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
         membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
         $or: [{ endDate: null }, { endDate: { $gt: today } }],
       },
@@ -3245,7 +3256,7 @@ export class CompetitionResultsService {
       Membership,
       {
         mecaId: { $ne: null },
-        paymentStatus: PaymentStatus.PAID,
+        paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
         membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
         $or: [{ endDate: null }, { endDate: { $gt: today } }],
       },
@@ -3623,7 +3634,7 @@ export class CompetitionResultsService {
       Membership,
       {
         mecaId: { $ne: null },
-        paymentStatus: PaymentStatus.PAID,
+        paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
         membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
         $or: [{ endDate: null }, { endDate: { $gt: today } }],
       },
