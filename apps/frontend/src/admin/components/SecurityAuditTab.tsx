@@ -337,13 +337,27 @@ export default function SecurityAuditTab() {
       {/* Summary cards */}
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <SummaryCard icon={<UserCheck className="h-4 w-4 text-blue-400" />} label="Total Profiles" value={summary.total_profiles} />
-          <SummaryCard icon={<KeyRound className="h-4 w-4 text-emerald-400" />} label="Can Login" value={summary.profiles_can_login} />
+          <SummaryCard
+            icon={<UserCheck className="h-4 w-4 text-blue-400" />}
+            label="Total Profiles"
+            value={summary.total_profiles}
+            caption="every account in the app"
+          />
+          {/* "Eligible", not "enabled": this counts accounts that are not
+              banned/disabled — whether they ACTUALLY get in is decided by the
+              membership gates (enforcement, expired-member block). */}
+          <SummaryCard
+            icon={<KeyRound className="h-4 w-4 text-emerald-400" />}
+            label="Login Eligible"
+            value={summary.profiles_can_login}
+            caption="not banned or disabled — membership gates still decide entry"
+          />
           <SummaryCard
             icon={<EyeOff className="h-4 w-4 text-amber-400" />}
             label="No Membership"
             value={summary.profiles_without_membership}
             highlight={summary.profiles_without_membership > 0}
+            caption="zero membership rows on the account"
           />
           <SummaryCard
             icon={<ShieldAlert className="h-4 w-4 text-purple-400" />}
@@ -351,12 +365,18 @@ export default function SecurityAuditTab() {
             value={summary.staff_or_admin}
             sub={summary.staff_without_membership > 0 ? `${summary.staff_without_membership} w/o membership` : undefined}
           />
-          <SummaryCard icon={<UserX className="h-4 w-4 text-rose-400" />} label="Banned" value={summary.banned} />
+          <SummaryCard
+            icon={<UserX className="h-4 w-4 text-rose-400" />}
+            label="Banned"
+            value={summary.banned}
+            caption="hard-blocked accounts"
+          />
           <SummaryCard
             icon={<AlertTriangle className="h-4 w-4 text-red-400" />}
             label="Auth Orphans"
             value={summary.auth_orphans}
             highlight={summary.auth_orphans > 0}
+            caption="login credential with NO profile (not the same as orphaned MECA IDs)"
           />
         </div>
       )}
@@ -959,12 +979,15 @@ function ModeOption({ selected, onClick, icon, title, subtitle }: {
 }
 
 function SummaryCard({
-  icon, label, value, sub, highlight,
+  icon, label, value, sub, caption, highlight,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  // Amber warning line (e.g. "3 w/o membership")
   sub?: string;
+  // Neutral explainer so each stat is self-describing
+  caption?: string;
   highlight?: boolean;
 }) {
   return (
@@ -975,6 +998,7 @@ function SummaryCard({
       </div>
       <p className="text-2xl font-bold text-white">{value.toLocaleString()}</p>
       {sub && <p className="text-[11px] text-amber-300 mt-0.5">{sub}</p>}
+      {caption && <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{caption}</p>}
     </div>
   );
 }
