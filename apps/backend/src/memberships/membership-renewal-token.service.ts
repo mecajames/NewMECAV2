@@ -47,7 +47,9 @@ export class MembershipRenewalTokenService {
     );
 
     const token = randomBytes(TOKEN_BYTES).toString('base64url');
-    const expiresAt = new Date(membership.endDate.getTime() + MecaIdService.GRACE_ADMIN_DAYS * 24 * 60 * 60 * 1000);
+    // Configured admin window (default 45d), NOT the amnesty-blanket value —
+    // an amnesty must not mint renewal links that stay live for years.
+    const expiresAt = new Date(membership.endDate.getTime() + MecaIdService.adminGraceDays() * 24 * 60 * 60 * 1000);
     // Floor at "now + 7 days" so a token issued unusually late still gets a sane window
     const minExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     if (expiresAt < minExpires) expiresAt.setTime(minExpires.getTime());

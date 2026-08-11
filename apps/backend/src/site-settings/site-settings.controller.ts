@@ -16,8 +16,21 @@ import { UserRole } from '@newmeca/shared';
 import { SiteSettingsService } from './site-settings.service';
 import { SupabaseAdminService } from '../auth/supabase-admin.service';
 import { Profile } from '../profiles/profiles.entity';
-import { isAdminUser } from '../auth/is-admin.helper';
+import { isAdminUser, isSuperAdmin } from '../auth/is-admin.helper';
+import { GRACE_SETTING_KEYS } from '../memberships/grace-config';
 import { Public } from '../auth/public.decorator';
+
+// Keys that only super-admins (James/Mick) may write or delete through the
+// generic endpoints. The grace/amnesty keys have their own super-admin
+// endpoints (memberships/admin/grace-config); the override password was
+// already super-admin-scoped in spirit. Without this guard any admin could
+// bypass the dedicated endpoints by posting the raw key here.
+const SUPER_ADMIN_ONLY_KEYS: ReadonlySet<string> = new Set([
+  GRACE_SETTING_KEYS.selfServeDays,
+  GRACE_SETTING_KEYS.adminDays,
+  GRACE_SETTING_KEYS.amnestyEndDate,
+  'super_admin_password',
+]);
 
 interface UpsertSettingDto {
   key: string;
@@ -83,7 +96,10 @@ export class SiteSettingsController {
     @Headers('authorization') authHeader: string,
     @Body() dto: UpsertSettingDto,
   ) {
-    await this.requireAdmin(authHeader);
+    const { profile } = await this.requireAdmin(authHeader);
+    if (SUPER_ADMIN_ONLY_KEYS.has(dto.key) && !isSuperAdmin(profile)) {
+      throw new ForbiddenException('This setting can only be changed by a super-admin.');
+    }
     return this.siteSettingsService.upsert(
       dto.key,
       dto.value,
@@ -99,7 +115,10 @@ export class SiteSettingsController {
     @Headers('authorization') authHeader: string,
     @Body() dto: { settings: UpsertSettingDto[] },
   ) {
-    await this.requireAdmin(authHeader);
+    const { profile } = await this.requireAdmin(authHeader);
+    if (!isSuperAdmin(profile) && dto.settings?.some(s => SUPER_ADMIN_ONLY_KEYS.has(s.key))) {
+      throw new ForbiddenException('One or more of these settings can only be changed by a super-admin.');
+    }
     return this.siteSettingsService.bulkUpsert(dto.settings);
   }
 
@@ -109,7 +128,10 @@ export class SiteSettingsController {
     @Headers('authorization') authHeader: string,
     @Param('key') key: string,
   ) {
-    await this.requireAdmin(authHeader);
+    const { profile } = await this.requireAdmin(authHeader);
+    if (SUPER_ADMIN_ONLY_KEYS.has(key) && !isSuperAdmin(profile)) {
+      throw new ForbiddenException('This setting can only be deleted by a super-admin.');
+    }
     await this.siteSettingsService.delete(key);
   }
 }

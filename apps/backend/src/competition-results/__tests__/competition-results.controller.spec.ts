@@ -4,6 +4,7 @@ import { CompetitionResultsController } from '../competition-results.controller'
 import { CompetitionResultsService } from '../competition-results.service';
 import { ResultsImportService } from '../results-import.service';
 import { SupabaseAdminService } from '../../auth/supabase-admin.service';
+import { AdminAuditService } from '../../user-activity/admin-audit.service';
 import { Request } from 'express';
 
 describe('CompetitionResultsController', () => {
@@ -26,6 +27,7 @@ describe('CompetitionResultsController', () => {
     startManualSession: jest.fn().mockResolvedValue('session-123'),
     endManualSession: jest.fn().mockResolvedValue(undefined),
     updateEventPoints: jest.fn().mockResolvedValue(undefined),
+    bustPointsEligibilityCache: jest.fn(),
     recalculateSeasonPoints: jest.fn().mockResolvedValue({ events_processed: 1, results_updated: 5, duration_ms: 100 }),
     importResults: jest.fn().mockResolvedValue({ message: 'ok', imported: 5, errors: [] }),
     recalculateAllPlacements: jest.fn().mockResolvedValue({ processed: 10, errors: 0 }),
@@ -52,6 +54,10 @@ describe('CompetitionResultsController', () => {
         {
           provide: SupabaseAdminService,
           useValue: { getClient: jest.fn(), findUserByEmail: jest.fn() },
+        },
+        {
+          provide: AdminAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
         },
         {
           provide: 'EntityManager',
@@ -797,7 +803,7 @@ describe('CompetitionResultsController', () => {
 
     it('should throw BadRequestException when parsedResults is missing', async () => {
       await expect(
-        controller.importWithResolution('event-1', {
+        controller.importWithResolution('event-1', undefined, {
           parsedResults: undefined as any,
           resolutions: {},
           createdBy: 'user-1',
@@ -808,7 +814,7 @@ describe('CompetitionResultsController', () => {
 
     it('should throw BadRequestException when createdBy is missing', async () => {
       await expect(
-        controller.importWithResolution('event-1', {
+        controller.importWithResolution('event-1', undefined, {
           parsedResults: [{ name: 'Test' }],
           resolutions: {},
           createdBy: '',
@@ -827,7 +833,7 @@ describe('CompetitionResultsController', () => {
       const serviceResult = { message: 'ok', imported: 1, updated: 1, skipped: 0, errors: [] };
       competitionResultsService.importResultsWithResolution.mockResolvedValue(serviceResult);
 
-      const result = await controller.importWithResolution('event-1', body, mockRequest);
+      const result = await controller.importWithResolution('event-1', undefined, body, mockRequest);
 
       expect(competitionResultsService.importResultsWithResolution).toHaveBeenCalledWith(
         'event-1',
@@ -849,7 +855,7 @@ describe('CompetitionResultsController', () => {
         fileExtension: '' as any,
       };
 
-      await controller.importWithResolution('event-1', body, mockRequest);
+      await controller.importWithResolution('event-1', undefined, body, mockRequest);
 
       expect(competitionResultsService.importResultsWithResolution).toHaveBeenCalledWith(
         'event-1',
@@ -870,7 +876,7 @@ describe('CompetitionResultsController', () => {
         fileExtension: 'xlsx',
       };
 
-      await controller.importWithResolution('event-1', body, mockRequest);
+      await controller.importWithResolution('event-1', undefined, body, mockRequest);
 
       expect(competitionResultsService.importResultsWithResolution).toHaveBeenCalledWith(
         expect.anything(),

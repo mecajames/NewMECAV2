@@ -1,5 +1,6 @@
 import { MecaIdService } from '../meca-id.service';
 import { Membership } from '../memberships.entity';
+import { applyGraceSettings, resetGraceConfigForTests, GRACE_SETTING_KEYS } from '../grace-config';
 
 /**
  * Logic-level end-to-end of the renewal flow, simulated entirely against
@@ -20,6 +21,13 @@ import { Membership } from '../memberships.entity';
  */
 describe('Renewal flow — simulated end-to-end', () => {
   let svc: MecaIdService;
+
+  // These tests pin the STANDARD (post-amnesty) windows at fixed day
+  // offsets, so turn the blanket amnesty OFF for the duration.
+  beforeAll(() => {
+    applyGraceSettings([{ setting_key: GRACE_SETTING_KEYS.amnestyEndDate, setting_value: '' }]);
+  });
+  afterAll(() => resetGraceConfigForTests());
 
   beforeEach(() => {
     svc = new MecaIdService({} as any);
@@ -132,6 +140,11 @@ describe('CompetitionResults back-fill — simulated', () => {
  * through August 25 2026. Member-facing copy only ever says 30 days.
  */
 describe('MECA ID retention window', () => {
+  // This suite asserts DEFAULT config behavior (amnesty present) — make sure
+  // a sibling suite's config changes can't leak in.
+  beforeAll(() => resetGraceConfigForTests());
+  afterAll(() => resetGraceConfigForTests());
+
   function makePrev(endDaysFromNow: number, mecaId = 700321) {
     return {
       id: 'm-prev',
@@ -150,11 +163,13 @@ describe('MECA ID retention window', () => {
     } as any;
   }
 
-  it('uses the 120-day relaunch amnesty before the deadline and 45 days after', () => {
-    const justBefore = new Date(MecaIdService.RELAUNCH_GRACE_DEADLINE.getTime() - 1000);
-    const justAfter = new Date(MecaIdService.RELAUNCH_GRACE_DEADLINE.getTime() + 1000);
+  it('uses the blanket amnesty before the configured deadline and the admin window after', () => {
+    const deadline = MecaIdService.amnestyDeadline();
+    expect(deadline).toBeInstanceOf(Date); // default config ships with an amnesty
+    const justBefore = new Date(deadline!.getTime() - 1000);
+    const justAfter = new Date(deadline!.getTime() + 1000);
     expect(MecaIdService.effectiveRetentionGraceDays(justBefore)).toBe(MecaIdService.RELAUNCH_GRACE_DAYS);
-    expect(MecaIdService.effectiveRetentionGraceDays(justAfter)).toBe(MecaIdService.GRACE_ADMIN_DAYS);
+    expect(MecaIdService.effectiveRetentionGraceDays(justAfter)).toBe(MecaIdService.adminGraceDays());
   });
 
   it('reclaims the previous MECA ID when expired within the effective window', async () => {

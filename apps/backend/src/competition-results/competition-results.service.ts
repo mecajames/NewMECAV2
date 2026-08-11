@@ -309,6 +309,14 @@ export class CompetitionResultsService {
     result.pointsOverrideReason = reason?.trim() || undefined;
     result.pointsOverrideBy = adminId;
     result.pointsOverrideAt = new Date();
+    // A renewal hold masks the row to 0 points / hidden MECA ID on every read
+    // path, which would make the hand-entered value invisible. The admin
+    // setting points by hand IS the resolution of that hold — release it.
+    if (result.pointsHeldForRenewal) {
+      result.pointsHeldForRenewal = false;
+      result.releasedAt = new Date();
+      result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: manual points override';
+    }
     await em.flush();
 
     this.logger.warn(
@@ -454,8 +462,9 @@ export class CompetitionResultsService {
         ? (statusByMecaId.get(numericMecaId) ?? 'none')
         : 'none';
 
-      // Mask MECA ID on held results (expired member, awaiting renewal)
-      if (r.pointsHeldForRenewal) {
+      // Mask MECA ID on held results (expired member, awaiting renewal).
+      // A manual override supersedes the hold — never mask hand-set points.
+      if (r.pointsHeldForRenewal && !r.pointsManualOverride) {
         r.mecaId = undefined;
         r.pointsEarned = 0;
       }
@@ -788,8 +797,9 @@ export class CompetitionResultsService {
           venue_state: result.event.venueState,
         };
       }
-      // Mask MECA ID on held results
-      if (result.pointsHeldForRenewal) {
+      // Mask MECA ID on held results.
+      // A manual override supersedes the hold — never mask hand-set points.
+      if (result.pointsHeldForRenewal && !result.pointsManualOverride) {
         serialized.meca_id = null;
         serialized.points_earned = 0;
       }
@@ -1955,6 +1965,14 @@ export class CompetitionResultsService {
         // hand-entered pointsEarned exactly as set; never recompute or hold it.
         // Placement is still assigned (it reflects score order, not points).
         if (result.pointsManualOverride) {
+          // A leftover renewal hold would keep masking the row to 0 on every
+          // read path; the override supersedes the hold, so release it here
+          // (the non-override self-heal below is never reached for this row).
+          if (result.pointsHeldForRenewal) {
+            result.pointsHeldForRenewal = false;
+            result.releasedAt = new Date();
+            result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: manual points override';
+          }
           currentPlacement++;
           continue;
         }
