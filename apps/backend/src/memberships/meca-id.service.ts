@@ -1,9 +1,10 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { Membership } from './memberships.entity';
 import { MecaIdHistory } from './meca-id-history.entity';
 import { Profile } from '../profiles/profiles.entity';
 import { UserRole, MembershipCategory, PaymentStatus } from '@newmeca/shared';
+import { getGraceConfig, applyGraceSettings, GRACE_SETTING_KEYS } from './grace-config';
 
 /**
  * Service for managing MECA ID assignment and lifecycle.
@@ -20,13 +21,42 @@ import { UserRole, MembershipCategory, PaymentStatus } from '@newmeca/shared';
  * - After the grace period, a new MECA ID is assigned
  */
 @Injectable()
-export class MecaIdService {
+export class MecaIdService implements OnModuleInit {
   private readonly logger = new Logger(MecaIdService.name);
 
   constructor(
     @Inject('EntityManager')
     private readonly em: EntityManager
   ) {}
+
+  /**
+   * Load the grace/amnesty configuration from site_settings at boot and keep
+   * it fresh on an interval. The super-admin update endpoint also applies
+   * changes to the in-process cache immediately, so the interval is just a
+   * safety net (e.g. a second process, or a manual DB edit).
+   */
+  async onModuleInit(): Promise<void> {
+    await this.refreshGraceConfigFromDb();
+    const timer = setInterval(() => {
+      this.refreshGraceConfigFromDb().catch(err =>
+        this.logger.warn(`Grace config refresh failed (keeping cached values): ${err?.message ?? err}`),
+      );
+    }, 5 * 60 * 1000);
+    timer.unref?.();
+  }
+
+  async refreshGraceConfigFromDb(): Promise<void> {
+    const em = this.em.fork();
+    const rows: Array<{ setting_key: string; setting_value: string | null }> = await em.getConnection().execute(
+      `SELECT setting_key, setting_value FROM public.site_settings WHERE setting_key IN (?, ?, ?)`,
+      [GRACE_SETTING_KEYS.selfServeDays, GRACE_SETTING_KEYS.adminDays, GRACE_SETTING_KEYS.amnestyEndDate],
+    );
+    const cfg = applyGraceSettings(rows);
+    this.logger.log(
+      `Grace config loaded: self-serve ${cfg.selfServeDays}d, admin ${cfg.adminDays}d, ` +
+      `amnesty ${cfg.amnestyEndDate ? `through ${cfg.amnestyEndDate}` : 'OFF'}`,
+    );
+  }
 
   /**
    * Get the next available MECA ID atomically from the database.
@@ -39,49 +69,75 @@ export class MecaIdService {
     return result[0].get_next_meca_id;
   }
 
-  // MECA ID grace tiers (see docs/features/MEMBERSHIP_LIFECYCLE.md §3)
+  // MECA ID grace tiers (see docs/features/MEMBERSHIP_LIFECYCLE.md §3).
+  // These are the built-in DEFAULTS — the live values are configurable from
+  // Site Settings → Grace & Amnesty (super-admin only) and served by
+  // grace-config.ts; use the getters below, never these constants, in
+  // business logic.
   static readonly GRACE_SOFT_DAYS = 30;          // days 1-30  : silent reclaim
   static readonly GRACE_MEDIUM_DAYS = 37;        // days 31-37 : silent reclaim + internal flag
   static readonly GRACE_ADMIN_DAYS = 45;         // days 38-45 : no self reclaim; admin may reassign
 
   // Relaunch amnesty: the new site launched Apr 27 2026 and members could NOT
-  // renew during the changeover. So through August 25, 2026 the amnesty is
-  // BLANKET — ANY expired member who renews keeps their MECA ID + held points,
-  // regardless of how long ago they expired (James 2026-06-20). Represented as a
-  // large-but-finite day count ("effectively unlimited") so the <= window
-  // comparison and the `now − days` date math stay valid (Infinity would break
-  // them). After Aug 25 it reverts to the normal windows: 30 self-service / 45
-  // admin (the 31–45 range is the silent admin-only buffer; members are only ever
-  // told 30 days).
+  // renew during the changeover. So through the configured amnesty end date
+  // (default August 25, 2026) the amnesty is BLANKET — ANY expired member who
+  // renews keeps their MECA ID + held points, regardless of how long ago they
+  // expired (James 2026-06-20). Represented as a large-but-finite day count
+  // ("effectively unlimited") so the <= window comparison and the `now − days`
+  // date math stay valid (Infinity would break them). After the amnesty it
+  // reverts to the configured windows: 30 self-service / 45 admin by default
+  // (the 31–45 range is the silent admin-only buffer; members are only ever
+  // told the self-service number).
   static readonly RELAUNCH_GRACE_DAYS = 36500; // ~100 years = blanket during the amnesty
-  // End of August 25, 2026 in the westernmost mainland US timezone (PDT, UTC-7).
-  static readonly RELAUNCH_GRACE_DEADLINE = new Date('2026-08-26T07:00:00.000Z');
+
+  /** Configured SELF-SERVICE window in raw days (advertised number; default 30). */
+  static selfServeGraceDays(): number {
+    return getGraceConfig().selfServeDays;
+  }
+
+  /** Configured ADMIN window in raw days (unannounced; default 45). */
+  static adminGraceDays(): number {
+    return getGraceConfig().adminDays;
+  }
+
+  /** Instant the blanket amnesty ends, or null when no amnesty is configured. */
+  static amnestyDeadline(): Date | null {
+    return getGraceConfig().amnestyDeadline;
+  }
+
+  /** Is the blanket amnesty in force at `at`? */
+  static isAmnestyActive(at: Date = new Date()): boolean {
+    const deadline = getGraceConfig().amnestyDeadline;
+    return !!deadline && at < deadline;
+  }
 
   /**
    * The ACTUAL (unannounced) MECA ID retention window, in days — the ADMIN /
-   * data-preservation window. BLANKET (any lapse) during the relaunch amnesty
-   * through Aug 25 2026, then 45. This is the WIDE window: held competition
-   * results are preserved this long so an admin can manually reactivate + restore
-   * points in the 31–45 day range. Member-facing copy only ever says 30 days.
+   * data-preservation window. BLANKET (any lapse) while the configured
+   * amnesty is in force, then the configured admin days (default 45). This is
+   * the WIDE window: held competition results are preserved this long so an
+   * admin can manually reactivate + restore points past the self-serve range.
+   * Member-facing copy only ever says the self-service number.
    */
   static effectiveRetentionGraceDays(at: Date = new Date()): number {
-    return at < MecaIdService.RELAUNCH_GRACE_DEADLINE
+    return MecaIdService.isAmnestyActive(at)
       ? MecaIdService.RELAUNCH_GRACE_DAYS
-      : MecaIdService.GRACE_ADMIN_DAYS;
+      : MecaIdService.adminGraceDays();
   }
 
   /**
    * The SELF-SERVICE retention window, in days — what a member's OWN online
    * renewal honors automatically (keep MECA ID + auto-reinstate held points).
-   * BLANKET (any lapse) during the relaunch amnesty through Aug 25 2026, then the
-   * ADVERTISED 30 days. Days 31–45 are reserved for ADMIN-only manual
-   * reactivation (see effectiveRetentionGraceDays); a self-service renewal in
-   * that range gets a NEW MECA ID and its held points wait for an admin.
+   * BLANKET (any lapse) while the configured amnesty is in force, then the
+   * ADVERTISED days (default 30). The range between self-serve and admin days
+   * is reserved for ADMIN-only manual reactivation (see
+   * effectiveRetentionGraceDays); a self-service renewal in that range gets a
+   * NEW MECA ID and its held points wait for an admin.
    */
   static selfServiceRetentionGraceDays(at: Date = new Date()): number {
-    return at < MecaIdService.RELAUNCH_GRACE_DEADLINE
+    return MecaIdService.isAmnestyActive(at)
       ? MecaIdService.RELAUNCH_GRACE_DAYS
-      : MecaIdService.GRACE_SOFT_DAYS;
+      : MecaIdService.selfServeGraceDays();
   }
 
   /**
@@ -143,8 +199,8 @@ export class MecaIdService {
 
           const tier =
             daysSinceExpiry <= 0 ? 'active'
-              : daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS ? 'soft'
-                : daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS ? 'medium'
+              : daysSinceExpiry <= MecaIdService.selfServeGraceDays() ? 'soft'
+                : daysSinceExpiry <= MecaIdService.selfServeGraceDays() + (MecaIdService.GRACE_MEDIUM_DAYS - MecaIdService.GRACE_SOFT_DAYS) ? 'medium'
                   : 'late';
           await this.recordReactivation(mecaId, membership, previousMembership.endDate ?? new Date(), em, tier);
 
@@ -519,18 +575,29 @@ export class MecaIdService {
     if (!membership.endDate) {
       return { tier: 'active', canSelfReclaim: false, canAdminReclaim: false, daysSinceExpiry: 0, daysRemaining: 0 };
     }
+    // Amnesty-aware windows: while the blanket amnesty is in force both
+    // spans are effectively unlimited, so any lapse lands in 'soft' (member
+    // self-reclaims). daysRemaining stays pinned to the advertised
+    // self-serve number so member-facing UI never leaks the wide windows.
+    const selfServeWindow = MecaIdService.selfServiceRetentionGraceDays();
+    const adminWindow = MecaIdService.effectiveRetentionGraceDays();
+    const advertisedDays = MecaIdService.selfServeGraceDays();
+    const mediumWindow = Math.min(
+      selfServeWindow + (MecaIdService.GRACE_MEDIUM_DAYS - MecaIdService.GRACE_SOFT_DAYS),
+      adminWindow,
+    );
     const daysSinceExpiry = this.getDaysSinceExpiry(membership.endDate);
     if (daysSinceExpiry <= 0) {
-      return { tier: 'active', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: 0, daysRemaining: MecaIdService.GRACE_SOFT_DAYS };
+      return { tier: 'active', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: 0, daysRemaining: advertisedDays };
     }
-    const daysRemainingPublic = Math.max(0, Math.floor(MecaIdService.GRACE_SOFT_DAYS - daysSinceExpiry));
-    if (daysSinceExpiry <= MecaIdService.GRACE_SOFT_DAYS) {
+    const daysRemainingPublic = Math.max(0, Math.floor(advertisedDays - daysSinceExpiry));
+    if (daysSinceExpiry <= selfServeWindow) {
       return { tier: 'soft', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: daysRemainingPublic };
     }
-    if (daysSinceExpiry <= MecaIdService.GRACE_MEDIUM_DAYS) {
+    if (daysSinceExpiry <= mediumWindow) {
       return { tier: 'medium', canSelfReclaim: true, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };
     }
-    if (daysSinceExpiry <= MecaIdService.GRACE_ADMIN_DAYS) {
+    if (daysSinceExpiry <= adminWindow) {
       return { tier: 'admin', canSelfReclaim: false, canAdminReclaim: true, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };
     }
     return { tier: 'expired', canSelfReclaim: false, canAdminReclaim: false, daysSinceExpiry: Math.floor(daysSinceExpiry), daysRemaining: 0 };

@@ -18,21 +18,28 @@ import { DEFAULT_SITE_LOGO } from '@/shared/siteLogo';
 import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
+import GraceAmnestySettings from './GraceAmnestySettings';
+import { isSuperAdmin } from '@/auth/permissions';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
 // Tab definitions
-type SettingsTab = 'appearance' | 'privacy' | 'integrations' | 'system' | 'shop';
+type SettingsTab = 'appearance' | 'privacy' | 'integrations' | 'system' | 'shop' | 'grace';
 
-const TABS: { id: SettingsTab; label: string; icon: React.ReactNode; description: string }[] = [
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode; description: string; superAdminOnly?: boolean }[] = [
   { id: 'appearance', label: 'Appearance', icon: <Palette className="h-5 w-5" />, description: 'Homepage, media, and social settings' },
   { id: 'privacy', label: 'Privacy & Consent', icon: <Shield className="h-5 w-5" />, description: 'Cookie consent banner and stats' },
   { id: 'integrations', label: 'Integrations', icon: <Link2 className="h-5 w-5" />, description: 'Third-party service connections' },
   { id: 'system', label: 'System', icon: <Settings2 className="h-5 w-5" />, description: 'Staging mode, tasks, and environment' },
   { id: 'shop', label: 'Shop Configuration', icon: <ShoppingCart className="h-5 w-5" />, description: 'Tax, shipping, and store settings' },
+  // Super-admin only (James/Mick) — MECA ID grace windows + blanket amnesty.
+  // Backend enforces the gate; hiding the tab is defense-in-depth.
+  { id: 'grace', label: 'Grace & Amnesty', icon: <Clock className="h-5 w-5" />, description: 'MECA ID retention windows', superAdminOnly: true },
 ];
 
 export default function SiteSettings() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  // Grace & Amnesty tab is James/Mick only (backend enforces this too).
+  const superAdmin = isSuperAdmin(profile as any);
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const [_settings, setSettings] = useState<SiteSetting[]>([]);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
@@ -733,7 +740,7 @@ export default function SiteSettings() {
       {/* Tab Navigation */}
       <div className="bg-slate-800 rounded-xl p-2">
         <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => (
+          {TABS.filter((tab) => !tab.superAdminOnly || superAdmin).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -2369,6 +2376,9 @@ export default function SiteSettings() {
 
         </>
       )}
+
+      {/* ==================== GRACE & AMNESTY TAB (SUPER-ADMIN ONLY) ==================== */}
+      {activeTab === 'grace' && superAdmin && <GraceAmnestySettings />}
 
       {/* ==================== SHOP CONFIGURATION TAB ==================== */}
       {activeTab === 'shop' && (

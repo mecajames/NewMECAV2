@@ -4415,7 +4415,7 @@ export class MembershipsService {
     }
 
     const gapDays = (current.startDate.getTime() - prior.endDate.getTime()) / (1000 * 60 * 60 * 24);
-    if (gapDays <= MecaIdService.GRACE_SOFT_DAYS || gapDays > MecaIdService.GRACE_ADMIN_DAYS) {
+    if (gapDays <= MecaIdService.selfServeGraceDays() || gapDays > MecaIdService.adminGraceDays()) {
       return { eligible: false };
     }
 

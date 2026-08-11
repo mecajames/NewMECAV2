@@ -12,6 +12,8 @@ import { MecaIdService } from '../meca-id.service';
 import { MasterSecondaryService } from '../master-secondary.service';
 import { MembershipSyncService } from '../membership-sync.service';
 import { SupabaseAdminService } from '../../auth/supabase-admin.service';
+import { PaymentFulfillmentService } from '../../payments/payment-fulfillment.service';
+import { MembershipRenewalTokenService } from '../membership-renewal-token.service';
 import { createMockEntityManager } from '../../../test/mocks/mikro-orm.mock';
 import { createMockMembership, createMockProfile } from '../../../test/utils/test-utils';
 
@@ -146,6 +148,8 @@ describe('MembershipsController', () => {
         { provide: MembershipSyncService, useValue: membershipSyncService },
         { provide: SupabaseAdminService, useValue: supabaseAdmin },
         { provide: EntityManager, useValue: mockEm },
+        { provide: PaymentFulfillmentService, useValue: { fulfillMembershipPayment: jest.fn() } },
+        { provide: MembershipRenewalTokenService, useValue: { issueToken: jest.fn(), revokeAllForMembership: jest.fn() } },
       ],
     }).compile();
 
@@ -253,10 +257,11 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('getMembership', () => {
     it('should delegate to membershipsService.findById', async () => {
+      setupAdminAuth();
       const expected = createMockMembership();
       membershipsService.findById.mockResolvedValue(expected);
 
-      const result = await controller.getMembership('membership_123');
+      const result = await controller.getMembership(ADMIN_AUTH_HEADER, 'membership_123');
 
       expect(membershipsService.findById).toHaveBeenCalledWith('membership_123');
       expect(result).toBe(expected);
@@ -268,11 +273,12 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('updateMembership', () => {
     it('should delegate to membershipsService.update', async () => {
+      setupAdminAuth();
       const updateData = { teamName: 'New Team' };
       const expected = createMockMembership(updateData);
       membershipsService.update.mockResolvedValue(expected);
 
-      const result = await controller.updateMembership('membership_123', updateData as any);
+      const result = await controller.updateMembership(ADMIN_AUTH_HEADER, 'membership_123', updateData as any);
 
       expect(membershipsService.update).toHaveBeenCalledWith('membership_123', updateData);
       expect(result).toBe(expected);
@@ -284,11 +290,16 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('deleteMembership', () => {
     it('should delegate to membershipsService.delete', async () => {
+      setupAdminAuth();
       membershipsService.delete.mockResolvedValue(undefined);
 
-      await controller.deleteMembership('membership_123');
+      await controller.deleteMembership(ADMIN_AUTH_HEADER, 'membership_123');
 
-      expect(membershipsService.delete).toHaveBeenCalledWith('membership_123');
+      expect(membershipsService.delete).toHaveBeenCalledWith('membership_123', {
+        financialAction: 'keep',
+        adminId: 'admin_123',
+        adminEmail: 'admin@test.com',
+      });
     });
   });
 
@@ -498,6 +509,7 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('createSecondaryMembership', () => {
     it('should delegate to masterSecondaryService with masterMembershipId merged', async () => {
+      setupAdminAuth();
       const bodyData = {
         membershipTypeConfigId: 'config_123',
         competitorName: 'Jane Doe',
@@ -507,12 +519,15 @@ describe('MembershipsController', () => {
       const expected = createMockMembership();
       masterSecondaryService.createSecondaryMembership.mockResolvedValue(expected);
 
-      const result = await controller.createSecondaryMembership('master_123', bodyData);
+      const result = await controller.createSecondaryMembership(ADMIN_AUTH_HEADER, 'master_123', bodyData);
 
-      expect(masterSecondaryService.createSecondaryMembership).toHaveBeenCalledWith({
-        ...bodyData,
-        masterMembershipId: 'master_123',
-      });
+      expect(masterSecondaryService.createSecondaryMembership).toHaveBeenCalledWith(
+        {
+          ...bodyData,
+          masterMembershipId: 'master_123',
+        },
+        { isAdmin: true },
+      );
       expect(result).toBe(expected);
     });
   });
@@ -744,6 +759,8 @@ describe('MembershipsController', () => {
         700600,
         'admin_123',
         'Correcting a mistake in MECA ID assignment',
+        false,
+        false,
       );
       expect(result).toBe(expected);
     });
@@ -896,6 +913,7 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('updateVehicleInfo', () => {
     it('should delegate to membershipsService.updateVehicleInfo', async () => {
+      setupAdminAuth();
       const vehicleData = {
         vehicleMake: 'Honda',
         vehicleModel: 'Civic',
@@ -905,9 +923,9 @@ describe('MembershipsController', () => {
       const expected = createMockMembership(vehicleData);
       membershipsService.updateVehicleInfo.mockResolvedValue(expected);
 
-      const result = await controller.updateVehicleInfo('membership_123', vehicleData);
+      const result = await controller.updateVehicleInfo(ADMIN_AUTH_HEADER, 'membership_123', vehicleData);
 
-      expect(membershipsService.updateVehicleInfo).toHaveBeenCalledWith('membership_123', vehicleData);
+      expect(membershipsService.updateVehicleInfo).toHaveBeenCalledWith('membership_123', vehicleData, { isAdmin: true });
       expect(result).toBe(expected);
     });
   });
@@ -939,10 +957,11 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('getSecondaryMemberships', () => {
     it('should delegate to masterSecondaryService.getSecondaryMemberships', async () => {
+      setupAdminAuth();
       const expected = [{ id: 'sec_1', competitorName: 'Jane' }];
       masterSecondaryService.getSecondaryMemberships.mockResolvedValue(expected);
 
-      const result = await controller.getSecondaryMemberships('master_123');
+      const result = await controller.getSecondaryMemberships(ADMIN_AUTH_HEADER, 'master_123');
 
       expect(masterSecondaryService.getSecondaryMemberships).toHaveBeenCalledWith('master_123');
       expect(result).toBe(expected);
@@ -954,6 +973,7 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('getMasterMembershipInfo', () => {
     it('should delegate to masterSecondaryService.getMasterMembershipInfo', async () => {
+      setupAdminAuth();
       const expected = {
         id: 'master_123',
         mecaId: 700500,
@@ -964,7 +984,7 @@ describe('MembershipsController', () => {
       };
       masterSecondaryService.getMasterMembershipInfo.mockResolvedValue(expected);
 
-      const result = await controller.getMasterMembershipInfo('master_123');
+      const result = await controller.getMasterMembershipInfo(ADMIN_AUTH_HEADER, 'master_123');
 
       expect(masterSecondaryService.getMasterMembershipInfo).toHaveBeenCalledWith('master_123');
       expect(result).toBe(expected);
@@ -976,12 +996,13 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('removeSecondary', () => {
     it('should delegate to masterSecondaryService.removeSecondary', async () => {
+      setupAdminAuth();
       const expected = createMockMembership();
       masterSecondaryService.removeSecondary.mockResolvedValue(expected);
 
-      const result = await controller.removeSecondary('master_123', 'secondary_456', 'user_123');
+      const result = await controller.removeSecondary(ADMIN_AUTH_HEADER, 'master_123', 'secondary_456');
 
-      expect(masterSecondaryService.removeSecondary).toHaveBeenCalledWith('secondary_456', 'user_123');
+      expect(masterSecondaryService.removeSecondary).toHaveBeenCalledWith('secondary_456', 'admin_123', { isAdmin: true });
       expect(result).toBe(expected);
     });
   });
@@ -991,10 +1012,11 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('upgradeToIndependent', () => {
     it('should delegate to masterSecondaryService.upgradeToIndependent', async () => {
+      setupAdminAuth();
       const expected = createMockMembership();
       masterSecondaryService.upgradeToIndependent.mockResolvedValue(expected);
 
-      const result = await controller.upgradeToIndependent('secondary_456');
+      const result = await controller.upgradeToIndependent(ADMIN_AUTH_HEADER, 'secondary_456');
 
       expect(masterSecondaryService.upgradeToIndependent).toHaveBeenCalledWith('secondary_456');
       expect(result).toBe(expected);
@@ -1006,10 +1028,11 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('markSecondaryPaid', () => {
     it('should delegate to masterSecondaryService.markSecondaryPaid', async () => {
+      setupAdminAuth();
       const expected = createMockMembership();
       masterSecondaryService.markSecondaryPaid.mockResolvedValue(expected);
 
-      const result = await controller.markSecondaryPaid('secondary_456', {
+      const result = await controller.markSecondaryPaid(ADMIN_AUTH_HEADER, 'secondary_456', {
         amountPaid: 25,
         transactionId: 'tx_123',
       });
@@ -1028,10 +1051,11 @@ describe('MembershipsController', () => {
   // =======================================================================
   describe('updateSecondaryDetails', () => {
     it('should delegate to masterSecondaryService.updateSecondaryDetails', async () => {
+      setupAdminAuth();
       const expected = createMockMembership();
       masterSecondaryService.updateSecondaryDetails.mockResolvedValue(expected);
 
-      const result = await controller.updateSecondaryDetails('secondary_456', {
+      const result = await controller.updateSecondaryDetails(ADMIN_AUTH_HEADER, 'secondary_456', {
         requestingUserId: 'user_123',
         competitorName: 'Updated Name',
         vehicleMake: 'Toyota',
@@ -1039,8 +1063,9 @@ describe('MembershipsController', () => {
 
       expect(masterSecondaryService.updateSecondaryDetails).toHaveBeenCalledWith(
         'secondary_456',
-        'user_123',
+        'admin_123',
         { competitorName: 'Updated Name', vehicleMake: 'Toyota' },
+        { isAdmin: true },
       );
       expect(result).toBe(expected);
     });
@@ -1160,6 +1185,8 @@ describe('MembershipsController', () => {
         'membership_123',
         'Duplicate charge on account',
         'admin_123',
+        undefined,
+        false,
       );
       expect(result).toBe(expected);
     });
@@ -1283,8 +1310,16 @@ describe('MembershipsController', () => {
   // renewKeepMecaId (admin + super admin password)
   // =======================================================================
   describe('renewKeepMecaId', () => {
+    const originalEnv = process.env;
+
     beforeEach(() => {
-      (controller as any).SUPER_ADMIN_PASSWORD = 'super-secret-123';
+      // resolveSuperAdminPassword() falls back to the env var when the
+      // site_settings row isn't present (the EM mock returns a profile here).
+      process.env = { ...originalEnv, SUPER_ADMIN_PASSWORD: 'super-secret-123' };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
     });
 
     it('should renew with forced MECA ID for admin with valid super admin password', async () => {

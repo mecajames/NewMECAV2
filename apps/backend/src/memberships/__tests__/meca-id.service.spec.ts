@@ -1,13 +1,23 @@
 import { MecaIdService } from '../meca-id.service';
 import { Membership } from '../memberships.entity';
+import { applyGraceSettings, resetGraceConfigForTests, GRACE_SETTING_KEYS } from '../grace-config';
 
 /**
  * Pure-logic tests for MecaIdService — exercises tiered grace + A1 date
  * math without spinning up a DB. Constructor receives a tiny stub EM
  * since the helpers under test don't touch it.
+ *
+ * These tests pin the STANDARD (post-amnesty) 30/45-day windows, so the
+ * blanket amnesty is explicitly turned OFF — otherwise they'd assert
+ * different tiers depending on the day the suite happens to run.
  */
 describe('MecaIdService — tiered grace + A1 date math', () => {
   let svc: MecaIdService;
+
+  beforeAll(() => {
+    applyGraceSettings([{ setting_key: GRACE_SETTING_KEYS.amnestyEndDate, setting_value: '' }]);
+  });
+  afterAll(() => resetGraceConfigForTests());
 
   beforeEach(() => {
     svc = new MecaIdService({} as any);

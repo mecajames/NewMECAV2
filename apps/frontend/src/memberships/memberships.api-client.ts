@@ -442,6 +442,15 @@ export interface SubscriptionAssignmentPreview {
   } | null;
 }
 
+export interface GraceConfigResponse {
+  selfServeDays: number;
+  adminDays: number;
+  amnestyEndDate: string | null;
+  amnestyDeadline: string | null;
+  amnestyActive: boolean;
+  defaults?: { selfServeDays: number; adminDays: number };
+}
+
 export const membershipsApi = {
   /**
    * Get a membership by ID
@@ -493,6 +502,29 @@ export const membershipsApi = {
     userId: string,
   ): Promise<{ success: boolean; oldMecaId: number; newMecaId: number; resultsRestored: number; message: string }> => {
     const response = await axios.post(`/api/memberships/user/${userId}/restore-meca-id`);
+    return response.data;
+  },
+
+  /**
+   * Super-admin only (James/Mick): read the MECA ID grace / amnesty
+   * configuration shown on Site Settings → Grace & Amnesty.
+   */
+  getGraceConfig: async (): Promise<GraceConfigResponse> => {
+    const response = await axios.get('/api/memberships/admin/grace-config');
+    return response.data;
+  },
+
+  /**
+   * Super-admin only (James/Mick): update the grace / amnesty configuration.
+   * amnestyEndDate is YYYY-MM-DD (through end of that day, Pacific) or
+   * null/'' to turn the amnesty off.
+   */
+  updateGraceConfig: async (data: {
+    selfServeDays: number;
+    adminDays: number;
+    amnestyEndDate: string | null;
+  }): Promise<GraceConfigResponse> => {
+    const response = await axios.post('/api/memberships/admin/grace-config', data);
     return response.data;
   },
 

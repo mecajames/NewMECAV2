@@ -37,6 +37,7 @@ import { MecaIdService } from './meca-id.service';
 import { MasterSecondaryService, CreateSecondaryMembershipDto, SecondaryMembershipInfo, MasterMembershipInfo } from './master-secondary.service';
 import { MembershipSyncService } from './membership-sync.service';
 import { MembershipRenewalTokenService } from './membership-renewal-token.service';
+import { getGraceConfig, applyGraceSettings, validateGraceSettings, GRACE_SETTING_KEYS } from './grace-config';
 import { Public } from '../auth/public.decorator';
 import { assertVehicleChangeAllowed } from './vehicle-lock.util';
 import { Throttle } from '@nestjs/throttler';
@@ -235,6 +236,112 @@ export class MembershipsController {
     await this.requireAdmin(authHeader);
     const revoked = await this.renewalTokenService.revokeAllForMembership(membershipId);
     return { revoked };
+  }
+
+  /**
+   * Super-admin (James/Mick only): read the MECA ID grace / amnesty
+   * configuration. The values are deliberately NOT exposed on the public
+   * site-settings endpoints — members are only ever told the self-serve
+   * number, and the amnesty/admin windows are unannounced.
+   */
+  @Get('admin/grace-config')
+  async getGraceConfigForAdmin(
+    @Headers('authorization') authHeader?: string,
+  ) {
+    await this.requireSuperAdmin(authHeader);
+    const cfg = getGraceConfig();
+    return {
+      selfServeDays: cfg.selfServeDays,
+      adminDays: cfg.adminDays,
+      amnestyEndDate: cfg.amnestyEndDate,
+      amnestyDeadline: cfg.amnestyDeadline,
+      amnestyActive: MecaIdService.isAmnestyActive(),
+      defaults: {
+        selfServeDays: MecaIdService.GRACE_SOFT_DAYS,
+        adminDays: MecaIdService.GRACE_ADMIN_DAYS,
+      },
+    };
+  }
+
+  /**
+   * Super-admin (James/Mick only): update the grace / amnesty configuration.
+   * Persists to site_settings (setting_type 'secret' so the public
+   * site-settings endpoints redact the values) and applies to the in-process
+   * cache immediately — every consumer (renewal keep-ID decision, held-points
+   * release, result stamping, nightly invalidation/strip, renewal-link TTL)
+   * picks it up on their next call.
+   */
+  @Post('admin/grace-config')
+  @HttpCode(HttpStatus.OK)
+  async updateGraceConfigForAdmin(
+    @Body() body: { selfServeDays?: number; adminDays?: number; amnestyEndDate?: string | null },
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const { profile } = await this.requireSuperAdmin(authHeader);
+
+    let normalized: { selfServeDays: number; adminDays: number; amnestyEndDate: string | null };
+    try {
+      normalized = validateGraceSettings(body ?? {});
+    } catch (err: any) {
+      throw new BadRequestException(err?.message || 'Invalid grace configuration');
+    }
+
+    const em = this.em.fork();
+    const rows: Array<{ key: string; value: string; description: string }> = [
+      {
+        key: GRACE_SETTING_KEYS.selfServeDays,
+        value: String(normalized.selfServeDays),
+        description: 'MECA ID self-service renewal grace window (days). Super-admin only.',
+      },
+      {
+        key: GRACE_SETTING_KEYS.adminDays,
+        value: String(normalized.adminDays),
+        description: 'MECA ID admin/data-preservation grace window (days, unannounced). Super-admin only.',
+      },
+      {
+        key: GRACE_SETTING_KEYS.amnestyEndDate,
+        value: normalized.amnestyEndDate ?? '',
+        description: 'Blanket amnesty end date (YYYY-MM-DD, through end of day Pacific; blank = amnesty off). Super-admin only.',
+      },
+    ];
+    // site_settings has NO unique constraint on setting_key, so no ON
+    // CONFLICT — find-then-update-or-insert, same as SiteSettingsService.
+    for (const row of rows) {
+      const existing = await em.findOne(SiteSettings, { setting_key: row.key });
+      if (existing) {
+        existing.setting_value = row.value;
+        existing.setting_type = 'secret';
+        existing.description = row.description;
+        existing.updated_by = profile?.id ?? undefined;
+        existing.updated_at = new Date();
+      } else {
+        em.persist(em.create(SiteSettings, {
+          setting_key: row.key,
+          setting_value: row.value,
+          setting_type: 'secret',
+          description: row.description,
+          updated_by: profile?.id ?? undefined,
+          updated_at: new Date(),
+        }));
+      }
+    }
+    await em.flush();
+
+    // Apply to the in-process cache immediately.
+    const cfg = applyGraceSettings(rows.map(r => ({ setting_key: r.key, setting_value: r.value })));
+
+    this.logger.warn(
+      `GRACE CONFIG UPDATED by super-admin ${profile?.email}: self-serve ${cfg.selfServeDays}d, ` +
+      `admin ${cfg.adminDays}d, amnesty ${cfg.amnestyEndDate ? `through ${cfg.amnestyEndDate}` : 'OFF'}`,
+    );
+
+    return {
+      selfServeDays: cfg.selfServeDays,
+      adminDays: cfg.adminDays,
+      amnestyEndDate: cfg.amnestyEndDate,
+      amnestyDeadline: cfg.amnestyDeadline,
+      amnestyActive: MecaIdService.isAmnestyActive(),
+    };
   }
 
   /**

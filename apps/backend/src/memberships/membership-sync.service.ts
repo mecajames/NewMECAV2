@@ -4,6 +4,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { MembershipStatus, PaymentStatus } from '@newmeca/shared';
 import { Profile } from '../profiles/profiles.entity';
 import { Membership } from './memberships.entity';
+import { MecaIdService } from './meca-id.service';
 
 /**
  * Service responsible for keeping profile.membership_status in sync with actual membership data.
@@ -179,8 +180,14 @@ export class MembershipSyncService {
       this.logger.warn(`MECA ID INVALIDATION HEALED: cleared stale invalidation on ${healed} profile(s) with live paid memberships`);
     }
 
-    // Invalidate MECA IDs for memberships expired > 45 days (hard cutoff)
-    // The MECA ID stays on the profile for historical reference but is marked as invalidated
+    // Invalidate MECA IDs for memberships expired beyond the ACTUAL retention
+    // window (effectiveRetentionGraceDays — configured admin days, or the
+    // effectively-unlimited blanket value while the amnesty is in force, so
+    // nothing is invalidated during an amnesty). Previously hard-coded to
+    // 45 days, which destroyed IDs the amnesty had promised to preserve.
+    // The MECA ID stays on the profile for historical reference but is marked as invalidated.
+    const graceDays = MecaIdService.effectiveRetentionGraceDays();
+    const graceCutoff = new Date(Date.now() - graceDays * 24 * 60 * 60 * 1000);
     const invalidateResult = await connection.execute(`
       UPDATE profiles p
       SET
@@ -199,23 +206,25 @@ export class MembershipSyncService {
           SELECT 1 FROM memberships m
           WHERE m.user_id = p.id
             AND m.payment_status = 'paid'
-            AND m.end_date < CURRENT_DATE - INTERVAL '45 days'
+            AND m.end_date < ?
         )
         AND NOT EXISTS (
           SELECT 1 FROM memberships m
           WHERE m.user_id = p.id
             AND m.payment_status = 'paid'
-            AND m.end_date >= CURRENT_DATE - INTERVAL '45 days'
+            AND m.end_date >= ?
         )
-    `);
+    `, [graceCutoff, graceCutoff]);
 
     const invalidated = invalidateResult.affectedRows || 0;
     if (invalidated > 0) {
-      this.logger.warn(`MECA ID INVALIDATION: ${invalidated} MECA IDs permanently invalidated (expired > 45 days)`);
+      this.logger.warn(`MECA ID INVALIDATION: ${invalidated} MECA IDs permanently invalidated (expired > ${graceDays} days)`);
     }
 
-    // For results that were held for renewal and the grace period has passed (45+ days),
-    // permanently strip the MECA ID from those results (results stay visible, just no ID or points)
+    // For results held for renewal past the same retention window, permanently
+    // strip the MECA ID (results stay visible, just no ID or points). Paused
+    // entirely while an amnesty is in force — held points must survive so a
+    // renewing member gets them back.
     const stripResult = await connection.execute(`
       UPDATE competition_results cr
       SET
@@ -225,12 +234,12 @@ export class MembershipSyncService {
         notes = COALESCE(notes, '') || ' | Grace period expired: MECA ID removed'
       WHERE cr.points_held_for_renewal = true
         AND cr.held_at IS NOT NULL
-        AND cr.held_at < CURRENT_DATE - INTERVAL '45 days'
-    `);
+        AND cr.held_at < ?
+    `, [graceCutoff]);
 
     const stripped = stripResult.affectedRows || 0;
     if (stripped > 0) {
-      this.logger.warn(`HELD RESULTS EXPIRED: ${stripped} held results had MECA ID permanently removed (grace period expired)`);
+      this.logger.warn(`HELD RESULTS EXPIRED: ${stripped} held results had MECA ID permanently removed (grace period expired after ${graceDays} days)`);
     }
 
     const result = {
