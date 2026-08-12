@@ -108,6 +108,13 @@ export class Ticket {
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'closed_at', serializedName: 'closed_at' })
   closedAt?: Date;
 
+  // Set when an admin converted this ticket into a member feature request.
+  // A converted ticket is hard-closed and can NEVER be reopened by the member
+  // (see TicketsService.reopenTicket) — the conversation continues on the
+  // Feature Ideas board instead.
+  @Property({ type: 'uuid', nullable: true, fieldName: 'converted_feature_request_id', serializedName: 'converted_feature_request_id' })
+  convertedFeatureRequestId?: string;
+
   // When the inactivity auto-close WARNING email was sent. While set, the ticket
   // is in its 24h grace window before TicketAutoCloseService closes it. Cleared
   // whenever a non-internal reply arrives (the inactivity clock restarts).
@@ -172,6 +179,7 @@ export class Ticket {
       auto_close_at: this.autoCloseAt?.toISOString() || null,
       customer_rating: this.customerRating ?? null,
       customer_feedback: this.customerFeedback ?? null,
+      converted_feature_request_id: this.convertedFeatureRequestId || null,
       created_at: this.createdAt.toISOString(),
       updated_at: this.updatedAt.toISOString(),
     };

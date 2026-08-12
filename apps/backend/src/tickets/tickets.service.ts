@@ -1326,6 +1326,14 @@ export class TicketsService {
       throw new ForbiddenException('Only the ticket reporter or an admin can reopen this ticket.');
     }
 
+    // A ticket that was converted into a feature request is permanently closed
+    // for members — the conversation continues on the Feature Ideas board.
+    if (!isAdmin && ticket.convertedFeatureRequestId) {
+      throw new BadRequestException(
+        'This ticket was turned into a feature request and can no longer be reopened. You can follow it on the Feature Ideas board in your MECA dashboard.',
+      );
+    }
+
     // Members can only reopen within 7 days of the ticket being closed/resolved.
     // Admins are not time-limited. Use closedAt, falling back to resolvedAt.
     if (!isAdmin) {
