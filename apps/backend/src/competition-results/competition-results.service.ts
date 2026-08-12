@@ -807,6 +807,27 @@ export class CompetitionResultsService {
     });
   }
 
+  /**
+   * Resolve the profile that owns a MECA ID (via the memberships table, most
+   * recent row wins). Returns null for guest/test/unassigned IDs and IDs no
+   * membership carries. Used to auto-link `competitor_id` on result creation.
+   */
+  private async resolveProfileIdForMecaId(em: EntityManager, mecaId: string): Promise<string | null> {
+    const clean = (mecaId ?? '').trim();
+    // Same exclusions as points eligibility: guest sentinel, unassigned, test IDs.
+    if (!clean || clean === '999999' || clean === '0' || clean.startsWith('99')) return null;
+    const mecaIdNum = parseInt(clean, 10);
+    if (!Number.isFinite(mecaIdNum)) return null;
+    const rows: Array<{ user_id: string }> = await em.getConnection().execute(
+      `SELECT m.user_id FROM memberships m
+        WHERE m.meca_id = ? AND m.user_id IS NOT NULL
+        ORDER BY m.created_at DESC
+        LIMIT 1`,
+      [mecaIdNum],
+    );
+    return rows[0]?.user_id ?? null;
+  }
+
   async create(
     data: Partial<CompetitionResult>,
     userId?: string,
@@ -951,6 +972,24 @@ export class CompetitionResultsService {
       transformedData.pointsEarned = 0;
     } else {
       transformedData.needsClassReview = false;
+    }
+
+    // AUTO-LINK COMPETITOR PROFILE: when the caller didn't resolve a profile
+    // (typical for ED manual entry and file imports, which only carry the
+    // MECA ID), link the member who owns that ID via the memberships table.
+    // Without this, the row is invisible on the member's own My MECA results
+    // (which queries by competitor link) even though admin views (which query
+    // by MECA ID) show it. Must run BEFORE expired-ID stamping, which may
+    // rewrite mecaId to the 999999 guest sentinel.
+    if (!transformedData.competitor && transformedData.mecaId) {
+      try {
+        const ownerProfileId = await this.resolveProfileIdForMecaId(em, String(transformedData.mecaId));
+        if (ownerProfileId) {
+          transformedData.competitor = Reference.createFromPK(Profile, ownerProfileId);
+        }
+      } catch (linkError) {
+        this.logger.warn(`Auto-link competitor for MECA ID ${transformedData.mecaId} failed (row still created): ${linkError}`);
+      }
     }
 
     // If the supplied MECA ID belongs to a member whose membership is

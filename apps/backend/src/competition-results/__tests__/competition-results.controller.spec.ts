@@ -43,26 +43,36 @@ describe('CompetitionResultsController', () => {
     parseTermLabFile: jest.fn().mockReturnValue([{ name: 'Lab Competitor', score: 95 }]),
   };
 
+  // Auth plumbing mocks — tests that hit admin-gated endpoints configure
+  // mockGetUser + mockEmForAuth.findOne to resolve the caller's profile.
+  const mockGetUser = jest.fn();
+  const mockSupabaseAdminService = {
+    getClient: jest.fn(),
+    findUserByEmail: jest.fn(),
+  };
+  const mockEmForAuth: any = { fork: jest.fn(), findOne: jest.fn(), find: jest.fn() };
+
+  function setupAdminAuth(profile: any = { id: 'admin-1', role: 'admin' }) {
+    mockGetUser.mockResolvedValue({ data: { user: { id: profile.id } }, error: null });
+    mockEmForAuth.findOne.mockResolvedValue(profile);
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSupabaseAdminService.getClient.mockReturnValue({ auth: { getUser: mockGetUser } });
+    mockEmForAuth.fork.mockReturnValue(mockEmForAuth);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CompetitionResultsController],
       providers: [
         { provide: CompetitionResultsService, useValue: mockCompetitionResultsService },
         { provide: ResultsImportService, useValue: mockResultsImportService },
-        {
-          provide: SupabaseAdminService,
-          useValue: { getClient: jest.fn(), findUserByEmail: jest.fn() },
-        },
+        { provide: SupabaseAdminService, useValue: mockSupabaseAdminService },
         {
           provide: AdminAuditService,
           useValue: { log: jest.fn().mockResolvedValue(undefined) },
         },
-        {
-          provide: 'EntityManager',
-          useValue: { fork: jest.fn(), findOne: jest.fn(), find: jest.fn() },
-        },
+        { provide: 'EntityManager', useValue: mockEmForAuth },
       ],
     }).compile();
 
@@ -514,14 +524,15 @@ describe('CompetitionResultsController', () => {
   // linkCompetitors
   // ---------------------------------------------------------------
   describe('linkCompetitors', () => {
-    it('should delegate to service.linkCompetitorsByMecaId and return structured response', async () => {
+    it('should delegate to service.linkCompetitorsByMecaId for an admin caller', async () => {
+      setupAdminAuth();
       competitionResultsService.linkCompetitorsByMecaId.mockResolvedValue({
         linked: 5,
         alreadyLinked: 3,
         noMatch: 2,
       });
 
-      const result = await controller.linkCompetitors();
+      const result = await controller.linkCompetitors('Bearer valid-admin-token');
 
       expect(competitionResultsService.linkCompetitorsByMecaId).toHaveBeenCalledTimes(1);
       expect(result).toEqual({
@@ -530,6 +541,22 @@ describe('CompetitionResultsController', () => {
         alreadyLinked: 3,
         noMatch: 2,
       });
+    });
+
+    it('should reject a non-admin caller without touching the service', async () => {
+      setupAdminAuth({ id: 'user-1', role: 'competitor' });
+
+      await expect(controller.linkCompetitors('Bearer valid-user-token')).rejects.toThrow(
+        'Admin access required',
+      );
+      expect(competitionResultsService.linkCompetitorsByMecaId).not.toHaveBeenCalled();
+    });
+
+    it('should reject when no auth header is supplied', async () => {
+      await expect(controller.linkCompetitors(undefined)).rejects.toThrow(
+        'No authorization token provided',
+      );
+      expect(competitionResultsService.linkCompetitorsByMecaId).not.toHaveBeenCalled();
     });
   });
 

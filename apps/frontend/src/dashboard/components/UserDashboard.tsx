@@ -58,9 +58,15 @@ export default function UserDashboard() {
 
   const fetchUserData = async () => {
     try {
+      // Results are looked up by MECA ID (same as the admin member page) so
+      // rows without a competitor_id link still show; fall back to the
+      // profile link for members without a MECA ID.
+      const myMecaId = profile?.meca_id != null ? String(profile.meca_id).trim() : '';
       const [regs, competitorResults] = await Promise.all([
         eventRegistrationsApi.getMyRegistrations(profile!.id),
-        competitionResultsApi.getByCompetitor(profile!.id),
+        myMecaId
+          ? competitionResultsApi.getByMecaId(myMecaId)
+          : competitionResultsApi.getByCompetitor(profile!.id),
       ]);
 
       // Map backend camelCase to match frontend expectations

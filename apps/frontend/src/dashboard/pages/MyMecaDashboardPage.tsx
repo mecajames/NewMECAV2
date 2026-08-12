@@ -1170,9 +1170,16 @@ export default function MyMecaDashboardPage() {
 
   const fetchUserData = async () => {
     try {
+      // Results are looked up by MECA ID — the same lookup the admin member
+      // page uses — so rows entered/imported without a competitor_id profile
+      // link still show. Fall back to the profile link for members without a
+      // MECA ID. (meca_id can arrive as a number — String() it.)
+      const myMecaId = profile?.meca_id != null ? String(profile.meca_id).trim() : '';
       const [regs, competitorResults] = await Promise.all([
         eventRegistrationsApi.getMyRegistrations(profile!.id),
-        competitionResultsApi.getByCompetitor(profile!.id),
+        myMecaId
+          ? competitionResultsApi.getByMecaId(myMecaId)
+          : competitionResultsApi.getByCompetitor(profile!.id),
       ]);
 
       // Map backend camelCase to match frontend expectations

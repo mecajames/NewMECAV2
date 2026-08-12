@@ -125,6 +125,17 @@ export const competitionResultsApi = {
     return response.data;
   },
 
+  /**
+   * Admin data maintenance: link competitor_id on result rows to the member
+   * profile that owns the row's MECA ID (via memberships). Fixes rows entered
+   * or imported without a profile link, which are invisible on the member's
+   * own My MECA results. Idempotent — safe to re-run.
+   */
+  linkCompetitors: async (): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> => {
+    const response = await axios.post('/api/competition-results/link-competitors');
+    return response.data;
+  },
+
   getLeaderboard: async (options?: {
     seasonId?: string;
     format?: string;
