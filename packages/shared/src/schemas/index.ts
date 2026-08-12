@@ -76,3 +76,6 @@ export * from "./hall-of-fame.schema.js";
 
 // Coupons
 export * from "./coupons.schema.js";
+
+// Feature Requests (member-suggested features + voting)
+export * from "./feature-requests.schema.js";

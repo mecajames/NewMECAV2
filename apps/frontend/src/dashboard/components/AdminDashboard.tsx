@@ -388,6 +388,14 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
           navigateTo: '/admin/hall-of-fame',
         },
         {
+          icon: Star,
+          title: 'Feature Requests',
+          description: 'Member-suggested features: votes, ratings, comments, and the status pipeline',
+          action: 'feature-requests',
+          color: 'orange',
+          navigateTo: '/admin/feature-requests',
+        },
+        {
           icon: Flame,
           title: 'Forever Members',
           description: 'Manage memorial pages for members who have passed away',

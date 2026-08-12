@@ -68,6 +68,7 @@ import { TicketAttachmentLightbox } from './TicketAttachmentLightbox';
 import { TicketPurchaseContextPanel } from './TicketPurchaseContextPanel';
 import { TicketPresenceBanner } from './TicketPresenceBanner';
 import { TicketMergeModal } from './TicketMergeModal';
+import { ConvertTicketToFeatureModal } from '@/feature-requests/ConvertTicketToFeatureModal';
 import { AutoCloseCountdown, autoCloseTime } from './AutoCloseCountdown';
 import { useTicketCategoryLabels } from '../category-labels';
 import { LIFECYCLE_BADGE, lifecycleOf, subStatusOf } from '../status-lifecycle';
@@ -286,6 +287,10 @@ export function TicketDetail({
   // Action states
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  // Convert this ticket into a member feature request (staff-only; hard-closes
+  // the ticket). Success message shown after the modal reports back.
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertResult, setConvertResult] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -2084,6 +2089,34 @@ export function TicketDetail({
                   </button>
                 </div>
               )}
+              {/* Staff: turn a member's suggestion into a feature request on the
+                  Feature Ideas board. Member tickets only; converting closes the
+                  ticket permanently. Hidden once converted. */}
+              {isStaff && !(ticket as any).converted_feature_request_id && ticket.reporter_id && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Star className="w-4 h-4" />
+                    Feature idea?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowConvertModal(true)}
+                    title="Convert this ticket into a feature request the member is credited for (closes the ticket)"
+                    className="text-xs px-2 py-0.5 rounded bg-slate-600/60 text-orange-300 border border-slate-500 hover:bg-slate-600 flex items-center gap-1"
+                  >
+                    Convert to Feature Idea
+                  </button>
+                </div>
+              )}
+              {isStaff && (ticket as any).converted_feature_request_id && (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400 flex items-center gap-2">
+                    <Star className="w-4 h-4" />
+                    Feature idea
+                  </span>
+                  <span className="text-xs text-emerald-400">Converted — on the Feature Ideas board</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
@@ -2867,6 +2900,31 @@ export function TicketDetail({
           </div>
         );
       })()}
+
+      {/* Convert to Feature Idea (staff) */}
+      {showConvertModal && ticket && (
+        <ConvertTicketToFeatureModal
+          ticketId={ticket.id}
+          initialTitle={ticket.title}
+          initialDescription={ticket.description}
+          onClose={() => setShowConvertModal(false)}
+          onConverted={(_frId, needsDetails) => {
+            setShowConvertModal(false);
+            setConvertResult(
+              needsDetails
+                ? 'Converted as a needs-details draft — the member has been asked (bell + email) to complete their idea. This ticket is now closed.'
+                : 'Converted! The idea is live on the Feature Ideas board and the member has been notified. This ticket is now closed.',
+            );
+            fetchTicket();
+          }}
+        />
+      )}
+      {convertResult && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-900/90 border border-emerald-700 text-emerald-100 rounded-lg p-4 max-w-md shadow-xl">
+          {convertResult}
+          <button onClick={() => setConvertResult(null)} className="ml-3 text-emerald-300 hover:text-white text-sm underline">Dismiss</button>
+        </div>
+      )}
 
       {/* Assign Modal */}
       {showMergeModal && (

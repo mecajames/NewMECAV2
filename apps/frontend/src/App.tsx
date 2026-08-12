@@ -194,6 +194,7 @@ const ForeverMemberDetailPage = lazy(() => import('@/forever-members/pages/Forev
 const ForeverMembersAdminPage = lazy(() => import('@/forever-members/pages/ForeverMembersAdminPage'));
 const LoginAuditPage = lazy(() => import('@/admin/pages/LoginAuditPage'));
 const AdminAuditPage = lazy(() => import('@/admin/pages/AdminAuditPage'));
+const AdminFeatureRequestsPage = lazy(() => import('@/admin/pages/AdminFeatureRequestsPage'));
 const ResultsNeedingClassPage = lazy(() => import('@/admin/pages/ResultsNeedingClassPage'));
 const QAChecklistPage = lazy(() => import('@/admin/pages/QAChecklistPage'));
 const QARoundDetailPage = lazy(() => import('@/admin/pages/QARoundDetailPage'));
@@ -473,6 +474,7 @@ function App() {
               {/* Admin Login Audit */}
               <Route path="/admin/login-audit" element={<L><LoginAuditPage /></L>} />
               <Route path="/admin/admin-audit" element={<L><AdminAuditPage /></L>} />
+              <Route path="/admin/feature-requests" element={<L><AdminFeatureRequestsPage /></L>} />
               <Route path="/admin/results-needing-class" element={<L><ResultsNeedingClassPage /></L>} />
 
               {/* Admin QA Checklist */}

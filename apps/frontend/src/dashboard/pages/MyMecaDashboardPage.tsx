@@ -27,8 +27,10 @@ import { seasonsApi, Season } from '@/seasons/seasons.api-client';
 import { AchievementsGallery } from '@/achievements';
 import { SocialShareButtons } from '@/shared/components';
 import { membershipsApi, Membership, MemberCancelMembershipModal, TeamUpgradeModal } from '@/memberships';
-import { Vote } from 'lucide-react';
+import { Vote, Lightbulb } from 'lucide-react';
 import { finalsVotingApi } from '@/api-client/finals-voting.api-client';
+import FeatureIdeasTab from '@/feature-requests/FeatureIdeasTab';
+import FeatureVoteWidget from '@/feature-requests/FeatureVoteWidget';
 import { billingApi, Invoice } from '@/api-client/billing.api-client';
 import MyCompsBadge from '../components/MyCompsBadge';
 import type { VotingPublicStatus } from '@newmeca/shared';
@@ -46,7 +48,7 @@ interface EventHostingRequest {
   createdAt: string;
 }
 
-type TabType = 'overview' | 'profile' | 'team' | 'support' | 'billing' | 'results' | 'analytics';
+type TabType = 'overview' | 'profile' | 'team' | 'support' | 'billing' | 'results' | 'analytics' | 'features';
 
 export default function MyMecaDashboardPage() {
   const navigate = useNavigate();
@@ -527,7 +529,7 @@ export default function MyMecaDashboardPage() {
     const action = searchParams.get('action');
 
     // Set active tab from URL parameter
-    if (tab && ['overview', 'profile', 'team', 'support', 'billing', 'results', 'analytics'].includes(tab)) {
+    if (tab && ['overview', 'profile', 'team', 'support', 'billing', 'results', 'analytics', 'features'].includes(tab)) {
       setActiveTab(tab as TabType);
     }
 
@@ -1292,6 +1294,7 @@ export default function MyMecaDashboardPage() {
     { id: 'billing', label: 'Membership & Billing', icon: CreditCard },
     { id: 'results', label: 'Results', icon: Trophy },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'features', label: 'Feature Ideas', icon: Lightbulb },
   ];
 
   const renderContent = () => {
@@ -1306,6 +1309,8 @@ export default function MyMecaDashboardPage() {
         return renderResults();
       case 'analytics':
         return renderAnalytics();
+      case 'features':
+        return <FeatureIdeasTab />;
       default:
         return renderOverview();
     }
@@ -1313,6 +1318,9 @@ export default function MyMecaDashboardPage() {
 
   const renderOverview = () => (
     <>
+      {/* Vote for the next MECA feature */}
+      <FeatureVoteWidget onGoVote={() => setActiveTab('features')} />
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-slate-800 rounded-xl p-6 shadow-lg">
