@@ -427,7 +427,12 @@ export class CompetitionResultsController {
 
   @Post('link-competitors')
   @HttpCode(HttpStatus.OK)
-  async linkCompetitors(): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> {
+  async linkCompetitors(
+    @Headers('authorization') authHeader?: string,
+  ): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> {
+    // Data-maintenance write — admin only (exposed as a button in Site
+    // Settings → System → Data Maintenance).
+    await this.requireAdmin(authHeader);
     const result = await this.competitionResultsService.linkCompetitorsByMecaId();
     return {
       message: 'Competitors linked successfully',

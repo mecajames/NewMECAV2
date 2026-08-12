@@ -69,6 +69,7 @@ export default function SiteSettings() {
   // Data Maintenance (System tab) — one-click cleanups, e.g. trimming stray
   // whitespace off competition_results.meca_id after imports/deploys.
   const [trimmingMecaIds, setTrimmingMecaIds] = useState(false);
+  const [linkingCompetitors, setLinkingCompetitors] = useState(false);
   const [dataMaintResult, setDataMaintResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
@@ -719,6 +720,34 @@ export default function SiteSettings() {
       });
     } finally {
       setTrimmingMecaIds(false);
+    }
+  };
+
+  // Data Maintenance: link result rows to the member profile that owns their
+  // MECA ID. Repairs rows entered/imported without a competitor link (they
+  // show for admins but are invisible on the member's own My MECA results).
+  const handleLinkCompetitors = async () => {
+    if (!confirm('Link competition results to member profiles by MECA ID? Fixes results that are missing from members’ My MECA pages. Safe to run any time.')) {
+      return;
+    }
+    setLinkingCompetitors(true);
+    setDataMaintResult(null);
+    try {
+      const result = await competitionResultsApi.linkCompetitors();
+      setDataMaintResult({
+        type: 'success',
+        message:
+          result.linked > 0
+            ? `Linked ${result.linked} result row${result.linked === 1 ? '' : 's'} to member profiles (${result.noMatch} had no matching member).`
+            : `Nothing to link — all linkable results are already connected (${result.noMatch} rows have no matching member).`,
+      });
+    } catch (error: any) {
+      setDataMaintResult({
+        type: 'error',
+        message: error.response?.data?.message || error.message || 'Failed to link results to profiles',
+      });
+    } finally {
+      setLinkingCompetitors(false);
     }
   };
 
@@ -2347,6 +2376,34 @@ export default function SiteSettings() {
                 <>
                   <Database className="h-4 w-4" />
                   Run Cleanup
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-teal-500" />
+              <h4 className="font-semibold text-white">Link Results to Profiles</h4>
+            </div>
+            <p className="text-sm text-gray-400">
+              Connects result rows to the member who owns their MECA ID. Fixes results that admins can
+              see but that are missing from the member's own My MECA results page.
+            </p>
+            <button
+              onClick={handleLinkCompetitors}
+              disabled={linkingCompetitors}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {linkingCompetitors ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" />
+                  Linking...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Link Results
                 </>
               )}
             </button>
