@@ -55,6 +55,7 @@ import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { FeatureRequestsModule } from './feature-requests/feature-requests.module';
+import { SystemDiagnosticsModule } from './system-diagnostics/system-diagnostics.module';
 import { AdminNotificationsModule } from './admin-notifications/admin-notifications.module';
 import { TrainingRecordsModule } from './training-records/training-records.module';
 import { ScheduledTasksModule } from './scheduled-tasks/scheduled-tasks.module';
@@ -145,6 +146,7 @@ import { SecurityModule } from './security/security.module';
     ShopModule,
     CouponsModule,
     FeatureRequestsModule,
+    SystemDiagnosticsModule,
     AdminNotificationsModule,
     TrainingRecordsModule,
     ScheduledTasksModule,

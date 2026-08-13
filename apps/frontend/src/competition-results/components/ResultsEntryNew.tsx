@@ -34,6 +34,8 @@ interface ResultEntry {
   updated_at?: string;
   revision_count?: number;
   modification_reason?: string;
+  // WHY the row got (or didn't get) points — stamped by every recalculation.
+  points_reason?: string;
 }
 
 interface PreviewResult {
@@ -534,6 +536,7 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
           updated_at: r.updated_at || r.updatedAt,
           revision_count: r.revision_count || r.revisionCount || 0,
           modification_reason: r.modification_reason || r.modificationReason || '',
+          points_reason: r.points_reason || '',
         };
       });
       setExistingResults(formattedResults);
@@ -1874,7 +1877,16 @@ export default function ResultsEntryNew({ initialEventId }: { initialEventId?: s
                     <td className="px-3 py-2 text-white">{result.wattage === -1 ? <span className="text-orange-400 font-semibold">Unlimited</span> : (result.wattage || '-')}</td>
                     <td className="px-3 py-2 text-white">{result.frequency || '-'}</td>
                     <td className="px-3 py-2 text-white font-semibold">{result.placement || '-'}</td>
-                    <td className="px-3 py-2 text-orange-400 font-semibold">{result.points_earned || '0'}</td>
+                    <td className="px-3 py-2 text-orange-400 font-semibold">
+                      {/* Hover the points value (or the amber dot on a 0) to
+                          see WHY — the reason every recalculation stamps. */}
+                      <span title={result.points_reason || undefined} className={result.points_reason ? 'cursor-help' : undefined}>
+                        {result.points_earned || '0'}
+                        {(!result.points_earned || result.points_earned === '0') && result.points_reason && (
+                          <span className="ml-1 text-amber-400" title={result.points_reason}>ⓘ</span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-gray-400 text-xs">
                       {(() => {
                         // Prefer the server-resolved name; fall back to a

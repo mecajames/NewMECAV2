@@ -155,4 +155,10 @@ export class CompetitionResult {
 
   @Property({ type: 'timestamptz', nullable: true, fieldName: 'points_override_at', serializedName: 'points_override_at' })
   pointsOverrideAt?: Date;
+
+  // WHY this row got (or didn't get) points — stamped on every recalculation
+  // so a 0 is never silent (e.g. "Guest entry", "Membership expired 6/1/2026",
+  // "Held for renewal", "Awarded: 1st place × 3X").
+  @Property({ type: 'text', nullable: true, fieldName: 'points_reason', serializedName: 'points_reason' })
+  pointsReason?: string;
 }

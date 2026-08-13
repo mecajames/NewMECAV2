@@ -425,6 +425,56 @@ export class CompetitionResultsController {
     return this.competitionResultsService.ignoreDuplicateGroup(classIds);
   }
 
+  /**
+   * Admin "Find Results": search every result row that could belong to a
+   * member — by name, email, or ANY MECA ID they've ever held (active,
+   * expired, or historical). Powers /admin/find-results.
+   */
+  @Get('admin/search')
+  async adminSearchResults(
+    @Headers('authorization') authHeader: string,
+    @Query('q') q: string,
+    // Comma-separated season UUIDs; absent/empty = all seasons.
+    @Query('seasonIds') seasonIds?: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    const seasons = (seasonIds ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    return this.competitionResultsService.searchResultsForAdmin(q, seasons);
+  }
+
+  /** Admin "Find Results": preview who owns a MECA ID before assigning to it. */
+  @Get('admin/meca-id-owner/:mecaId')
+  async adminMecaIdOwner(
+    @Headers('authorization') authHeader: string,
+    @Param('mecaId') mecaId: string,
+  ) {
+    await this.requireAdmin(authHeader);
+    return this.competitionResultsService.mecaIdOwnerForAdmin(mecaId);
+  }
+
+  /** Admin "Find Results": assign the selected results to a MECA ID. */
+  @Post('admin/assign-meca-id')
+  @HttpCode(HttpStatus.OK)
+  async adminAssignResults(
+    @Headers('authorization') authHeader: string,
+    @Body() body: { resultIds?: string[]; mecaId?: string },
+  ) {
+    const admin = await this.requireAdmin(authHeader);
+    const result = await this.competitionResultsService.assignResultsToMecaId(
+      body?.resultIds ?? [],
+      String(body?.mecaId ?? ''),
+      admin.id,
+    );
+    this.adminAuditService.logAction({
+      adminUserId: admin.id,
+      action: 'results_assigned_to_meca_id',
+      resourceType: 'competition_result',
+      description: `Assigned ${result.updated} result(s) to MECA ID ${String(body?.mecaId).trim()} (${result.owner}); ${result.eventsRecalculated} event(s) recalculated`,
+      newValues: { mecaId: String(body?.mecaId).trim(), resultIds: body?.resultIds, ...result },
+    });
+    return result;
+  }
+
   @Post('link-competitors')
   @HttpCode(HttpStatus.OK)
   async linkCompetitors(

@@ -270,6 +270,14 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
           color: 'yellow',
         },
         {
+          icon: Search,
+          title: 'Find Results',
+          description: "Search a member's results by name, email, or any MECA ID and reassign them",
+          action: 'find-results',
+          color: 'yellow',
+          navigateTo: '/admin/find-results',
+        },
+        {
           icon: AlertCircle,
           title: 'Pending Results',
           description: 'Review ED-submitted results with unknown classes',

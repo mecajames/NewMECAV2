@@ -89,6 +89,32 @@ describe('CompetitionResultsService — manual points on held rows', () => {
     expect(em.flush).toHaveBeenCalled();
   });
 
+  it('updateEventPoints FAILS LOUDLY when the eligibility lookup breaks — never silently zeroes', async () => {
+    // Regression for prod 2026-08-12: a missing memberships column made the
+    // eligibility query throw; the old code caught it, treated EVERY member
+    // as ineligible, and zeroed the whole event while reporting success.
+    heldResult.pointsEarned = 27;
+    heldResult.pointsHeldForRenewal = false;
+    em.find.mockImplementation(async (entity: any) => {
+      if (entity === Membership) throw new Error('column m1.frozen_at does not exist');
+      if (entity === CompetitionResult) return [heldResult];
+      return [];
+    });
+
+    await expect(svc.updateEventPoints('e-1')).rejects.toThrow(/eligibility lookup failed/i);
+    // The row's existing points must be untouched — no silent zeroing.
+    expect(heldResult.pointsEarned).toBe(27);
+  });
+
+  it('updateEventPoints stamps a human-readable reason on ineligible rows', async () => {
+    // Member 701234 has no membership rows → the recalc must SAY so instead
+    // of leaving a silent 0 (James, 2026-08-12).
+    heldResult.pointsHeldForRenewal = false;
+    await svc.updateEventPoints('e-1');
+    expect(heldResult.pointsEarned).toBe(0);
+    expect(heldResult.pointsReason).toMatch(/No membership carries MECA ID 701234/i);
+  });
+
   it('updateEventPoints releases a stale hold on manually-overridden rows instead of skipping it', async () => {
     heldResult.pointsManualOverride = true;
     heldResult.pointsEarned = 42;
