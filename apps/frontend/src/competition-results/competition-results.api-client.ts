@@ -29,6 +29,8 @@ export interface CompetitionResult {
   // Manual one-off points override (super-admin) — locked against auto-recalc.
   pointsManualOverride?: boolean;
   points_manual_override?: boolean;
+  // WHY the row got (or didn't get) points — stamped by every recalculation.
+  points_reason?: string;
   pointsOverrideReason?: string;
   points_override_reason?: string;
   pointsOverrideAt?: string;
@@ -133,6 +135,29 @@ export const competitionResultsApi = {
    */
   linkCompetitors: async (): Promise<{ message: string; linked: number; alreadyLinked: number; noMatch: number }> => {
     const response = await axios.post('/api/competition-results/link-competitors');
+    return response.data;
+  },
+
+  /**
+   * Admin "Find Results": search results by member name, email, or ANY MECA ID
+   * they've ever held (active, expired, or historical).
+   */
+  adminSearchResults: async (q: string, seasonIds?: string[]): Promise<any[]> => {
+    const response = await axios.get('/api/competition-results/admin/search', {
+      params: { q, ...(seasonIds && seasonIds.length > 0 ? { seasonIds: seasonIds.join(',') } : {}) },
+    });
+    return response.data;
+  },
+
+  /** Admin "Find Results": who currently owns a MECA ID (target preview). */
+  adminMecaIdOwner: async (mecaId: string): Promise<{ found: boolean; name?: string; email?: string; active?: boolean }> => {
+    const response = await axios.get(`/api/competition-results/admin/meca-id-owner/${encodeURIComponent(mecaId)}`);
+    return response.data;
+  },
+
+  /** Admin "Find Results": assign the selected results to a MECA ID. */
+  adminAssignResults: async (resultIds: string[], mecaId: string): Promise<{ updated: number; eventsRecalculated: number; owner: string }> => {
+    const response = await axios.post('/api/competition-results/admin/assign-meca-id', { resultIds, mecaId });
     return response.data;
   },
 

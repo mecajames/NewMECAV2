@@ -19,6 +19,7 @@ import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import GraceAmnestySettings from './GraceAmnestySettings';
+import { systemDiagnosticsApi, SchemaDriftReport, PointsPipelineReport } from '@/api-client/system-diagnostics.api-client';
 import { isSuperAdmin } from '@/auth/permissions';
 import { scheduledTasksApi } from '@/scheduled-tasks';
 
@@ -71,6 +72,11 @@ export default function SiteSettings() {
   const [trimmingMecaIds, setTrimmingMecaIds] = useState(false);
   const [linkingCompetitors, setLinkingCompetitors] = useState(false);
   const [dataMaintResult, setDataMaintResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // System Health Check: entity-vs-DB schema drift + points pipeline probe.
+  const [healthRunning, setHealthRunning] = useState(false);
+  const [healthDrift, setHealthDrift] = useState<SchemaDriftReport | null>(null);
+  const [healthPoints, setHealthPoints] = useState<PointsPipelineReport | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     // Cookie consent banner (CMP)
@@ -720,6 +726,27 @@ export default function SiteSettings() {
       });
     } finally {
       setTrimmingMecaIds(false);
+    }
+  };
+
+  // System Health Check: runs both diagnostics; results render inline below
+  // the button. Read-only, safe to run any time (including on prod).
+  const runHealthCheck = async () => {
+    setHealthRunning(true);
+    setHealthError(null);
+    setHealthDrift(null);
+    setHealthPoints(null);
+    try {
+      const [drift, points] = await Promise.all([
+        systemDiagnosticsApi.schemaDrift(),
+        systemDiagnosticsApi.pointsPipeline(),
+      ]);
+      setHealthDrift(drift);
+      setHealthPoints(points);
+    } catch (error: any) {
+      setHealthError(error.response?.data?.message || error.message || 'Health check failed');
+    } finally {
+      setHealthRunning(false);
     }
   };
 
@@ -2409,6 +2436,86 @@ export default function SiteSettings() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* System Health Check — entity-vs-DB schema drift + points pipeline.
+          Built after schema drift silently zeroed members' points on prod. */}
+      <div className="bg-slate-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-700 pb-3">
+          <div className="flex items-center gap-3">
+            <Server className="h-6 w-6 text-emerald-500" />
+            <div>
+              <h3 className="text-xl font-semibold text-white">System Health Check</h3>
+              <p className="text-sm text-gray-400">
+                Verifies the database has every column the code expects (schema drift) and that the
+                points pipeline can see eligible members. Read-only — run any time, especially after a deploy.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={runHealthCheck}
+            disabled={healthRunning}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-semibold rounded-lg flex items-center gap-2 whitespace-nowrap"
+          >
+            {healthRunning ? (
+              <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" /> Checking…</>
+            ) : (
+              <><CheckCircle className="h-4 w-4" /> Run Health Check</>
+            )}
+          </button>
+        </div>
+
+        {healthError && (
+          <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">{healthError}</div>
+        )}
+
+        {healthDrift && (
+          <div className={`rounded-lg p-4 ${healthDrift.driftCount === 0 ? 'bg-green-900/20 border border-green-800' : 'bg-red-900/30 border border-red-700'}`}>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              {healthDrift.driftCount === 0 ? (
+                <><CheckCircle className="h-4 w-4 text-green-500" /><span className="text-green-300">Schema OK — all {healthDrift.checkedTables} tables have every column the code expects.</span></>
+              ) : (
+                <><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-red-300">SCHEMA DRIFT — {healthDrift.driftCount} table(s) are missing columns the code expects. Queries on these tables will fail; run the pending migrations.</span></>
+              )}
+            </div>
+            {healthDrift.problems.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm text-red-200">
+                {healthDrift.problems.map(p => (
+                  <li key={p.table} className="font-mono text-xs">
+                    {p.table}: {p.missingTable ? 'TABLE MISSING (pending migration)' : `missing ${p.missingColumns.join(', ')}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {healthPoints && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className={`rounded-lg p-4 text-sm ${healthPoints.eligibility.ok ? 'bg-green-900/20 border border-green-800 text-green-300' : 'bg-red-900/30 border border-red-700 text-red-300'}`}>
+              <div className="font-semibold mb-1">Points eligibility query</div>
+              {healthPoints.eligibility.ok
+                ? <>✓ Working — {healthPoints.eligibility.eligibleMembers} members currently points-eligible.</>
+                : <>✗ BROKEN — recalculations would zero everyone. Error: <span className="font-mono text-xs">{healthPoints.eligibility.error}</span></>}
+              <div className="mt-2 pt-2 border-t border-slate-700/60">
+                <div className="font-semibold mb-1">Current season</div>
+                {healthPoints.season?.error
+                  ? <span className="text-red-300">✗ {healthPoints.season.error}</span>
+                  : <>✓ {healthPoints.season?.name ?? '—'} — points config {healthPoints.season?.has_points_config ? 'present' : 'MISSING'}</>}
+              </div>
+            </div>
+            <div className="rounded-lg p-4 bg-slate-700/50 text-sm text-gray-300">
+              <div className="font-semibold text-white mb-1">Recently applied migrations</div>
+              <ul className="space-y-0.5 max-h-44 overflow-y-auto">
+                {healthPoints.migrations.map((m, i) => (
+                  <li key={i} className="font-mono text-xs">
+                    {m.error ? <span className="text-red-300">{m.error}</span> : <>{m.name} <span className="text-gray-500">({m.executed_at ? new Date(m.executed_at).toLocaleDateString() : ''})</span></>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Membership Grace Period */}

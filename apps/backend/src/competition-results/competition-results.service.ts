@@ -158,6 +158,188 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Admin "Find Results" search: given a free-text query (member name, email,
+   * or any MECA ID — active, expired, or historical), return every result row
+   * that could belong to that member:
+   *   - rows whose meca_id / original_meca_id matches any ID the matched
+   *     member(s) have EVER held (memberships + meca_id_history + profile)
+   *   - rows linked to the matched profile(s) via competitor_id
+   *   - rows whose competitor_name matches the query
+   *   - rows whose meca_id / original_meca_id equals the query directly
+   * Built for the "member renewed but their old results aren't in My MECA"
+   * support case — feed the selection into assignResultsToMecaId().
+   *
+   * Optional season scoping: pass seasonIds to limit the sweep; empty/absent
+   * = all seasons. Matches the row's own season_id, falling back to the
+   * event's season for legacy rows that predate the season_id backfill.
+   */
+  async searchResultsForAdmin(query: string, seasonIds?: string[]): Promise<any[]> {
+    const q = (query ?? '').trim();
+    if (q.length < 2) {
+      throw new BadRequestException('Enter at least 2 characters to search.');
+    }
+    const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    const seasons = (seasonIds ?? []).map(s => s.trim()).filter(s => UUID_RE.test(s));
+    const seasonClause = seasons.length > 0
+      ? ` AND COALESCE(cr.season_id, e.season_id) IN (${seasons.map(() => '?').join(', ')})`
+      : '';
+    const em = this.em.fork();
+    const like = `%${q}%`;
+    const rows: any[] = await em.getConnection().execute(
+      `
+      WITH matched_profiles AS (
+        -- profiles.meca_id is TEXT on prod but INTEGER on some environments —
+        -- ALWAYS ::text before string ops (see reference_mikroorm_gotchas).
+        SELECT id, first_name, last_name, email, meca_id::text AS meca_id
+          FROM public.profiles
+         WHERE email ILIKE ?
+            OR TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) ILIKE ?
+            OR TRIM(COALESCE(meca_id::text, '')) = ?
+      ),
+      member_meca_ids AS (
+        SELECT DISTINCT mid::text AS meca_id FROM (
+          SELECT m.meca_id AS mid
+            FROM public.memberships m
+            JOIN matched_profiles mp ON m.user_id = mp.id
+           WHERE m.meca_id IS NOT NULL
+          UNION
+          SELECT h.meca_id
+            FROM public.meca_id_history h
+            LEFT JOIN public.memberships m2 ON h.membership_id = m2.id
+            LEFT JOIN matched_profiles mp2 ON m2.user_id = mp2.id
+            LEFT JOIN matched_profiles mp3 ON h.profile_id = mp3.id
+           WHERE mp2.id IS NOT NULL OR mp3.id IS NOT NULL
+          UNION
+          -- CASE (not WHERE + cast) so the planner can never evaluate the
+          -- ::int cast on a non-numeric profile meca_id before filtering.
+          SELECT CASE WHEN TRIM(COALESCE(mp4.meca_id, '')) ~ '^[0-9]+$'
+                      THEN TRIM(mp4.meca_id)::int END
+            FROM matched_profiles mp4
+        ) x WHERE x.mid IS NOT NULL AND x.mid::text <> ''
+      )
+      SELECT cr.id, cr.meca_id, cr.original_meca_id, cr.competitor_name,
+             cr.competition_class, cr.format, cr.score, cr.placement,
+             cr.points_earned, cr.points_reason, cr.points_held_for_renewal, cr.pending_back_fill,
+             cr.needs_class_review, cr.competitor_id, cr.created_at,
+             COALESCE(cr.season_id, e.season_id) AS season_id,
+             e.id AS event_id, e.title AS event_title, e.event_date,
+             p.first_name AS linked_first_name, p.last_name AS linked_last_name,
+             p.email AS linked_email
+        FROM public.competition_results cr
+        LEFT JOIN public.events e ON e.id = cr.event_id
+        LEFT JOIN public.profiles p ON p.id = cr.competitor_id
+       WHERE (
+             TRIM(COALESCE(cr.meca_id, '')) IN (SELECT meca_id FROM member_meca_ids)
+          OR TRIM(COALESCE(cr.original_meca_id, '')) IN (SELECT meca_id FROM member_meca_ids)
+          OR cr.competitor_id IN (SELECT id FROM matched_profiles)
+          OR cr.competitor_name ILIKE ?
+          OR TRIM(COALESCE(cr.meca_id, '')) = ?
+          OR TRIM(COALESCE(cr.original_meca_id, '')) = ?
+       )${seasonClause}
+       ORDER BY e.event_date DESC NULLS LAST, cr.created_at DESC
+       LIMIT 500
+      `,
+      [like, like, q, like, q, q, ...seasons],
+    );
+    return rows;
+  }
+
+  /**
+   * Admin "Find Results" owner preview: who currently holds a MECA ID, so the
+   * admin can confirm the target before assigning results to it.
+   */
+  async mecaIdOwnerForAdmin(mecaId: string): Promise<{ found: boolean; name?: string; email?: string; active?: boolean; userId?: string }> {
+    const clean = (mecaId ?? '').trim();
+    const mecaIdNum = parseInt(clean, 10);
+    if (!Number.isFinite(mecaIdNum)) return { found: false };
+    const em = this.em.fork();
+    const rows: any[] = await em.getConnection().execute(
+      `SELECT p.id, p.first_name, p.last_name, p.email,
+              (m.payment_status IN ('paid', 'cancelled') AND (m.end_date IS NULL OR m.end_date > NOW())) AS is_active
+         FROM public.memberships m
+         JOIN public.profiles p ON p.id = m.user_id
+        WHERE m.meca_id = ?
+        ORDER BY m.created_at DESC
+        LIMIT 1`,
+      [mecaIdNum],
+    );
+    if (rows.length === 0) return { found: false };
+    const r = rows[0];
+    return {
+      found: true,
+      name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || 'MECA Member',
+      email: r.email ?? undefined,
+      active: r.is_active === true,
+      userId: r.id,
+    };
+  }
+
+  /**
+   * Admin "Find Results" assignment: move the SELECTED result rows onto a
+   * specific MECA ID (which must belong to a member), link the owner's
+   * profile, clear guest-stamping/back-fill leftovers, and recalculate points
+   * for every affected event so held points release immediately when the
+   * owner is eligible.
+   */
+  async assignResultsToMecaId(
+    resultIds: string[],
+    mecaId: string,
+    adminId: string,
+  ): Promise<{ updated: number; eventsRecalculated: number; owner: string }> {
+    const clean = (mecaId ?? '').trim();
+    const mecaIdNum = parseInt(clean, 10);
+    if (!Number.isFinite(mecaIdNum) || mecaIdNum <= 0) {
+      throw new BadRequestException('Enter a valid MECA ID to assign the results to.');
+    }
+    if (!Array.isArray(resultIds) || resultIds.length === 0) {
+      throw new BadRequestException('Select at least one result to assign.');
+    }
+    if (resultIds.length > 500) {
+      throw new BadRequestException('Assign at most 500 results at a time.');
+    }
+
+    const owner = await this.mecaIdOwnerForAdmin(clean);
+    if (!owner.found || !owner.userId) {
+      throw new BadRequestException(`MECA ID ${clean} does not belong to any member — check the number.`);
+    }
+
+    const em = this.em.fork();
+    const results = await em.find(CompetitionResult, { id: { $in: resultIds } }, { populate: ['event'] });
+    if (results.length === 0) {
+      throw new BadRequestException('None of the selected results were found.');
+    }
+
+    const eventIds = new Set<string>();
+    for (const row of results) {
+      row.mecaId = String(mecaIdNum);
+      row.originalMecaId = undefined;
+      row.pendingBackFill = false;
+      row.competitor = em.getReference(Profile, owner.userId) as any;
+      const eventId = (row.event as any)?.id;
+      if (eventId) eventIds.add(eventId);
+    }
+    await em.flush();
+
+    // Recalc every affected event with a FRESH eligibility cache so the new
+    // owner's active membership is seen immediately (and held rows release).
+    this.bustPointsEligibilityCache();
+    let eventsRecalculated = 0;
+    for (const eventId of eventIds) {
+      try {
+        await this.updateEventPoints(eventId);
+        eventsRecalculated++;
+      } catch (err) {
+        this.logger.error(`assignResultsToMecaId: recalc failed for event ${eventId}: ${err}`);
+      }
+    }
+
+    this.logger.warn(
+      `Admin ${adminId} assigned ${results.length} result(s) to MECA ID ${mecaIdNum} (${owner.name}); recalculated ${eventsRecalculated} event(s)`,
+    );
+    return { updated: results.length, eventsRecalculated, owner: owner.name! };
+  }
+
+  /**
    * Reassign every competition result from one MECA ID to another. Used when a
    * member's membership MECA ID is corrected/reverted (e.g. a renewal was given
    * a fresh ID but should keep the member's original): the results earned under
@@ -317,6 +499,7 @@ export class CompetitionResultsService {
       result.releasedAt = new Date();
       result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: manual points override';
     }
+    result.pointsReason = 'Points set manually by an admin (locked against recalculation)';
     await em.flush();
 
     this.logger.warn(
@@ -1569,19 +1752,29 @@ export class CompetitionResultsService {
       MembershipCategory.MANUFACTURER,
     ];
 
-    // Find all active, paid memberships with MECA IDs in eligible categories
-    const memberships = await em.find(
-      Membership,
-      {
-        mecaId: { $ne: null },
-        paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
-        membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
-        $or: [{ endDate: null }, { endDate: { $gt: today } }],
-      },
-      {
-        populate: ['membershipTypeConfig'],
-      }
-    );
+    let memberships: Membership[];
+    try {
+      // Find all active, paid memberships with MECA IDs in eligible categories
+      memberships = await em.find(
+        Membership,
+        {
+          mecaId: { $ne: null },
+          paymentStatus: { $in: VALID_TERM_PAYMENT_STATUSES },
+          membershipTypeConfig: { category: { $in: pointsEligibleCategories } },
+          $or: [{ endDate: null }, { endDate: { $gt: today } }],
+        },
+        {
+          populate: ['membershipTypeConfig'],
+        }
+      );
+    } catch (err: any) {
+      // A failed refresh must NEVER masquerade as "nobody is eligible" — that
+      // silently zeroes every member's points on the next recalculation (it
+      // hid a missing prod column for days, 2026-08-12). Reset the timestamp
+      // so the next call retries, and surface the real error to the caller.
+      this.pointsEligibleCacheTimestamp = 0;
+      throw new Error(`Points-eligibility lookup failed (points would be wrongly zeroed): ${err?.message ?? err}`);
+    }
 
     // Update the cache
     this.pointsEligibleMecaIds = new Set(memberships.map(m => m.mecaId!));
@@ -1624,6 +1817,43 @@ export class CompetitionResultsService {
 
     // Check if this MECA ID is in our points-eligible set
     return this.pointsEligibleMecaIds.has(mecaIdNum);
+  }
+
+  /**
+   * Explain WHY a MECA ID is not points-eligible, in admin-readable words.
+   * Mirrors isMemberEligibleAsync's exclusions, then inspects the actual
+   * membership rows for the specific blocker. Stamped onto
+   * competition_results.points_reason so a 0 is never silent.
+   */
+  private async explainIneligibility(mecaId: string | undefined, em: EntityManager): Promise<string> {
+    if (!mecaId || mecaId === '0') return 'No MECA ID on this result';
+    if (mecaId === '999999') return 'Guest entry — guests do not earn points';
+    if (mecaId.startsWith('99')) return 'Test/special MECA ID — not points-eligible';
+    const mecaIdNum = parseInt(String(mecaId).trim(), 10);
+    if (isNaN(mecaIdNum)) return `MECA ID "${mecaId}" is not a valid number`;
+
+    const memberships = await em.find(
+      Membership,
+      { mecaId: mecaIdNum },
+      { populate: ['membershipTypeConfig'], orderBy: { endDate: 'DESC' } },
+    );
+    if (memberships.length === 0) {
+      return `No membership carries MECA ID ${mecaIdNum} — assign the results to the member's current ID (Find Results)`;
+    }
+    const m = memberships[0];
+    const now = new Date();
+    if (m.endDate && m.endDate <= now) {
+      return `Membership expired ${m.endDate.toLocaleDateString('en-US')}`;
+    }
+    const status = String((m as any).paymentStatus ?? '');
+    if (!['paid', 'cancelled'].includes(status)) {
+      return `Membership payment status is '${status || 'unknown'}' — needs a paid membership`;
+    }
+    const category = (m.membershipTypeConfig as any)?.category;
+    if (category && !['competitor', 'retail', 'manufacturer'].includes(String(category))) {
+      return `Membership category '${category}' is not points-eligible (competitor/retail/manufacturer only)`;
+    }
+    return 'Not points-eligible at recalculation time — check the membership on the member page';
   }
 
   /**
@@ -1956,7 +2186,10 @@ export class CompetitionResultsService {
       // class, so they must not earn points or influence anyone else's
       // placement until an admin resolves them. Points are recomputed for
       // the event once the row is approved (see resolvePendingResult).
-      if ((result as any).needsClassReview) continue;
+      if ((result as any).needsClassReview) {
+        result.pointsReason = 'Class needs admin review (Pending Results) — points withheld until approved';
+        continue;
+      }
 
       // Get format from class if available, otherwise from result.format field
       let format: string | null = result.format || null;
@@ -1979,13 +2212,13 @@ export class CompetitionResultsService {
 
     this.logger.log(`[updateEventPoints] Step 5 OK - grouped into ${groupedResults.size} groups`);
 
-    // Step 6: Refresh the points-eligible MECA IDs cache before processing
-    try {
-      await this.refreshPointsEligibleCache();
-      this.logger.log(`[updateEventPoints] Step 6 OK - cache refreshed`);
-    } catch (cacheError) {
-      this.logger.warn(`[updateEventPoints] Step 6 failed to refresh cache: ${cacheError}`);
-    }
+    // Step 6: Refresh the points-eligible MECA IDs cache before processing.
+    // DELIBERATELY NOT caught: if the eligibility lookup is broken (e.g. the
+    // DB is missing a column the entity expects), continuing would treat
+    // EVERY member as ineligible and zero the whole event's points while the
+    // recalc "succeeds". Fail loudly instead — the admin sees the real error.
+    await this.refreshPointsEligibleCache();
+    this.logger.log(`[updateEventPoints] Step 6 OK - cache refreshed`);
 
     // Step 7: Process each group - assign placements and calculate points
     for (const [key, group] of groupedResults) {
@@ -2012,6 +2245,7 @@ export class CompetitionResultsService {
             result.releasedAt = new Date();
             result.notes = (result.notes || '').replace(/\s*\|\s*Held:.*$/, '') + ' | Released: manual points override';
           }
+          result.pointsReason = 'Points set manually by an admin (locked against recalculation)';
           currentPlacement++;
           continue;
         }
@@ -2030,13 +2264,20 @@ export class CompetitionResultsService {
             // Points are only awarded to MECA IDs from active Competitor, Retailer, or Manufacturer memberships
             const isMemberEligible = await this.isMemberEligibleAsync(mecaId);
 
-            if (isMemberEligible && pointsConfig) {
+            if (isMemberEligible && !pointsConfig) {
+              // Member is fine — the SEASON is the problem. Say so.
+              result.pointsEarned = 0;
+              result.pointsReason = "No points configuration found for this event's season — set one up in Points Configuration";
+            } else if (isMemberEligible && pointsConfig) {
               result.pointsEarned = this.calculatePoints(
                 currentPlacement,
                 multiplier,
                 format,
                 pointsConfig
               );
+              result.pointsReason = result.pointsEarned > 0
+                ? `Awarded: place ${currentPlacement} at ${multiplier}X`
+                : `Place ${currentPlacement} is outside the paying placements for a ${multiplier}X event`;
               // Self-heal previously-held rows: if this row was stamped
               // "held" while the member was lapsed (e.g. their only paid
               // membership row got deleted in a duplicate cleanup) and the
@@ -2057,8 +2298,10 @@ export class CompetitionResultsService {
                 // Calculate what points WOULD be earned (stored as 0 until released)
                 result.pointsEarned = 0;
                 result.notes = (result.notes ? result.notes + ' | ' : '') + 'Held: membership expired, within grace period';
+                result.pointsReason = 'Membership expired — points HELD and released automatically when they renew';
               } else {
                 result.pointsEarned = 0;
+                result.pointsReason = await this.explainIneligibility(mecaId, em);
               }
             }
           } catch (rowError: any) {
@@ -2066,10 +2309,12 @@ export class CompetitionResultsService {
               `[updateEventPoints] Failed to compute points for result ${result.id} (mecaId=${String(mecaId)}) in event ${eventId}: ${rowError?.message}`,
             );
             result.pointsEarned = 0;
+            result.pointsReason = `Error while computing points: ${rowError?.message ?? rowError}`;
           }
         } else {
           // Format not eligible for points (unknown format or non-points format)
           result.pointsEarned = 0;
+          result.pointsReason = 'No class/format linked to this result — link a class so points can be calculated';
         }
 
         currentPlacement++;
