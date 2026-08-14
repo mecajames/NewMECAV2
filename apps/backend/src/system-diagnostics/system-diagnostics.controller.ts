@@ -42,4 +42,18 @@ export class SystemDiagnosticsController {
     await this.requireAdmin(authHeader);
     return this.diagnostics.pointsPipeline();
   }
+
+  /** Members whose ACTIVE membership meca_id ≠ their profile meca_id (held-points cause). */
+  @Get('meca-id-mismatch')
+  async mecaIdMismatch(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.diagnostics.mecaIdMismatch();
+  }
+
+  /** Result-row hygiene counts: whitespace ids, unlinked rows, guest-stamped, held. */
+  @Get('results-hygiene')
+  async resultsHygiene(@Headers('authorization') authHeader: string) {
+    await this.requireAdmin(authHeader);
+    return this.diagnostics.resultsHygiene();
+  }
 }
