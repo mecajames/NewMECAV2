@@ -2743,9 +2743,23 @@ export class MembershipsService {
       }
     }
 
+    // The override changes WHICH id the active membership carries, so points
+    // eligibility for BOTH ids changes right now — bust the 5-minute
+    // eligibility cache and recalc every event holding results under either
+    // id. Without this, a member whose active membership sat on the wrong id
+    // (results held under their profile id) stays "held" after the fix until
+    // some unrelated recalc runs (Pringle 701501/701595, 2026-08-13).
+    let eventsRecalculated = 0;
+    try {
+      eventsRecalculated = await this.competitionResultsService.recalcEventsForMecaIds([oldMecaId, newMecaId]);
+    } catch (err) {
+      this.logger.error('Post-override points recalc failed (non-fatal — points settle on next recalc):', err);
+    }
+
     this.logger.warn(
       `MECA ID OVERRIDE COMPLETE: Membership ${membershipId} changed from ${oldMecaId} to ${newMecaId}` +
-        (movedResults ? ` (moved ${movedResults} result row(s) ${oldMecaId} → ${newMecaId})` : ''),
+        (movedResults ? ` (moved ${movedResults} result row(s) ${oldMecaId} → ${newMecaId})` : '') +
+        ` — recalculated points for ${eventsRecalculated} event(s)`,
     );
 
     return {
@@ -2754,7 +2768,8 @@ export class MembershipsService {
       message:
         `MECA ID successfully changed from ${oldMecaId || 'none'} to ${newMecaId}.` +
         (tookOver ? ` The ID was released from its previous holder (that account now has no MECA ID).` : '') +
-        (movedResults ? ` Moved ${movedResults} competition result(s) from ${oldMecaId} to ${newMecaId}.` : ''),
+        (movedResults ? ` Moved ${movedResults} competition result(s) from ${oldMecaId} to ${newMecaId}.` : '') +
+        ` Recalculated points for ${eventsRecalculated} affected event(s).`,
     };
   }
 

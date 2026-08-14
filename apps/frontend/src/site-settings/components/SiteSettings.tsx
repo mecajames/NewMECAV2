@@ -19,6 +19,7 @@ import { membershipsApi } from '@/memberships/memberships.api-client';
 import axios from '@/lib/axios';
 import QuickBooksSettings from '@/admin/components/QuickBooksSettings';
 import GraceAmnestySettings from './GraceAmnestySettings';
+import ResultsDiagnosticCenter from './ResultsDiagnosticCenter';
 import { systemDiagnosticsApi, SchemaDriftReport, PointsPipelineReport } from '@/api-client/system-diagnostics.api-client';
 import { isSuperAdmin } from '@/auth/permissions';
 import { scheduledTasksApi } from '@/scheduled-tasks';
@@ -2517,6 +2518,10 @@ export default function SiteSettings() {
           </div>
         )}
       </div>
+
+      {/* Results & Points Diagnostic Center — scans for every known cause of
+          missing points/results and puts the fix button next to each finding. */}
+      <ResultsDiagnosticCenter />
 
       {/* Membership Grace Period */}
       <div className="bg-slate-800 rounded-xl p-6 space-y-4">

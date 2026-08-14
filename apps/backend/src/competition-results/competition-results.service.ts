@@ -365,6 +365,42 @@ export class CompetitionResultsService {
   }
 
   /**
+   * Bust the eligibility cache and recalculate every event that has results
+   * under any of the given MECA IDs. Used after an admin corrects WHICH id a
+   * membership carries (super-admin MECA ID override): the member's results
+   * — often held under the profile/results id while the active membership sat
+   * on a different id — must re-run eligibility against the corrected
+   * membership immediately, not after the 5-minute cache TTL plus whenever
+   * the next unrelated recalc happens to touch those events.
+   */
+  async recalcEventsForMecaIds(mecaIds: Array<string | number | null | undefined>): Promise<number> {
+    const ids = [...new Set(
+      mecaIds.map(id => String(id ?? '').trim()).filter(id => id && id !== '0'),
+    )];
+    if (ids.length === 0) return 0;
+
+    const em = this.em.fork();
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = await em.getConnection().execute(
+      `SELECT DISTINCT event_id FROM competition_results
+        WHERE event_id IS NOT NULL AND trim(meca_id) IN (${placeholders})`,
+      ids,
+    );
+
+    this.bustPointsEligibilityCache();
+    let recalculated = 0;
+    for (const row of rows) {
+      try {
+        await this.updateEventPoints(row.event_id);
+        recalculated++;
+      } catch (err) {
+        this.logger.error(`recalcEventsForMecaIds: recalc failed for event ${row.event_id}: ${err}`);
+      }
+    }
+    return recalculated;
+  }
+
+  /**
    * Reinstate every competition result a member earned while their membership
    * was lapsed, when an admin reactivates/renews them. Covers BOTH hold
    * mechanisms:

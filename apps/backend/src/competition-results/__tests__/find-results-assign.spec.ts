@@ -78,3 +78,56 @@ describe('CompetitionResultsService — assignResultsToMecaId', () => {
     await expect(svc.mecaIdOwnerForAdmin('nope')).resolves.toEqual({ found: false });
   });
 });
+
+/**
+ * Post-override recalc: after a super-admin corrects WHICH MECA ID an active
+ * membership carries, every event with results under either id must be
+ * recalculated with a fresh eligibility cache — otherwise held points stay
+ * held until the 5-minute TTL plus an unrelated recalc (Pringle, 2026-08-13).
+ */
+describe('CompetitionResultsService — recalcEventsForMecaIds', () => {
+  let svc: CompetitionResultsService;
+  let em: any;
+  let conn: any;
+
+  beforeEach(() => {
+    conn = {
+      execute: jest.fn(async () => [{ event_id: 'e-1' }, { event_id: 'e-2' }]),
+    };
+    em = {
+      fork: () => em,
+      getConnection: () => conn,
+    };
+    svc = new CompetitionResultsService(em, {} as any, {} as any, {} as any, undefined, undefined);
+    jest.spyOn(svc, 'bustPointsEligibilityCache');
+    jest.spyOn(svc, 'updateEventPoints').mockResolvedValue(undefined);
+  });
+
+  it('returns 0 without querying when no usable ids are given', async () => {
+    await expect(svc.recalcEventsForMecaIds([null, undefined, '', ' ', '0'])).resolves.toBe(0);
+    expect(conn.execute).not.toHaveBeenCalled();
+    expect(svc.updateEventPoints).not.toHaveBeenCalled();
+  });
+
+  it('dedupes/trims ids, busts the cache, and recalcs each affected event once', async () => {
+    const count = await svc.recalcEventsForMecaIds([701501, ' 701595 ', '701501']);
+
+    expect(count).toBe(2);
+    const [sql, params] = conn.execute.mock.calls[0];
+    expect(sql).toMatch(/DISTINCT event_id/i);
+    expect(params).toEqual(['701501', '701595']);
+    expect(svc.bustPointsEligibilityCache).toHaveBeenCalled();
+    expect(svc.updateEventPoints).toHaveBeenCalledTimes(2);
+    expect(svc.updateEventPoints).toHaveBeenCalledWith('e-1');
+    expect(svc.updateEventPoints).toHaveBeenCalledWith('e-2');
+  });
+
+  it('a failing event recalc is logged and skipped, not fatal', async () => {
+    (svc.updateEventPoints as jest.Mock)
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(svc.recalcEventsForMecaIds(['701595'])).resolves.toBe(1);
+    expect(svc.updateEventPoints).toHaveBeenCalledTimes(2);
+  });
+});

@@ -24,6 +24,10 @@ export class JudgeLevelHistory {
   @ManyToOne(() => Profile, { fieldName: 'changed_by' })
   changedBy!: Profile;
 
-  @Property({ type: 'timestamptz', fieldName: 'changed_at' })
+  // Maps to the table's created_at (a history row is created AT the change).
+  // The entity originally expected a changed_at column that no migration ever
+  // added — on any DB matching the baseline the INSERT failed, so level
+  // changes silently wrote no history. Found by the schema-drift health check.
+  @Property({ type: 'timestamptz', fieldName: 'created_at' })
   changedAt: Date = new Date();
 }

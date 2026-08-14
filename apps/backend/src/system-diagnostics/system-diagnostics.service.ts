@@ -152,4 +152,129 @@ export class SystemDiagnosticsService {
 
     return { eligibility, season, migrations };
   }
+
+  /**
+   * MECA ID mismatch sweep (read-only). Finds the class of member whose
+   * ACTIVE membership row carries a DIFFERENT meca_id than their own profile
+   * (Pringle 701501/701595, 2026-08-13): points eligibility and the Find
+   * Results owner check both key on memberships.meca_id, so these members
+   * show "not active" and their points stay held even though their profile
+   * badge says active — usually the leftover of a duplicate membership
+   * creation where the dup minted a fresh id and the original got cancelled.
+   *
+   * Fix per member: super-admin MECA ID Override on the ACTIVE membership →
+   * set it to the profile/results id (the override moves results and
+   * recalculates the affected events).
+   */
+  async mecaIdMismatch(): Promise<{
+    mismatchCount: number;
+    mismatchedMembers: Array<{
+      email: string; member: string | null;
+      profile_meca_id: string; active_membership_meca_id: string;
+      active_membership_id: string; active_until: string | null;
+      results_on_profile_id: number; held_results_on_profile_id: number;
+    }>;
+    strandedHeldResults: Array<{
+      result_meca_id: string; email: string;
+      active_membership_meca_id: string; held_results: number;
+    }>;
+  }> {
+    const conn = this.em.fork().getConnection();
+
+    // Members whose active membership sits on a different id than their
+    // profile — with how many results (and held results) live under the
+    // profile id, so the worst cases sort first.
+    const mismatchedMembers: any[] = await conn.execute(`
+      SELECT p.email,
+             NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), '') AS member,
+             p.meca_id::text                             AS profile_meca_id,
+             m.meca_id::text                             AS active_membership_meca_id,
+             m.id                                        AS active_membership_id,
+             m.end_date                                  AS active_until,
+             (SELECT count(*)::int FROM public.competition_results cr
+               WHERE trim(cr.meca_id) = trim(p.meca_id::text))   AS results_on_profile_id,
+             (SELECT count(*)::int FROM public.competition_results cr
+               WHERE trim(cr.meca_id) = trim(p.meca_id::text)
+                 AND cr.points_held_for_renewal = true)          AS held_results_on_profile_id
+        FROM public.profiles p
+        JOIN public.memberships m
+          ON m.user_id = p.id
+         AND m.payment_status IN ('paid', 'cancelled')
+         AND (m.end_date IS NULL OR m.end_date > NOW())
+       WHERE p.meca_id IS NOT NULL
+         AND trim(p.meca_id::text) <> ''
+         AND trim(p.meca_id::text) <> m.meca_id::text
+       ORDER BY held_results_on_profile_id DESC, p.email`);
+
+    // Held results stamped with an id whose owner IS active — on a different
+    // id. These stay held forever without intervention.
+    const strandedHeldResults: any[] = await conn.execute(`
+      SELECT trim(cr.meca_id)                            AS result_meca_id,
+             p.email,
+             m_active.meca_id::text                      AS active_membership_meca_id,
+             count(*)::int                               AS held_results
+        FROM public.competition_results cr
+        JOIN public.memberships m_old
+          ON m_old.meca_id::text = trim(cr.meca_id)
+        JOIN public.profiles p ON p.id = m_old.user_id
+        JOIN public.memberships m_active
+          ON m_active.user_id = p.id
+         AND m_active.payment_status IN ('paid', 'cancelled')
+         AND (m_active.end_date IS NULL OR m_active.end_date > NOW())
+         AND m_active.meca_id::text <> trim(cr.meca_id)
+       WHERE cr.points_held_for_renewal = true
+       GROUP BY trim(cr.meca_id), p.email, m_active.meca_id
+       ORDER BY held_results DESC`);
+
+    return {
+      mismatchCount: mismatchedMembers.length,
+      mismatchedMembers,
+      strandedHeldResults,
+    };
+  }
+
+  /**
+   * Results hygiene counts (read-only) for the Diagnostic Center — each count
+   * maps to a known breakage class and an existing one-click fix:
+   *  - whitespaceIds → results whose meca_id has stray whitespace (breaks ID
+   *    matching everywhere); fixed by the Trim MECA IDs tool.
+   *  - unlinkedResults → results whose meca_id belongs to a member profile
+   *    but competitor_id is NULL (invisible on the member's My MECA page);
+   *    fixed by the Link Results tool.
+   *  - guestStamped → rows stamped 999999 awaiting back-fill of their real id.
+   *  - heldResults → rows currently holding points for renewal (context for
+   *    the mismatch sweep; holds release via renewal/amnesty/recalc).
+   */
+  async resultsHygiene(): Promise<{
+    whitespaceIds: number;
+    unlinkedResults: number;
+    guestStamped: number;
+    heldResults: number;
+  }> {
+    const conn = this.em.fork().getConnection();
+    const count = async (sql: string): Promise<number> => {
+      const rows: any[] = await conn.execute(sql);
+      return Number(rows?.[0]?.n ?? 0);
+    };
+
+    const whitespaceIds = await count(
+      `SELECT count(*)::int AS n FROM public.competition_results
+        WHERE meca_id IS NOT NULL AND meca_id <> trim(meca_id)`,
+    );
+    const unlinkedResults = await count(
+      `SELECT count(*)::int AS n FROM public.competition_results cr
+         JOIN public.profiles p ON trim(p.meca_id::text) = trim(cr.meca_id)
+        WHERE cr.competitor_id IS NULL AND trim(cr.meca_id) <> ''`,
+    );
+    const guestStamped = await count(
+      `SELECT count(*)::int AS n FROM public.competition_results
+        WHERE pending_back_fill = true`,
+    );
+    const heldResults = await count(
+      `SELECT count(*)::int AS n FROM public.competition_results
+        WHERE points_held_for_renewal = true`,
+    );
+
+    return { whitespaceIds, unlinkedResults, guestStamped, heldResults };
+  }
 }
