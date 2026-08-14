@@ -392,6 +392,17 @@ export const competitionResultsApi = {
   },
 
   /**
+   * Admin — recalculate placements + points for EVERY event with results,
+   * with a fresh eligibility cache. The "align everyone" hammer: releases
+   * holds for members who are active again, stamps points_reason on every
+   * row, and re-sorts placements. Can take a while on prod.
+   */
+  recalculateAllPlacements: async (): Promise<{ message: string; processed: number; errors: number }> => {
+    const response = await axios.post('/api/competition-results/recalculate-all-placements');
+    return response.data;
+  },
+
+  /**
    * Admin-only — list every result whose class_id can't be resolved
    * (deleted/inactive class AND no text fallback match). These rows
    * are hidden from public results pages but tracked here so an
