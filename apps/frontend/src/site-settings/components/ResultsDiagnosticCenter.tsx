@@ -49,6 +49,10 @@ export default function ResultsDiagnosticCenter() {
   const [linking, setLinking] = useState(false);
   const [hygieneMessage, setHygieneMessage] = useState<RowMessage | null>(null);
 
+  // Full realignment: recalc placements + points for EVERY event.
+  const [recalcingAll, setRecalcingAll] = useState(false);
+  const [recalcAllMessage, setRecalcAllMessage] = useState<RowMessage | null>(null);
+
   const runDiagnostics = async () => {
     setRunning(true);
     setError(null);
@@ -155,6 +159,30 @@ export default function ResultsDiagnosticCenter() {
       setHygieneMessage({ type: 'error', message: errMessage(err, 'Link failed') });
     } finally {
       setLinking(false);
+    }
+  };
+
+  const runRecalcAll = async () => {
+    if (!confirm(
+      'Recalculate placements and points for EVERY event with results?\n\n' +
+      'This re-sorts placements, awards points per the season config, releases holds for members who are active again, and stamps a reason on every zero. ' +
+      'Safe to run any time, but it touches every event and can take several minutes — leave the page open.',
+    )) {
+      return;
+    }
+    setRecalcingAll(true);
+    setRecalcAllMessage(null);
+    try {
+      const result = await competitionResultsApi.recalculateAllPlacements();
+      setRecalcAllMessage({
+        type: result.errors > 0 ? 'error' : 'success',
+        message: `Recalculated ${result.processed} event(s)` + (result.errors > 0 ? ` — ${result.errors} event(s) FAILED (check backend logs).` : '.'),
+      });
+      await runDiagnostics();
+    } catch (err) {
+      setRecalcAllMessage({ type: 'error', message: errMessage(err, 'Full recalculation failed') });
+    } finally {
+      setRecalcingAll(false);
     }
   };
 
@@ -336,6 +364,34 @@ export default function ResultsDiagnosticCenter() {
               <div className="text-xs text-gray-400">Normal for lapsed members — holds release on renewal, amnesty, or recalc. Only a problem when the owner IS active (see mismatch section).</div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ------------------- Full realignment ------------------- */}
+      {hasScanned && (
+        <div className="rounded-lg p-4 bg-slate-700/40 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-white">Full realignment — recalculate every event</div>
+            <p className="text-xs text-gray-400 mt-1">
+              The finishing move after fixes above: re-sorts placements, awards points per the season
+              config, releases holds for members who are active again, and stamps a reason on every zero —
+              across ALL events. Safe any time; can take several minutes.
+            </p>
+            {recalcAllMessage && (
+              <div className={`mt-2 text-sm ${recalcAllMessage.type === 'success' ? 'text-green-300' : 'text-red-300'}`}>{recalcAllMessage.message}</div>
+            )}
+          </div>
+          <button
+            onClick={runRecalcAll}
+            disabled={recalcingAll}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm font-semibold rounded-lg flex items-center gap-2 whitespace-nowrap"
+          >
+            {recalcingAll ? (
+              <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-r-transparent" /> Recalculating…</>
+            ) : (
+              <><RefreshCw className="h-4 w-4" /> Recalculate All Events</>
+            )}
+          </button>
         </div>
       )}
 
