@@ -1815,8 +1815,8 @@ export default function MembersPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && memberToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 border border-slate-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-500/20 rounded-full">
                 <AlertTriangle className="h-6 w-6 text-red-500" />
@@ -1877,8 +1877,8 @@ export default function MembersPage() {
 
       {/* Send Message Modal */}
       {messageModalMember && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 border border-slate-700">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">
               Send Message to {messageModalMember.first_name} {messageModalMember.last_name}
             </h3>

@@ -260,7 +260,7 @@ export default function TeamUpgradeModal({
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-800 rounded-xl max-w-md w-full p-8">
+        <div className="bg-slate-800 rounded-xl max-w-md w-full p-8 max-h-[90vh] overflow-y-auto">
           <div className="flex flex-col items-center justify-center">
             <Loader2 className="h-12 w-12 animate-spin text-orange-500 mb-4" />
             <p className="text-gray-300">Loading upgrade details...</p>

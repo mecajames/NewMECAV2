@@ -310,7 +310,7 @@ export default function QAReviewPage() {
         {/* Fail Modal */}
         {failingItemId && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-white font-bold text-lg flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-red-500" /> Report Issue

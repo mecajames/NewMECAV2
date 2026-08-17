@@ -119,7 +119,7 @@ export default function ConsentBanner() {
       {/* Preferences dialog */}
       {showPrefs && (
         <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-md w-full p-5">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl max-w-md w-full p-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-white font-semibold flex items-center gap-2">
                 <Cookie className="h-5 w-5 text-orange-500" />

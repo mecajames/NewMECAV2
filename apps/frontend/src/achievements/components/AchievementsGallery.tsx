@@ -125,7 +125,7 @@ export function AchievementsGallery({
           onClick={() => setSelectedAchievement(null)}
         >
           <div
-            className="bg-slate-800 rounded-xl max-w-lg w-full overflow-hidden border border-slate-700"
+            className="bg-slate-800 rounded-xl max-w-lg w-full border border-slate-700 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">

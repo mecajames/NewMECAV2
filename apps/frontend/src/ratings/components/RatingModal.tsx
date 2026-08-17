@@ -83,7 +83,7 @@ export function RatingModal({
         />
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-md my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-lg shadow-xl">
+        <div className="inline-block w-full max-w-md my-8 text-left align-middle transition-all transform bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
             <div>

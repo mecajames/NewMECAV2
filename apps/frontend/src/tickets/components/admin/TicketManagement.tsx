@@ -1164,15 +1164,15 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
             <table className="w-full">
               <thead className="bg-slate-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ticket</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Priority</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Reporter</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Assigned</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Last Reply</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Closed</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Ticket</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Status</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Priority</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Reporter</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Assigned</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Last Reply</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Created</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Closed</th>
+                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
@@ -1192,14 +1192,14 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                     className="hover:bg-slate-700/50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/admin/tickets/${ticket.id}`)}
                   >
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <div>
                         <span className="text-xs font-mono text-orange-400">{ticket.ticket_number}</span>
                         <p className="text-white font-medium truncate max-w-xs">{ticket.title}</p>
                         <p className="text-xs text-gray-500">{categoryLabel(ticket.category)}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${lifecycle.className}`}>
                         {lifecycle.label}
                       </span>
@@ -1211,12 +1211,12 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         <AutoCloseCountdown ticket={ticket} />
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full border ${priorityBadge.className}`}>
                         {priorityBadge.label}
                       </span>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       <span className="text-gray-300 text-sm">{getReporterName(ticket)}</span>
                       {!ticket.reporter && (ticket.guest_name || ticket.guest_email) && (
                         <span className="ml-1.5 text-[10px] uppercase bg-slate-700 text-gray-400 px-1.5 py-0.5 rounded">
@@ -1224,7 +1224,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       {ticket.assigned_to ? (
                         <span className="text-gray-300 text-sm">
                           {ticket.assigned_to.first_name || ticket.assigned_to.email.split('@')[0]}
@@ -1233,7 +1233,7 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         <span className="text-gray-500 text-sm italic">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       {ticket.last_reply ? (
                         <div className="flex flex-col gap-0.5">
                           <span className="text-gray-300 text-sm truncate max-w-[10rem]" title={ticket.last_reply.author_name}>
@@ -1258,17 +1258,17 @@ export function TicketManagement({ currentUserId }: TicketManagementProps) {
                         <span className="text-gray-600 text-xs italic">No replies</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      <span className="text-gray-400 text-sm">{formatFullDate(ticket.created_at)}</span>
+                    <td className="px-3 py-4">
+                      <span className="text-gray-400 text-sm whitespace-nowrap">{formatFullDate(ticket.created_at)}</span>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4">
                       {ticket.closed_at ? (
-                        <span className="text-gray-400 text-sm">{formatFullDate(ticket.closed_at)}</span>
+                        <span className="text-gray-400 text-sm whitespace-nowrap">{formatFullDate(ticket.closed_at)}</span>
                       ) : (
                         <span className="text-gray-600 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-right">
+                    <td className="px-3 py-4 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {!ticket.assigned_to_id && (
                           <button

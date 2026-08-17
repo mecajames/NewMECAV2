@@ -836,7 +836,7 @@ export default function EDHostingRequestsPage() {
       {/* Decline Modal */}
       {showDeclineModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">Decline Assignment</h3>
             <p className="text-gray-400 mb-4">
               Please provide a reason for declining this event hosting request. This will be sent back to the admin.

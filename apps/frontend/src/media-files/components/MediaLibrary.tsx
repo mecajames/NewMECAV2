@@ -341,7 +341,7 @@ export default function MediaLibrary() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">Upload File</h3>
               <button onClick={() => setShowUploadModal(false)} className="text-gray-400 hover:text-white">
@@ -490,7 +490,7 @@ export default function MediaLibrary() {
       {/* External URL Modal */}
       {showExternalModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-white">Add External Media</h3>
               <button onClick={() => setShowExternalModal(false)} className="text-gray-400 hover:text-white">

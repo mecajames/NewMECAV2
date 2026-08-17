@@ -1355,7 +1355,7 @@ export default function EventHostingRequestsManagement() {
       {/* ED Assignment Modal */}
       {showAssignModal && selectedRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">
               {selectedRequest.status === EventHostingRequestStatus.ED_REJECTED ? 'Reassign' : 'Assign'} Event Director
             </h3>
@@ -1598,7 +1598,7 @@ export default function EventHostingRequestsManagement() {
       {/* Revoke ED Assignment Modal */}
       {showRevokeModal && selectedRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <UserMinus className="h-6 w-6 text-red-500" />
               Revoke ED Assignment
