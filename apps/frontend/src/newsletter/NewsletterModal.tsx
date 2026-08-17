@@ -74,7 +74,7 @@ export function NewsletterModal({ isOpen, onClose }: NewsletterModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 overflow-hidden">
+      <div className="relative w-full max-w-md bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700 max-h-[90vh] overflow-y-auto">
         {/* Orange accent bar */}
         <div className="h-1 bg-gradient-to-r from-orange-500 via-orange-600 to-red-500" />
 

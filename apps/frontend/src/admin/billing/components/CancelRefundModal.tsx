@@ -127,7 +127,7 @@ export default function CancelRefundModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-slate-800 rounded-xl shadow-xl w-full max-w-lg border border-slate-700">
+      <div className="relative bg-slate-800 rounded-xl shadow-xl w-full max-w-lg border border-slate-700 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b border-slate-700 ${
           mode === 'refund' ? 'bg-red-500/10' : 'bg-amber-500/10'

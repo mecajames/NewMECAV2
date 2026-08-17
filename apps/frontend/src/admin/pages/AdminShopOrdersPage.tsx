@@ -771,7 +771,7 @@ export function AdminShopOrdersPage() {
         {/* Update Status Modal */}
         {showStatusModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-white mb-4">Update Order Status</h3>
               <select
                 value={newStatus}
@@ -806,7 +806,7 @@ export function AdminShopOrdersPage() {
         {/* Tracking Modal */}
         {showTrackingModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-white mb-4">Add Tracking Number</h3>
               <input
                 type="text"
@@ -837,7 +837,7 @@ export function AdminShopOrdersPage() {
         {/* Notes Modal */}
         {showNotesModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-white mb-4">Admin Notes</h3>
               <textarea
                 value={adminNotes}
@@ -868,7 +868,7 @@ export function AdminShopOrdersPage() {
         {/* Refund Modal */}
         {showRefundModal && refundOrder && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold text-white mb-1">Refund Order</h3>
               <p className="text-gray-500 text-sm mb-4">{refundOrder.orderNumber} — ${Number(refundOrder.totalAmount).toFixed(2)}</p>
               <p className="text-gray-400 mb-4">

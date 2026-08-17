@@ -938,7 +938,7 @@ export default function NotificationsAdminPage() {
       {/* View Notification Modal */}
       {viewNotification && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewNotification(null)}>
-          <div className="bg-slate-800 rounded-xl max-w-lg w-full overflow-hidden border border-slate-700" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-slate-800 rounded-xl max-w-lg w-full border border-slate-700 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-slate-700">
               <h3 className="text-lg font-bold text-white">Notification Details</h3>
               <button onClick={() => setViewNotification(null)} className="text-gray-400 hover:text-white">

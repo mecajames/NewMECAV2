@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Calendar, MapPin, Users, DollarSign, Filter, TrendingUp, Search, Globe, Map, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { eventsApi, Event } from '@/events';
@@ -23,7 +23,11 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<EventStatus | 'all'>('all');
   const [seasons, setSeasons] = useState<Season[]>([]);
-  const [selectedSeason, setSelectedSeason] = useState<string>('all');
+  // '' = seasons not loaded yet. The first events fetch is blocked until the
+  // current season is known, so the page never downloads all-season history
+  // and races the season-filtered request (that race is what surfaced 2018
+  // events under a "2026" dropdown).
+  const [selectedSeason, setSelectedSeason] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<string>('all');
   const [selectedState, setSelectedState] = useState<string>('all');
@@ -31,9 +35,9 @@ export default function EventsPage() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
-  // Date sort for the list: 'soonest' puts the nearest event date at the
-  // top (natural for a calendar); 'latest' puts the furthest-out first.
-  const [sortOrder, setSortOrder] = useState<'soonest' | 'latest'>('soonest');
+  // Date sort for the list: 'latest' = newest event date first (default, so
+  // fresh events are never buried); 'oldest' = ascending by date.
+  const [sortOrder, setSortOrder] = useState<'oldest' | 'latest'>('latest');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,7 +63,9 @@ export default function EventsPage() {
   }, [filter]);
 
   useEffect(() => {
+    if (!selectedSeason) return; // wait until fetchSeasons picks the current season
     fetchEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, selectedSeason]);
 
   useEffect(() => {
@@ -76,19 +82,29 @@ export default function EventsPage() {
   const fetchSeasons = async () => {
     try {
       const data = await seasonsApi.getAll();
-      setSeasons(data);
-      
-      // Set current season as default
-      const currentSeason = data.find(s => s.is_current || s.isCurrent);
-      if (currentSeason) {
-        setSelectedSeason(currentSeason.id);
-      }
+      // Hide "(Historical)" archive seasons from the calendar dropdown —
+      // nobody browses events that far back here (James 2026-08-17). The
+      // seasons themselves are untouched; archives stay reachable elsewhere.
+      const visibleSeasons = data.filter(s => !/historical/i.test(s.name || ''));
+      setSeasons(visibleSeasons);
+
+      // Members only care about the current season by default — old seasons
+      // stay reachable through the dropdown but never load unasked.
+      const currentSeason = visibleSeasons.find(s => s.is_current || s.isCurrent);
+      setSelectedSeason(currentSeason ? currentSeason.id : 'all');
     } catch (error) {
       console.error('Error fetching seasons:', error);
+      setSelectedSeason('all'); // still show events if seasons fail to load
     }
   };
 
+  // Out-of-order response guard: only the newest in-flight request may write
+  // state. Without this, a slow earlier fetch (e.g. an all-season one) can
+  // land last and silently replace correctly filtered results.
+  const fetchSeqRef = useRef(0);
+
   const fetchEvents = async () => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       // Use optimized endpoint with server-side filtering
@@ -98,17 +114,13 @@ export default function EventsPage() {
         seasonId: selectedSeason !== 'all' ? selectedSeason : undefined,
         status: filter !== 'all' ? filter : undefined,
       });
+      if (seq !== fetchSeqRef.current) return; // stale response — a newer fetch is in flight
 
-      // Sort by event_date descending (newest first) - backend should do this but ensure it
-      const publicEvents = result.events.sort((a, b) =>
-        new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
-      );
-
-      setEvents(publicEvents);
+      setEvents(result.events);
     } catch (error) {
       console.error('Error fetching events:', error);
     }
-    setLoading(false);
+    if (seq === fetchSeqRef.current) setLoading(false);
   };
 
   // Apply all filters to events
@@ -206,11 +218,11 @@ export default function EventsPage() {
       });
     }
 
-    // Sort by event date. 'soonest' = ascending (nearest date at the top),
-    // 'latest' = descending (furthest-out first).
+    // Sort by event date. 'latest' = descending (newest first),
+    // 'oldest' = ascending (oldest first).
     result.sort((a, b) => {
       const diff = new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
-      return sortOrder === 'soonest' ? diff : -diff;
+      return sortOrder === 'oldest' ? diff : -diff;
     });
 
     return result;
@@ -354,6 +366,7 @@ export default function EventsPage() {
                 onChange={(e) => setSelectedSeason(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
+                {!selectedSeason && <option value="">Loading seasons…</option>}
                 <option value="all">All Seasons</option>
                 {seasons.map((season) => (
                   <option key={season.id} value={season.id}>
@@ -464,7 +477,7 @@ export default function EventsPage() {
                 </div>
               </div>
 
-              {/* Date sort — soonest event first (default) or furthest-out first */}
+              {/* Date sort — latest event first (default) or oldest first */}
               <div>
                 <div className="flex items-center gap-2 text-gray-300 mb-2">
                   <Calendar className="h-4 w-4" />
@@ -472,12 +485,12 @@ export default function EventsPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { value: 'soonest', label: 'Soonest First' },
                     { value: 'latest', label: 'Latest First' },
+                    { value: 'oldest', label: 'Oldest First' },
                   ].map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setSortOrder(option.value as 'soonest' | 'latest')}
+                      onClick={() => setSortOrder(option.value as 'oldest' | 'latest')}
                       className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                         sortOrder === option.value
                           ? 'bg-orange-600 text-white'

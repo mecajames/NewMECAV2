@@ -540,7 +540,7 @@ export default function EventDirectorApplicationDetailPage() {
       {/* Approve Modal */}
       {showApproveModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">Approve Application</h3>
             <p className="text-slate-300 mb-4">
               This will create a new Event Director profile for {application.full_name}.
@@ -569,7 +569,7 @@ export default function EventDirectorApplicationDetailPage() {
       {/* Reject Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-4">Reject Application</h3>
             <p className="text-slate-300 mb-4">
               Are you sure you want to reject this application from {application.full_name}?

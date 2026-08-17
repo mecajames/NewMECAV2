@@ -892,7 +892,7 @@ export default function TeamPublicProfilePage() {
           onClick={() => setShowJoinModal(false)}
         >
           <div
-            className="bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl"
+            className="bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">

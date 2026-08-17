@@ -2886,7 +2886,7 @@ export default function MyMecaDashboardPage() {
           {/* Change Role Modal */}
           {showRoleModal && selectedMember && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-800 rounded-xl max-w-md w-full">
+              <div className="bg-slate-800 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between p-6 border-b border-slate-700">
                   <h3 className="text-xl font-bold text-white">Change Role</h3>
                   <button
@@ -2948,7 +2948,7 @@ export default function MyMecaDashboardPage() {
           {/* Transfer Ownership Modal */}
           {showTransferOwnershipModal && selectedMember && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-800 rounded-xl max-w-md w-full">
+              <div className="bg-slate-800 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between p-6 border-b border-slate-700">
                   <h3 className="text-xl font-bold text-white">Transfer Ownership</h3>
                   <button
@@ -3007,7 +3007,7 @@ export default function MyMecaDashboardPage() {
           {/* Invite Member Modal */}
           {showInviteModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-800 rounded-xl max-w-md w-full">
+              <div className="bg-slate-800 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between p-6 border-b border-slate-700">
                   <h3 className="text-xl font-bold text-white">Invite Member by MECA ID</h3>
                   <button
@@ -5141,7 +5141,7 @@ export default function MyMecaDashboardPage() {
         {/* Disable Auto-Renewal Modal */}
         {showDisableAutoRenewalModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-white">Disable Auto-Renewal</h3>
                 <button

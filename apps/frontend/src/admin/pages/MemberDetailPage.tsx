@@ -1397,7 +1397,7 @@ export default function MemberDetailPage() {
           const isProtected = String(member.meca_id) === '202401';
           return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-md border border-slate-700">
+            <div className="bg-slate-800 rounded-xl shadow-xl w-full max-w-md border border-slate-700 max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-slate-700">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Shield className="h-5 w-5 text-orange-500" />
@@ -1534,8 +1534,8 @@ export default function MemberDetailPage() {
 
         {/* Send Message Modal */}
         {showMessageModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold text-white mb-4">
                 Send Message to {member.first_name} {member.last_name}
               </h2>
@@ -1595,8 +1595,8 @@ export default function MemberDetailPage() {
 
         {/* Password Reset Modal */}
         {showPasswordResetModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="h-6 w-6 text-orange-500" />
                 <h2 className="text-2xl font-bold text-white">
@@ -3737,8 +3737,8 @@ function MediaGalleryTab({ member }: { member: Profile }) {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-500/20 rounded-full">
                 <AlertTriangle className="h-6 w-6 text-red-500" />
@@ -4709,8 +4709,8 @@ function TeamsTab({ member, businessMembershipData }: {
 
       {/* Add Member Modal */}
       {showAddMemberModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4">Add Team Member</h3>
             <div className="space-y-4">
               <div>
@@ -4797,8 +4797,8 @@ function TeamsTab({ member, businessMembershipData }: {
 
       {/* Transfer Ownership Modal */}
       {showTransferModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4">Transfer Team Ownership</h3>
             <div className="space-y-4">
               <p className="text-gray-400 text-sm">
@@ -4846,8 +4846,8 @@ function TeamsTab({ member, businessMembershipData }: {
 
       {/* Delete Team Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
                 <AlertTriangle className="h-6 w-6 text-red-500" />
@@ -6503,8 +6503,8 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
 
       {/* Edit Team Name Modal */}
       {showTeamNameModal && editingMembership && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-white mb-4">
               Edit Team Name
             </h2>
@@ -7049,8 +7049,8 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
 
       {/* Super Admin MECA ID Override Modal */}
       {showMecaIdOverrideModal && overrideMembership && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-purple-500/30">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-purple-500/30 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-2 mb-4">
               <Shield className="text-purple-400" size={24} />
               <h3 className="text-lg font-bold text-white">Super Admin: Override MECA ID</h3>
@@ -7146,8 +7146,8 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
 
       {/* Auto-Renewal Cancellation Modal (Admin can only cancel, not enable) */}
       {showAutoRenewalModal && autoRenewalMembership && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-600">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-slate-600 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-4">Cancel Auto-Renewal</h3>
 
             <div className="space-y-4">
@@ -7249,7 +7249,7 @@ function MembershipsTab({ member, onOpenManualRenewal, onOpenAssignSubscription 
           membership PAID, generates Order + Invoice, and audit-logs. */}
       {applyPaymentMembership && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-white font-bold text-lg mb-1">Record Payment</h3>
             <p className="text-slate-400 text-sm mb-4">
               Record a payment on <span className="text-white">{applyPaymentMembership.membershipTypeConfig?.name || 'this membership'}</span> via

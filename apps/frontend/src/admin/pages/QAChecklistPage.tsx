@@ -444,7 +444,7 @@ export default function QAChecklistPage() {
         {/* Edit Round Modal */}
         {editingRoundId && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-white font-bold text-lg mb-4">Edit Round</h3>
               <div className="space-y-4">
                 <div>

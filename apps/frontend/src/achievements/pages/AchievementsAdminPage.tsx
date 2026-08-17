@@ -1538,7 +1538,7 @@ export default function AchievementsAdminPage() {
         {/* Re-check Results Modal */}
         {showRecheckModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-slate-700 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-orange-500" />
@@ -1665,7 +1665,7 @@ export default function AchievementsAdminPage() {
         {/* Repair Values Modal */}
         {showRepairModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-slate-700 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Wrench className="h-5 w-5 text-amber-500" />
@@ -1954,8 +1954,8 @@ export default function AchievementsAdminPage() {
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && recipientToDelete && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4 border border-slate-700">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">

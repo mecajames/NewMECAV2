@@ -826,7 +826,7 @@ export default function QARoundDetailPage() {
         {/* Create Next Round Modal */}
         {showCreateNextModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-white font-bold text-lg mb-2">Create Next Round</h3>
               <p className="text-slate-400 text-sm mb-4">
                 This will create a new round containing only the {failedItems.length} failed item{failedItems.length !== 1 ? 's' : ''} from this round for re-testing.
@@ -927,7 +927,7 @@ export default function QARoundDetailPage() {
         {/* Add Custom Item Modal */}
         {showAddCustomModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-white font-bold text-lg mb-4">Add Custom Item</h3>
               <div className="space-y-3">
                 <div>
@@ -996,7 +996,7 @@ export default function QARoundDetailPage() {
         {/* Edit Round Modal */}
         {showEditModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-white font-bold text-lg mb-4">Edit Round</h3>
               <div className="space-y-4">
                 <div>
@@ -1031,7 +1031,7 @@ export default function QARoundDetailPage() {
         {/* Fix Response Modal */}
         {fixingResponseId && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <h3 className="text-white font-bold text-lg mb-4">Submit Developer Fix</h3>
               <div className="space-y-4">
                 <div>
