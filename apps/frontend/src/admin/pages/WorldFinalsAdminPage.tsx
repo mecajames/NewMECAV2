@@ -12,6 +12,7 @@ import {
   type QualificationStats
 } from '@/api-client/world-finals.api-client';
 import { seasonsApi } from '@/seasons/seasons.api-client';
+import { SearchableSelect } from '@/shared/components';
 import { competitionClassesApi, type CompetitionClass } from '@/competition-classes/competition-classes.api-client';
 import { eventsApi, type Event as MecaEvent } from '@/events/events.api-client';
 
@@ -524,13 +525,20 @@ export default function WorldFinalsAdminPage() {
                   <p className="text-red-300 text-sm mt-3">{eventError}</p>
                 ) : seasonEvents.length > 0 ? (
                   <div className="flex flex-wrap gap-2 mt-4">
-                    <select value={eventCandidateId} onChange={e => setEventCandidateId(e.target.value)}
-                      className="min-w-[280px] px-3 py-2 bg-slate-800 border border-amber-600/50 rounded-lg text-white">
-                      <option value="">Select an existing season event...</option>
-                      {seasonEvents.filter(event => event.event_type !== 'world_finals').map(event => (
-                        <option key={event.id} value={event.id}>{event.title} ({new Date(event.event_date).toLocaleDateString()})</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      className="min-w-[280px] max-w-xl flex-1"
+                      buttonClassName="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-800 border border-amber-600/50 rounded-lg text-white text-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      value={eventCandidateId}
+                      onChange={setEventCandidateId}
+                      placeholder="Select an existing season event..."
+                      searchPlaceholder="Search events by name or date…"
+                      options={seasonEvents
+                        .filter(event => event.event_type !== 'world_finals')
+                        .map(event => ({
+                          value: event.id,
+                          label: `${event.title} (${new Date(event.event_date).toLocaleDateString()})`,
+                        }))}
+                    />
                     <button onClick={handleDesignateWorldFinalsEvent} disabled={!eventCandidateId}
                       className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg">
                       <CalendarPlus className="h-4 w-4" />Use as World Finals Event
