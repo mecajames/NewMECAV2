@@ -1017,6 +1017,20 @@ export class WorldFinalsService {
 
   async upsertRegistrationConfig(seasonId: string, data: Record<string, any>): Promise<WorldFinalsRegistrationConfig> {
     const em = this.em.fork();
+    if (data.isActive === true) {
+      const finalsEvents = await em.find(Event, { season: seasonId, eventType: 'world_finals' as any });
+      if (finalsEvents.length === 0) {
+        throw new BadRequestException('Add or designate a World Finals event before activating pre-registration');
+      }
+      const activePackage = await em.findOne(WorldFinalsPackage, {
+        seasonId,
+        wfEventId: { $in: finalsEvents.map(event => event.id) },
+        isActive: true,
+      });
+      if (!activePackage) {
+        throw new BadRequestException('Add at least one active package assigned to a World Finals event before activating pre-registration');
+      }
+    }
     let config = await em.findOne(WorldFinalsRegistrationConfig, { seasonId });
     if (!config) {
       config = new WorldFinalsRegistrationConfig();
@@ -1059,6 +1073,22 @@ export class WorldFinalsService {
 
   // --- Packages (multiple per event) ---
 
+  private async requireWorldFinalsEvent(em: EntityManager, seasonId: string, eventId?: string | null): Promise<Event> {
+    if (!eventId) {
+      throw new BadRequestException('Select a World Finals event before saving');
+    }
+
+    const event = await em.findOne(Event, {
+      id: eventId,
+      season: seasonId,
+      eventType: 'world_finals' as any,
+    });
+    if (!event) {
+      throw new BadRequestException('The selected event is not a World Finals event in this season');
+    }
+    return event;
+  }
+
   async getPackages(seasonId: string, eventId?: string): Promise<WorldFinalsPackage[]> {
     const em = this.em.fork();
     const filter: any = { seasonId };
@@ -1076,6 +1106,7 @@ export class WorldFinalsService {
 
   async createPackage(data: any): Promise<WorldFinalsPackage> {
     const em = this.em.fork();
+    await this.requireWorldFinalsEvent(em, data.seasonId, data.wfEventId);
     const pkg = new WorldFinalsPackage();
     // Explicit assignment — WorldFinalsPackage has serializedName on
     // season_id, wf_event_id, base_price_early, base_price_regular,
@@ -1115,6 +1146,12 @@ export class WorldFinalsService {
     const em = this.em.fork();
     const pkg = await em.findOne(WorldFinalsPackage, { id: packageId });
     if (!pkg) throw new NotFoundException('Package not found');
+
+    const seasonId = data.seasonId || pkg.seasonId;
+    if (data.wfEventId !== undefined) {
+      await this.requireWorldFinalsEvent(em, seasonId, data.wfEventId);
+      pkg.wfEventId = data.wfEventId;
+    }
 
     // Explicit assignment — WorldFinalsPackage has serializedName on most fields
     if (data.name !== undefined) pkg.name = data.name;
@@ -1165,8 +1202,9 @@ export class WorldFinalsService {
     return em.find(WorldFinalsAddonItem, filter, { orderBy: { displayOrder: 'ASC' } });
   }
 
-  async createAddonItem(data: Partial<WorldFinalsAddonItem>): Promise<WorldFinalsAddonItem> {
+  async createAddonItem(data: any): Promise<WorldFinalsAddonItem> {
     const em = this.em.fork();
+    await this.requireWorldFinalsEvent(em, data.seasonId, data.wfEventId);
     const item = new WorldFinalsAddonItem();
     // Explicit assignment — entity has serializedName on season_id, wf_event_id,
     // max_quantity, display_order, is_active. em.assign() can mis-map.
@@ -1182,10 +1220,14 @@ export class WorldFinalsService {
     return item;
   }
 
-  async updateAddonItem(id: string, data: Partial<WorldFinalsAddonItem>): Promise<WorldFinalsAddonItem> {
+  async updateAddonItem(id: string, data: any): Promise<WorldFinalsAddonItem> {
     const em = this.em.fork();
     const item = await em.findOne(WorldFinalsAddonItem, { id });
     if (!item) throw new NotFoundException('Add-on item not found');
+    const seasonId = data.seasonId || item.seasonId;
+    if (data.wfEventId !== undefined) {
+      await this.requireWorldFinalsEvent(em, seasonId, data.wfEventId);
+    }
     if (data.seasonId !== undefined) item.seasonId = data.seasonId;
     if (data.wfEventId !== undefined) item.wfEventId = data.wfEventId;
     if (data.name !== undefined) item.name = data.name;
@@ -1316,6 +1358,7 @@ export class WorldFinalsService {
 
     return {
       competitor: {
+        userId: profile?.id,
         mecaId: String(qualification.mecaId),
         name: qualification.competitorName,
         email: profile?.email || '',
@@ -1559,6 +1602,9 @@ export class WorldFinalsService {
     const paidWhereClause = eventId
       ? 'season_id = ? AND wf_event_id = ? AND payment_status = \'paid\''
       : 'season_id = ? AND payment_status = \'paid\'';
+    const packageWhereClause = eventId
+      ? 'fr.season_id = ? AND fr.wf_event_id = ? AND fr.registration_status != \'cancelled\''
+      : 'fr.season_id = ? AND fr.registration_status != \'cancelled\'';
     const params = eventId ? [seasonId, eventId] : [seasonId];
 
     const [stats] = await conn.execute(
@@ -1596,7 +1642,7 @@ export class WorldFinalsService {
         COALESCE(SUM(fr.total_amount) FILTER (WHERE fr.payment_status = 'paid'), 0) as revenue
       FROM finals_registrations fr
       LEFT JOIN world_finals_packages p ON p.id = fr.package_id
-      WHERE fr.${whereClause}
+      WHERE ${packageWhereClause}
       GROUP BY fr.package_id, p.name ORDER BY count DESC`,
       params
     );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Trophy, Send, ArrowLeft, RefreshCw,
   Settings, Package, Plus, Trash2, Save, DollarSign, BarChart3,
-  Edit2, X, Eye, Upload, Image
+  Edit2, X, Eye, Upload, Image, AlertTriangle, CalendarPlus
 } from 'lucide-react';
 import { uploadFile } from '@/api-client/uploads.api-client';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/api-client/world-finals.api-client';
 import { seasonsApi } from '@/seasons/seasons.api-client';
 import { competitionClassesApi, type CompetitionClass } from '@/competition-classes/competition-classes.api-client';
+import { eventsApi, type Event as MecaEvent } from '@/events/events.api-client';
 
 type AdminTab = 'qualifications' | 'config' | 'packages' | 'addons' | 'stats';
 
@@ -79,6 +80,11 @@ export default function WorldFinalsAdminPage() {
 
   // World Finals events loaded from events system (event_type='world_finals')
   const [events, setEvents] = useState<any[]>([]);
+  const [seasonEvents, setSeasonEvents] = useState<MecaEvent[]>([]);
+  const [eventCandidateId, setEventCandidateId] = useState('');
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventError, setEventError] = useState('');
+  const [dataErrors, setDataErrors] = useState<Record<string, string>>({});
 
   // Selected event for packages/addons/stats filtering
   const [selectedEventId, setSelectedEventId] = useState<string>('');
@@ -112,6 +118,7 @@ export default function WorldFinalsAdminPage() {
       fetchData();
       fetchConfig();
       fetchEvents();
+      fetchSeasonEvents();
       fetchPackages();
       fetchAddonItems();
       fetchPreRegStats();
@@ -181,11 +188,37 @@ export default function WorldFinalsAdminPage() {
   };
 
   const fetchEvents = async () => {
-    try { setEvents(await worldFinalsApi.getWorldFinalsEvents(selectedSeasonId)); } catch { /* ignore */ }
+    setEventsLoading(true);
+    setEventError('');
+    try {
+      const data = await worldFinalsApi.getWorldFinalsEvents(selectedSeasonId);
+      setEvents(data);
+      setSelectedEventId(current => {
+        if (data.length === 1 && !current) return data[0].id;
+        return current && !data.some((event: any) => event.id === current) ? '' : current;
+      });
+    } catch (err: any) {
+      setEvents([]);
+      setEventError(err?.response?.data?.message || 'World Finals events could not be loaded.');
+    } finally { setEventsLoading(false); }
+  };
+
+  const fetchSeasonEvents = async () => {
+    try {
+      const data = await eventsApi.getAllBySeason(selectedSeasonId, 1, 500);
+      setSeasonEvents(data);
+      setEventCandidateId(current => data.some(event => event.id === current) ? current : '');
+    } catch { setSeasonEvents([]); }
   };
 
   const fetchPackages = async () => {
-    try { setPackages(await worldFinalsApi.getPackages(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
+    try {
+      setPackages(await worldFinalsApi.getPackages(selectedSeasonId, selectedEventId || undefined));
+      setDataErrors(prev => ({ ...prev, packages: '' }));
+    } catch (err: any) {
+      setPackages([]);
+      setDataErrors(prev => ({ ...prev, packages: err?.response?.data?.message || 'Packages could not be loaded.' }));
+    }
   };
 
   const fetchSeasonClasses = async () => {
@@ -196,11 +229,34 @@ export default function WorldFinalsAdminPage() {
   };
 
   const fetchAddonItems = async () => {
-    try { setAddonItems(await worldFinalsApi.getAddonItems(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
+    try {
+      setAddonItems(await worldFinalsApi.getAddonItems(selectedSeasonId, selectedEventId || undefined));
+      setDataErrors(prev => ({ ...prev, addons: '' }));
+    } catch (err: any) {
+      setAddonItems([]);
+      setDataErrors(prev => ({ ...prev, addons: err?.response?.data?.message || 'Add-ons could not be loaded.' }));
+    }
   };
 
   const fetchPreRegStats = async () => {
-    try { setPreRegStats(await worldFinalsApi.getPreRegistrationStats(selectedSeasonId, selectedEventId || undefined)); } catch { /* ignore */ }
+    try {
+      setPreRegStats(await worldFinalsApi.getPreRegistrationStats(selectedSeasonId, selectedEventId || undefined));
+      setDataErrors(prev => ({ ...prev, stats: '' }));
+    } catch (err: any) {
+      setPreRegStats(null);
+      setDataErrors(prev => ({ ...prev, stats: err?.response?.data?.message || 'Registration stats could not be loaded.' }));
+    }
+  };
+
+  const handleDesignateWorldFinalsEvent = async () => {
+    if (!eventCandidateId) return;
+    try {
+      await eventsApi.update(eventCandidateId, { event_type: 'world_finals' });
+      await Promise.all([fetchEvents(), fetchSeasonEvents()]);
+      setSelectedEventId(eventCandidateId);
+    } catch (err: any) {
+      alert('Unable to designate event: ' + (err?.response?.data?.message || err.message));
+    }
   };
 
   // --- Qualification handlers ---
@@ -243,6 +299,21 @@ export default function WorldFinalsAdminPage() {
 
   // --- Config handlers ---
   const handleSaveConfig = async () => {
+    const open = new Date(configForm.registrationOpenDate);
+    const early = new Date(configForm.earlyBirdDeadline);
+    const close = new Date(configForm.registrationCloseDate);
+    if (![open, early, close].every(date => !Number.isNaN(date.getTime()))) {
+      alert('Registration open, early-bird, and close dates are required.');
+      return;
+    }
+    if (!(open < early && early < close)) {
+      alert('Dates must be ordered: registration opens, then early-bird ends, then registration closes.');
+      return;
+    }
+    if (configForm.isActive && events.length === 0) {
+      alert('Configure at least one World Finals event before activating pre-registration.');
+      return;
+    }
     setSavingConfig(true);
     try {
       await worldFinalsApi.upsertRegistrationConfig(selectedSeasonId, {
@@ -278,6 +349,7 @@ export default function WorldFinalsAdminPage() {
   };
 
   const startEditPackage = (pkg: any) => {
+    if (pkg.wf_event_id) setSelectedEventId(pkg.wf_event_id);
     setPkgForm({
       name: pkg.name || '', description: pkg.description || '',
       basePriceEarly: String(pkg.base_price_early), basePriceRegular: String(pkg.base_price_regular),
@@ -315,6 +387,7 @@ export default function WorldFinalsAdminPage() {
 
   const handleSavePackage = async () => {
     if (!pkgForm.name) { alert('Package name is required.'); return; }
+    if (!selectedEventId) { alert('Select a World Finals event before saving a package.'); return; }
     setSavingPkg(true);
     try {
       const payload = {
@@ -344,6 +417,7 @@ export default function WorldFinalsAdminPage() {
 
   // --- Add-on handlers ---
   const handleSaveAddon = async () => {
+    if (!selectedEventId) { alert('Select a World Finals event before saving an add-on.'); return; }
     setSavingAddon(true);
     try {
       const payload = { seasonId: selectedSeasonId, name: addonForm.name, description: addonForm.description || null,
@@ -396,6 +470,10 @@ export default function WorldFinalsAdminPage() {
           </button>
         )}
       </div>
+      {eventError && <p className="text-red-400 text-sm mt-3">{eventError}</p>}
+      {!eventsLoading && !eventError && events.length === 0 && (
+        <p className="text-amber-300 text-sm mt-3">No events are marked as World Finals for this season.</p>
+      )}
     </div>
   );
 
@@ -430,6 +508,43 @@ export default function WorldFinalsAdminPage() {
             {selectedSeason?.qualification_points_threshold && <span className="bg-green-500/20 text-green-400 px-3 py-1 rounded-lg text-sm">Threshold: {selectedSeason.qualification_points_threshold} pts</span>}
           </div>
         </div>
+
+        {/* The package system is keyed to events from Event Management. Make that
+            dependency visible and repairable instead of leaving empty selectors. */}
+        {!eventsLoading && events.length === 0 && (
+          <div className="bg-amber-950/40 border border-amber-600/50 rounded-xl p-5 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-amber-200 font-semibold">World Finals event connection required</h3>
+                <p className="text-amber-100/70 text-sm mt-1">
+                  Packages, add-ons, registration, and event-level stats need an Event Management record in this season with its event type set to World Finals.
+                </p>
+                {eventError ? (
+                  <p className="text-red-300 text-sm mt-3">{eventError}</p>
+                ) : seasonEvents.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <select value={eventCandidateId} onChange={e => setEventCandidateId(e.target.value)}
+                      className="min-w-[280px] px-3 py-2 bg-slate-800 border border-amber-600/50 rounded-lg text-white">
+                      <option value="">Select an existing season event...</option>
+                      {seasonEvents.filter(event => event.event_type !== 'world_finals').map(event => (
+                        <option key={event.id} value={event.id}>{event.title} ({new Date(event.event_date).toLocaleDateString()})</option>
+                      ))}
+                    </select>
+                    <button onClick={handleDesignateWorldFinalsEvent} disabled={!eventCandidateId}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg">
+                      <CalendarPlus className="h-4 w-4" />Use as World Finals Event
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-amber-100/70 text-sm mt-3">
+                    Create the event in Event Management first and choose “World Finals Event” as its event type, then return here.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 border-b border-slate-700 overflow-x-auto items-center">
@@ -747,6 +862,7 @@ export default function WorldFinalsAdminPage() {
         {activeTab === 'packages' && (
           <div className="space-y-6">
             <EventSelector />
+            {dataErrors.packages && <div className="bg-red-950/40 border border-red-700 text-red-300 rounded-lg p-4">{dataErrors.packages}</div>}
             {/* Package List */}
             {!editingPackage && (
               <>
@@ -772,7 +888,8 @@ export default function WorldFinalsAdminPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm">
                         <Eye className="h-4 w-4" />Preview Form</a>
                     )}
-                    <button onClick={startNewPackage} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-lg">
+                    <button onClick={startNewPackage} disabled={!selectedEventId} title={!selectedEventId ? 'Select a World Finals event first' : undefined}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg">
                       <Plus className="h-4 w-4" />Add Package</button>
                   </div>
                 </div>
@@ -784,6 +901,7 @@ export default function WorldFinalsAdminPage() {
                       <div>
                         <h4 className="text-lg font-semibold text-white">{pkg.name}</h4>
                         {pkg.description && <p className="text-gray-400 text-sm">{pkg.description}</p>}
+                        {!pkg.wf_event_id && <p className="text-amber-400 text-xs mt-1">Unassigned — edit this package and select an event before registration opens.</p>}
                       </div>
                       <div className="flex gap-2">
                         <span className={`px-2 py-1 rounded text-xs ${pkg.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>{pkg.is_active ? 'Active' : 'Inactive'}</span>
@@ -904,6 +1022,7 @@ export default function WorldFinalsAdminPage() {
         {activeTab === 'addons' && (
           <div className="space-y-6">
             <EventSelector />
+            {dataErrors.addons && <div className="bg-red-950/40 border border-red-700 text-red-300 rounded-lg p-4">{dataErrors.addons}</div>}
             <div className="bg-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">{editingAddon ? 'Edit' : 'Add'} Item</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -918,7 +1037,7 @@ export default function WorldFinalsAdminPage() {
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
               </div>
               <div className="flex gap-3">
-                <button onClick={handleSaveAddon} disabled={savingAddon || !addonForm.name}
+                <button onClick={handleSaveAddon} disabled={savingAddon || !addonForm.name || !selectedEventId}
                   className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg">
                   <Save className="h-4 w-4" />{editingAddon ? 'Update' : 'Add'}</button>
                 {editingAddon && <button onClick={() => { setEditingAddon(null); setAddonForm({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true }); }}
@@ -938,7 +1057,7 @@ export default function WorldFinalsAdminPage() {
                     <td className="px-6 py-3 text-green-400">${Number(item.price).toFixed(2)}</td>
                     <td className="px-6 py-3 text-white">{item.max_quantity}</td>
                     <td className="px-6 py-3 flex gap-2">
-                      <button onClick={() => { setEditingAddon(item.id); setAddonForm({ name: item.name, description: item.description || '', price: String(item.price), maxQuantity: String(item.max_quantity), displayOrder: String(item.display_order), isActive: item.is_active }); }} className="p-1 text-gray-400 hover:text-white"><Edit2 className="h-4 w-4" /></button>
+                      <button onClick={() => { if (item.wf_event_id) setSelectedEventId(item.wf_event_id); setEditingAddon(item.id); setAddonForm({ name: item.name, description: item.description || '', price: String(item.price), maxQuantity: String(item.max_quantity), displayOrder: String(item.display_order), isActive: item.is_active }); }} className="p-1 text-gray-400 hover:text-white"><Edit2 className="h-4 w-4" /></button>
                       <button onClick={async () => { if (confirm('Delete?')) { await worldFinalsApi.deleteAddonItem(item.id); await fetchAddonItems(); }}} className="p-1 text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                     </td></tr>
                   ))}
@@ -952,6 +1071,7 @@ export default function WorldFinalsAdminPage() {
         {activeTab === 'stats' && (
           <div className="space-y-6">
             <EventSelector />
+            {dataErrors.stats && <div className="bg-red-950/40 border border-red-700 text-red-300 rounded-lg p-4">{dataErrors.stats}</div>}
             {preRegStats && preRegStats.totalRegistrations > 0 ? (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

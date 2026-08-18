@@ -486,6 +486,7 @@ export class WorldFinalsController {
     // Find the selected package across all event groups
     let selectedPkg: any = null;
     let selectedEvent: any = null;
+    let selectedGroup: any = null;
     let pricingTier = 'regular';
     for (const group of validation.eventGroups) {
       for (const evt of group.events) {
@@ -493,6 +494,7 @@ export class WorldFinalsController {
         if (pkg) {
           selectedPkg = pkg;
           selectedEvent = evt;
+          selectedGroup = group;
           pricingTier = evt.pricingTier;
           break;
         }
@@ -502,26 +504,71 @@ export class WorldFinalsController {
     if (!selectedPkg) throw new ForbiddenException('Invalid package selection');
     if (selectedPkg.alreadyRegistered) throw new ForbiddenException('You have already registered for this package');
 
-    // Separate standard vs premium classes
-    const standardClasses = (data.classes || []).filter((c: any) => !c.isPremium);
-    const premiumClasses = (data.classes || []).filter((c: any) => c.isPremium);
+    // Never trust browser-submitted eligibility or prices. Resolve every class
+    // and add-on against the server-side package/config returned by validation.
+    const eligibleClasses = new Map(
+      (selectedPkg.eligibleClasses || []).map((c: any) => [c.class_name || c.className, c]),
+    );
+    const requestedClasses = Array.isArray(data.classes) ? data.classes : [];
+    if (requestedClasses.length === 0) throw new ForbiddenException('Select at least one eligible class');
+    const canonicalClasses = requestedClasses.map((requested: any) => {
+      const eligible: any = eligibleClasses.get(requested.className);
+      if (!eligible) throw new ForbiddenException(`Class is not eligible for this package: ${requested.className}`);
+      return {
+        className: eligible.class_name || eligible.className,
+        format: eligible.format || '',
+        isPremium: Boolean(eligible.is_premium ?? eligible.isPremium),
+        premiumPrice: Number(eligible.premium_price ?? eligible.premiumPrice ?? 0),
+      };
+    });
+    if (new Set(canonicalClasses.map((c: any) => c.className)).size !== canonicalClasses.length) {
+      throw new ForbiddenException('A class may only be selected once');
+    }
+
+    const allowedAddons = new Map((selectedGroup?.addonItems || []).map((item: any) => [item.id, item]));
+    const canonicalAddons = (Array.isArray(data.addonItems) ? data.addonItems : []).map((requested: any) => {
+      const item: any = allowedAddons.get(requested.itemId);
+      const quantity = Number(requested.quantity);
+      if (!item) throw new ForbiddenException('Invalid add-on selection');
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(item.max_quantity ?? item.maxQuantity ?? 1)) {
+        throw new ForbiddenException(`Invalid quantity for add-on: ${item.name}`);
+      }
+      return { itemId: item.id, name: item.name, quantity, price: Number(item.price) };
+    });
+    if (new Set(canonicalAddons.map((a: any) => a.itemId)).size !== canonicalAddons.length) {
+      throw new ForbiddenException('An add-on may only be selected once');
+    }
+
+    const standardClasses = canonicalClasses.filter((c: any) => !c.isPremium);
+    const premiumClasses = canonicalClasses.filter((c: any) => c.isPremium);
 
     // Calculate pricing
-    const extraTshirts = data.extraTshirts || [];
+    const extraTshirts = Array.isArray(data.extraTshirts) ? data.extraTshirts : [];
+    const allowedShirtSizes = new Set(validation.config.available_tshirt_sizes || []);
+    const extraShirtCount = extraTshirts.reduce((total: number, shirt: any) => {
+      const quantity = Number(shirt.quantity);
+      if (!validation.config.collect_extra_tshirts || !allowedShirtSizes.has(shirt.size) || !Number.isInteger(quantity) || quantity < 1) {
+        throw new ForbiddenException('Invalid extra T-shirt selection');
+      }
+      return total + quantity;
+    }, 0);
+    if (extraShirtCount > Number(validation.config.max_extra_tshirts || 0)) {
+      throw new ForbiddenException('Extra T-shirt quantity exceeds the allowed maximum');
+    }
     const extraTshirtPrice = Number(validation.config.extra_tshirt_price || 25);
     const pricing = this.worldFinalsService.calculatePreRegistrationPricing(
       selectedPkg,
       pricingTier,
       standardClasses.length,
       premiumClasses.map((c: any) => ({ className: c.className, price: c.premiumPrice || 0 })),
-      data.addonItems || [],
+      canonicalAddons,
       extraTshirts,
       extraTshirtPrice,
     );
 
     // Create registration
     const email = data.email || validation.competitor.email;
-    const eventId = data.eventId || selectedEvent?.id;
+    const eventId = selectedEvent?.id;
     const registration = await this.worldFinalsService.createPreRegistration({
       token: data.token,
       packageId: data.packageId,
@@ -532,8 +579,8 @@ export class WorldFinalsController {
       firstName: data.firstName || validation.competitor.firstName,
       lastName: data.lastName || validation.competitor.lastName,
       phone: data.phone,
-      classes: data.classes || [],
-      addonItems: data.addonItems || [],
+      classes: canonicalClasses,
+      addonItems: canonicalAddons,
       tshirtSize: data.tshirtSize,
       ringSize: data.ringSize,
       extraTshirts: extraTshirts.length > 0 ? extraTshirts : undefined,
@@ -545,7 +592,7 @@ export class WorldFinalsController {
       addonsAmount: pricing.addonsTotal + pricing.extraTshirtTotal,
       totalAmount: pricing.total,
       notes: data.notes,
-      userId: data.userId,
+      userId: validation.competitor.userId,
     });
 
     // Create Stripe payment intent

@@ -11,11 +11,14 @@ import { Notification } from '../../notifications/notifications.entity';
 import { EmailService } from '../../email/email.service';
 import { createMockEntityManager } from '../../../test/mocks/mikro-orm.mock';
 import { EntityManager } from '@mikro-orm/core';
+import { AdminNotificationsService } from '../../admin-notifications/admin-notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { Event } from '../../events/events.entity';
 
 describe('WorldFinalsService', () => {
   let service: WorldFinalsService;
   let mockEm: jest.Mocked<EntityManager>;
-  let mockEmailService: { sendEmail: jest.Mock };
+  let mockEmailService: { sendEmail: jest.Mock; sendWorldFinalsQualificationEmail: jest.Mock };
 
   const TEST_USER_ID = 'user_test_123';
   const TEST_SEASON_ID = 'season_test_123';
@@ -100,6 +103,7 @@ describe('WorldFinalsService', () => {
     mockEm = createMockEntityManager();
     mockEmailService = {
       sendEmail: jest.fn().mockResolvedValue(undefined),
+      sendWorldFinalsQualificationEmail: jest.fn().mockResolvedValue({ success: true }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -107,6 +111,8 @@ describe('WorldFinalsService', () => {
         WorldFinalsService,
         { provide: 'EntityManager', useValue: mockEm },
         { provide: EmailService, useValue: mockEmailService },
+        { provide: AdminNotificationsService, useValue: { notifyNewEventRegistration: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { createForUser: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 
@@ -115,6 +121,27 @@ describe('WorldFinalsService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('World Finals package event assignment', () => {
+    it('rejects packages that are not assigned to an event', async () => {
+      await expect(service.createPackage({ seasonId: TEST_SEASON_ID, name: 'SPL' }))
+        .rejects.toThrow('Select a World Finals event before saving');
+    });
+
+    it('rejects an event that is not a World Finals event in the selected season', async () => {
+      mockEm.findOne.mockResolvedValueOnce(null);
+      await expect(service.createPackage({
+        seasonId: TEST_SEASON_ID,
+        wfEventId: 'event_123',
+        name: 'SPL',
+      })).rejects.toThrow('The selected event is not a World Finals event in this season');
+      expect(mockEm.findOne).toHaveBeenCalledWith(Event, {
+        id: 'event_123',
+        season: TEST_SEASON_ID,
+        eventType: 'world_finals',
+      });
+    });
   });
 
   // ============================================
@@ -353,7 +380,7 @@ describe('WorldFinalsService', () => {
       expect(mockEm.flush).toHaveBeenCalled();
     });
 
-    it('should send notification and email when creating new qualification with userId', async () => {
+    it('should create an in-app notification without emailing before invitations are sent', async () => {
       const season = createMockSeason({ qualificationPointsThreshold: 100 });
 
       mockEm.findOne
@@ -370,8 +397,8 @@ describe('WorldFinalsService', () => {
 
       // Should persist both the qualification and the notification
       expect(mockEm.persist).toHaveBeenCalled();
-      // Should attempt to send email
-      expect(mockEmailService.sendEmail).toHaveBeenCalled();
+      // Qualification emails are intentionally deferred to Send Invite / Send All Pending.
+      expect(mockEmailService.sendWorldFinalsQualificationEmail).not.toHaveBeenCalled();
     });
 
     it('should skip notification when no userId is provided', async () => {
@@ -829,10 +856,8 @@ describe('WorldFinalsService', () => {
       });
 
       expect(result).toBeDefined();
-      expect(mockEm.assign).toHaveBeenCalledWith(reg, {
-        division: 'Amateur',
-        competitionClass: 'SQ',
-      });
+      expect(reg.division).toBe('Amateur');
+      expect(reg.competitionClass).toBe('SQ');
       expect(mockEm.flush).toHaveBeenCalled();
     });
 
@@ -842,10 +867,8 @@ describe('WorldFinalsService', () => {
 
       await service.updateRegistration(TEST_REGISTRATION_ID, TEST_USER_ID, {});
 
-      expect(mockEm.assign).toHaveBeenCalledWith(reg, {
-        division: 'Pro',
-        competitionClass: 'SQL 1',
-      });
+      expect(reg.division).toBe('Pro');
+      expect(reg.competitionClass).toBe('SQL 1');
     });
   });
 
