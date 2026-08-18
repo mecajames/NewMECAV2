@@ -6,6 +6,7 @@ import { WorldFinalsService } from '../world-finals.service';
 import { SupabaseAdminService } from '../../auth/supabase-admin.service';
 import { Profile } from '../../profiles/profiles.entity';
 import { UserRole } from '@newmeca/shared';
+import { StripeService } from '../../stripe/stripe.service';
 
 describe('WorldFinalsController', () => {
   let controller: WorldFinalsController;
@@ -85,6 +86,7 @@ describe('WorldFinalsController', () => {
       providers: [
         { provide: WorldFinalsService, useValue: mockWorldFinalsService },
         { provide: SupabaseAdminService, useValue: mockSupabaseAdmin },
+        { provide: StripeService, useValue: { createPaymentIntent: jest.fn() } },
         { provide: EntityManager, useValue: mockEm },
       ],
     }).compile();
