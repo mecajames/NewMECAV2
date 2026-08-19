@@ -26,7 +26,6 @@ import { userActivityApi } from '@/user-activity/user-activity.api-client';
 import { shopApi } from '@/shop/shop.api-client';
 import { ticketsApi } from '@/tickets/tickets.api-client';
 import { membershipsApi } from '@/memberships/memberships.api-client';
-import { qaApi } from '@/api-client/qa.api-client';
 import { SeasonSelect, useSeasonFilter } from '@/shared/components/SeasonSelect';
 
 type AdminView = 'overview' | 'events' | 'results' | 'pending-results' | 'users' | 'memberships' | 'rulebooks' | 'media' | 'settings' | 'hosting-requests' | 'class-mappings';
@@ -82,7 +81,6 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
     ticketsTotal: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [qaAssignments, setQaAssignments] = useState<any[]>([]);
   // Count of ED-submitted results awaiting class review — drives the overview
   // alert banner and the badge on the "Pending Results" tile.
   const [pendingResultsCount, setPendingResultsCount] = useState(0);
@@ -104,7 +102,6 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
   const { seasonId, setSeasonId, dateRange, loading: seasonsLoading } = useSeasonFilter();
 
   useEffect(() => {
-    fetchQaAssignments();
     fetchPendingResultsCount();
   }, []);
 
@@ -218,16 +215,6 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
       });
     } finally {
       if (requestToken === fetchStatsRequestRef.current) setLoading(false);
-    }
-  };
-
-  const fetchQaAssignments = async () => {
-    try {
-      const assignments = await qaApi.getMyAssignments();
-      // Only show incomplete assignments
-      setQaAssignments(assignments.filter((a: any) => a.status !== 'completed'));
-    } catch {
-      // QA module may not be set up yet, ignore
     }
   };
 
@@ -603,14 +590,6 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
             }]
           : []),
         {
-          icon: ClipboardCheck,
-          title: 'QA Testing Checklist',
-          description: 'Step-by-step site testing checklist for QA sign-off',
-          action: 'qa-checklist',
-          color: 'orange',
-          navigateTo: '/admin/qa-checklist',
-        },
-        {
           icon: FileText,
           title: 'Audit Log',
           description: 'View all results entry audit logs across all events',
@@ -973,42 +952,6 @@ export default function AdminDashboard({ initialView }: { initialView?: AdminVie
           </button>
         ))}
       </div>
-
-      {/* QA Assignments Banner */}
-      {qaAssignments.length > 0 && (
-        <div className="bg-orange-900/20 border border-orange-700 rounded-xl p-4 mb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <ClipboardCheck className="h-5 w-5 text-orange-500" />
-            <h3 className="text-orange-300 font-semibold">You have QA testing assigned to you</h3>
-          </div>
-          <div className="space-y-2">
-            {qaAssignments.map((a: any) => (
-              <button
-                key={a.id}
-                onClick={() => navigate(`/admin/qa-checklist/review/${a.id}`)}
-                className="w-full flex items-center justify-between bg-slate-800 hover:bg-slate-700 rounded-lg p-3 transition-colors"
-              >
-                <div className="text-left">
-                  <p className="text-white font-medium text-sm">{a.round.title} (v{a.round.versionNumber})</p>
-                  <p className="text-slate-400 text-xs">
-                    {a.counts.pass + a.counts.fail + a.counts.skip}/{a.counts.total} items tested
-                    {a.counts.fail > 0 && <span className="text-red-400 ml-2">{a.counts.fail} failed</span>}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-24 bg-slate-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-400"
-                      style={{ width: `${a.counts.total > 0 ? Math.round(((a.counts.pass + a.counts.fail + a.counts.skip) / a.counts.total) * 100) : 0}%` }}
-                    />
-                  </div>
-                  <span className="text-orange-400 text-sm font-medium">Start Review →</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Management Sections */}
       <h2 className="text-xl font-bold text-white mb-4">Management Sections</h2>

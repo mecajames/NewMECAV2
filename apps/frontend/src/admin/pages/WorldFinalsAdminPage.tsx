@@ -98,16 +98,18 @@ export default function WorldFinalsAdminPage() {
     name: '', description: '',
     basePriceEarly: '175', basePriceRegular: '200', includedClasses: '3',
     additionalClassPriceEarly: '75', additionalClassPriceRegular: '100',
-    displayOrder: '0', isActive: true,
+    displayOrder: '0', isActive: true, wfEventId: '',
     selectedClasses: [] as { className: string; format: string; isPremium: boolean; premiumPrice: string }[],
   });
   const [savingPkg, setSavingPkg] = useState(false);
 
   // Add-on items state
   const [addonItems, setAddonItems] = useState<any[]>([]);
-  const [addonForm, setAddonForm] = useState({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true });
+  const [addonForm, setAddonForm] = useState({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true, wfEventId: '', formats: [] as string[], classNames: [] as string[] });
   const [editingAddon, setEditingAddon] = useState<string | null>(null);
   const [savingAddon, setSavingAddon] = useState(false);
+  // "Add another World Finals event" panel in the connected-events bar
+  const [showAddEvent, setShowAddEvent] = useState(false);
 
   // Stats
   const [preRegStats, setPreRegStats] = useState<any>(null);
@@ -255,6 +257,8 @@ export default function WorldFinalsAdminPage() {
       await eventsApi.update(eventCandidateId, { event_type: 'world_finals' });
       await Promise.all([fetchEvents(), fetchSeasonEvents()]);
       setSelectedEventId(eventCandidateId);
+      setEventCandidateId('');
+      setShowAddEvent(false);
     } catch (err: any) {
       alert('Unable to designate event: ' + (err?.response?.data?.message || err.message));
     }
@@ -345,13 +349,17 @@ export default function WorldFinalsAdminPage() {
   // --- Package handlers ---
   const startNewPackage = () => {
     setPkgForm({ name: '', description: '', basePriceEarly: '175', basePriceRegular: '200', includedClasses: '3',
-      additionalClassPriceEarly: '75', additionalClassPriceRegular: '100', displayOrder: '0', isActive: true, selectedClasses: [] });
+      additionalClassPriceEarly: '75', additionalClassPriceRegular: '100', displayOrder: '0', isActive: true,
+      // Pre-fill from the event filter (or the only event) but keep the
+      // assignment explicit — the form always shows which event it targets.
+      wfEventId: selectedEventId || (events.length === 1 ? events[0].id : ''),
+      selectedClasses: [] });
     setEditingPackage('new');
   };
 
   const startEditPackage = (pkg: any) => {
-    if (pkg.wf_event_id) setSelectedEventId(pkg.wf_event_id);
     setPkgForm({
+      wfEventId: pkg.wf_event_id || '',
       name: pkg.name || '', description: pkg.description || '',
       basePriceEarly: String(pkg.base_price_early), basePriceRegular: String(pkg.base_price_regular),
       includedClasses: String(pkg.included_classes), additionalClassPriceEarly: String(pkg.additional_class_price_early),
@@ -388,7 +396,7 @@ export default function WorldFinalsAdminPage() {
 
   const handleSavePackage = async () => {
     if (!pkgForm.name) { alert('Package name is required.'); return; }
-    if (!selectedEventId) { alert('Select a World Finals event before saving a package.'); return; }
+    if (!pkgForm.wfEventId) { alert('Choose which World Finals event this package belongs to.'); return; }
     setSavingPkg(true);
     try {
       const payload = {
@@ -398,7 +406,7 @@ export default function WorldFinalsAdminPage() {
         additionalClassPriceEarly: parseFloat(pkgForm.additionalClassPriceEarly),
         additionalClassPriceRegular: parseFloat(pkgForm.additionalClassPriceRegular),
         displayOrder: parseInt(pkgForm.displayOrder), isActive: pkgForm.isActive,
-        wfEventId: selectedEventId || null,
+        wfEventId: pkgForm.wfEventId,
         classes: pkgForm.selectedClasses.map(c => ({
           className: c.className, format: c.format, isPremium: c.isPremium, premiumPrice: c.isPremium ? parseFloat(c.premiumPrice) : null,
         })),
@@ -418,18 +426,26 @@ export default function WorldFinalsAdminPage() {
 
   // --- Add-on handlers ---
   const handleSaveAddon = async () => {
-    if (!selectedEventId) { alert('Select a World Finals event before saving an add-on.'); return; }
+    if (!addonForm.wfEventId) { alert('Choose which World Finals event this add-on belongs to.'); return; }
     setSavingAddon(true);
     try {
       const payload = { seasonId: selectedSeasonId, name: addonForm.name, description: addonForm.description || null,
         price: parseFloat(addonForm.price), maxQuantity: parseInt(addonForm.maxQuantity), displayOrder: parseInt(addonForm.displayOrder), isActive: addonForm.isActive,
-        wfEventId: selectedEventId || null };
+        wfEventId: addonForm.wfEventId, formats: addonForm.formats,
+        // Only keep class names that still fall inside the chosen formats —
+        // unchecking a format silently drops its classes from the scoping.
+        classNames: addonForm.classNames.filter(name => {
+          const cls = seasonClasses.find(c => c.name === name);
+          return cls && (addonForm.formats.length === 0 || addonForm.formats.includes(cls.format));
+        }) };
       if (editingAddon) await worldFinalsApi.updateAddonItem(editingAddon, payload);
       else await worldFinalsApi.createAddonItem(payload);
       setEditingAddon(null);
-      setAddonForm({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true });
+      // Keep the event selection sticky — admins usually add several items
+      // to the same event in a row.
+      setAddonForm(prev => ({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true, wfEventId: prev.wfEventId, formats: [], classNames: [] }));
       await fetchAddonItems();
-    } catch (err: any) { alert('Error: ' + err.message); }
+    } catch (err: any) { alert('Error: ' + (err?.response?.data?.message || err.message)); }
     finally { setSavingAddon(false); }
   };
 
@@ -447,6 +463,32 @@ export default function WorldFinalsAdminPage() {
     if (!classesByFormat[cls.format]) classesByFormat[cls.format] = [];
     classesByFormat[cls.format].push(cls);
   }
+
+  // Searchable picker + button that flips an existing season event's type to
+  // "World Finals Event" — used both in the empty-state banner and the
+  // "Add another event" panel of the connected-events bar.
+  const renderEventConnector = () => (
+    <div className="flex flex-wrap gap-2">
+      <SearchableSelect
+        className="min-w-[280px] max-w-xl flex-1"
+        buttonClassName="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+        value={eventCandidateId}
+        onChange={setEventCandidateId}
+        placeholder="Select an existing season event..."
+        searchPlaceholder="Search events by name or date…"
+        options={seasonEvents
+          .filter(event => event.event_type !== 'world_finals')
+          .map(event => ({
+            value: event.id,
+            label: `${event.title} (${new Date(event.event_date).toLocaleDateString()})`,
+          }))}
+      />
+      <button onClick={handleDesignateWorldFinalsEvent} disabled={!eventCandidateId}
+        className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg">
+        <CalendarPlus className="h-4 w-4" />Use as World Finals Event
+      </button>
+    </div>
+  );
 
   // Event selector component used in packages, addons, stats tabs
   // Shows events from the Event Management system (event_type='world_finals')
@@ -510,40 +552,26 @@ export default function WorldFinalsAdminPage() {
           </div>
         </div>
 
-        {/* The package system is keyed to events from Event Management. Make that
-            dependency visible and repairable instead of leaving empty selectors. */}
-        {!eventsLoading && events.length === 0 && (
+        {/* World Finals events are DETECTED automatically: any Event Management
+            record in this season with Event Type = "World Finals Event" appears
+            here (backend filters season + event_type). The picker below is just
+            a shortcut that sets that same field on an existing event, so admins
+            can connect the first event — or additional ones (SPL + SQL finals,
+            extra days) — without leaving this page. */}
+        {!eventsLoading && (events.length === 0 ? (
           <div className="bg-amber-950/40 border border-amber-600/50 rounded-xl p-5 mb-6">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
               <div className="flex-1">
-                <h3 className="text-amber-200 font-semibold">World Finals event connection required</h3>
+                <h3 className="text-amber-200 font-semibold">No World Finals event found in this season</h3>
                 <p className="text-amber-100/70 text-sm mt-1">
-                  Packages, add-ons, registration, and event-level stats need an Event Management record in this season with its event type set to World Finals.
+                  This page automatically detects every event in this season whose Event Type is set to “World Finals Event” in Event Management — none found yet.
+                  If you already created one, check that its Season and Event Type are set correctly. Otherwise pick a season event below and its type will be updated for you.
                 </p>
                 {eventError ? (
                   <p className="text-red-300 text-sm mt-3">{eventError}</p>
                 ) : seasonEvents.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    <SearchableSelect
-                      className="min-w-[280px] max-w-xl flex-1"
-                      buttonClassName="w-full flex items-center justify-between gap-2 px-3 py-2 bg-slate-800 border border-amber-600/50 rounded-lg text-white text-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      value={eventCandidateId}
-                      onChange={setEventCandidateId}
-                      placeholder="Select an existing season event..."
-                      searchPlaceholder="Search events by name or date…"
-                      options={seasonEvents
-                        .filter(event => event.event_type !== 'world_finals')
-                        .map(event => ({
-                          value: event.id,
-                          label: `${event.title} (${new Date(event.event_date).toLocaleDateString()})`,
-                        }))}
-                    />
-                    <button onClick={handleDesignateWorldFinalsEvent} disabled={!eventCandidateId}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg">
-                      <CalendarPlus className="h-4 w-4" />Use as World Finals Event
-                    </button>
-                  </div>
+                  <div className="mt-4">{renderEventConnector()}</div>
                 ) : (
                   <p className="text-amber-100/70 text-sm mt-3">
                     Create the event in Event Management first and choose “World Finals Event” as its event type, then return here.
@@ -552,7 +580,33 @@ export default function WorldFinalsAdminPage() {
               </div>
             </div>
           </div>
-        )}
+        ) : (
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-gray-400 text-sm font-medium">World Finals events (auto-detected):</span>
+                {events.map(evt => (
+                  <span key={evt.id} className="px-2.5 py-1 bg-slate-700 rounded-lg text-sm text-white">
+                    {evt.title}
+                    {evt.event_date && <span className="text-gray-400"> · {new Date(evt.event_date).toLocaleDateString()}</span>}
+                  </span>
+                ))}
+              </div>
+              <button onClick={() => setShowAddEvent(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-lg text-sm transition-colors">
+                <CalendarPlus className="h-4 w-4" />{showAddEvent ? 'Close' : 'Add another event'}
+              </button>
+            </div>
+            {showAddEvent && (
+              <div className="mt-3 pt-3 border-t border-slate-700">
+                <p className="text-gray-400 text-xs mb-2">
+                  Pick an existing event from this season — its Event Type will be set to “World Finals Event”. (Setting the type directly in Event Management does the same thing.)
+                </p>
+                {renderEventConnector()}
+              </div>
+            )}
+          </div>
+        ))}
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 border-b border-slate-700 overflow-x-auto items-center">
@@ -896,7 +950,7 @@ export default function WorldFinalsAdminPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg text-sm">
                         <Eye className="h-4 w-4" />Preview Form</a>
                     )}
-                    <button onClick={startNewPackage} disabled={!selectedEventId} title={!selectedEventId ? 'Select a World Finals event first' : undefined}
+                    <button onClick={startNewPackage} disabled={events.length === 0} title={events.length === 0 ? 'Connect a World Finals event first' : undefined}
                       className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg">
                       <Plus className="h-4 w-4" />Add Package</button>
                   </div>
@@ -909,7 +963,13 @@ export default function WorldFinalsAdminPage() {
                       <div>
                         <h4 className="text-lg font-semibold text-white">{pkg.name}</h4>
                         {pkg.description && <p className="text-gray-400 text-sm">{pkg.description}</p>}
-                        {!pkg.wf_event_id && <p className="text-amber-400 text-xs mt-1">Unassigned — edit this package and select an event before registration opens.</p>}
+                        {pkg.wf_event_id ? (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Event: <span className="text-gray-300">{events.find(evt => evt.id === pkg.wf_event_id)?.title || 'Unknown event'}</span>
+                          </p>
+                        ) : (
+                          <p className="text-amber-400 text-xs mt-1">Unassigned — edit this package and select an event before registration opens.</p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <span className={`px-2 py-1 rounded text-xs ${pkg.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>{pkg.is_active ? 'Active' : 'Inactive'}</span>
@@ -941,6 +1001,14 @@ export default function WorldFinalsAdminPage() {
             {editingPackage && (
               <div className="bg-slate-800 border border-orange-500/30 rounded-xl p-6 space-y-5">
                 <h3 className="text-lg font-semibold text-orange-400">{editingPackage === 'new' ? 'New Package' : 'Edit Package'}</h3>
+                <div><label className="block text-sm text-gray-400 mb-1">World Finals Event *</label>
+                  <select value={pkgForm.wfEventId} onChange={e => setPkgForm({ ...pkgForm, wfEventId: e.target.value })}
+                    className="w-full md:w-1/2 px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white">
+                    <option value="">Select which event this package is for…</option>
+                    {events.map(evt => (
+                      <option key={evt.id} value={evt.id}>{evt.title}{evt.event_date ? ` (${new Date(evt.event_date).toLocaleDateString()})` : ''}</option>
+                    ))}
+                  </select></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><label className="block text-sm text-gray-400 mb-1">Package Name *</label>
                     <input type="text" value={pkgForm.name} onChange={e => setPkgForm({ ...pkgForm, name: e.target.value })} placeholder="e.g., SPL Competition Package"
@@ -1033,7 +1101,13 @@ export default function WorldFinalsAdminPage() {
             {dataErrors.addons && <div className="bg-red-950/40 border border-red-700 text-red-300 rounded-lg p-4">{dataErrors.addons}</div>}
             <div className="bg-slate-800 rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-4">{editingAddon ? 'Edit' : 'Add'} Item</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div><label className="block text-sm text-gray-400 mb-1">World Finals Event *</label>
+                  <select value={addonForm.wfEventId} onChange={e => setAddonForm({ ...addonForm, wfEventId: e.target.value })}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white">
+                    <option value="">Select event…</option>
+                    {events.map(evt => <option key={evt.id} value={evt.id}>{evt.title}</option>)}
+                  </select></div>
                 <div><label className="block text-sm text-gray-400 mb-1">Name *</label>
                   <input type="text" value={addonForm.name} onChange={e => setAddonForm({ ...addonForm, name: e.target.value })} placeholder="e.g., Display Booth"
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
@@ -1044,11 +1118,62 @@ export default function WorldFinalsAdminPage() {
                   <input type="number" value={addonForm.maxQuantity} onChange={e => setAddonForm({ ...addonForm, maxQuantity: e.target.value })}
                     className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
               </div>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">
+                  Limit to Formats <span className="text-gray-500 font-normal">(nothing selected = offered to every registrant)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(classesByFormat).map(format => {
+                    const checked = addonForm.formats.includes(format);
+                    return (
+                      <button key={format} type="button"
+                        onClick={() => setAddonForm(prev => ({
+                          ...prev,
+                          formats: checked ? prev.formats.filter(f => f !== format) : [...prev.formats, format],
+                        }))}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          checked ? 'bg-orange-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}>
+                        {format}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {addonForm.formats.length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Limit to Specific Classes <span className="text-gray-500 font-normal">(optional — nothing selected = every class in the formats above)</span>
+                  </label>
+                  <div className="space-y-2">
+                    {addonForm.formats.map(format => (
+                      <div key={format}>
+                        <p className="text-xs text-gray-500 mb-1">{format}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(classesByFormat[format] || []).map(cls => {
+                            const checked = addonForm.classNames.includes(cls.name);
+                            return (
+                              <button key={cls.id} type="button"
+                                onClick={() => setAddonForm(prev => ({
+                                  ...prev,
+                                  classNames: checked ? prev.classNames.filter(n => n !== cls.name) : [...prev.classNames, cls.name],
+                                }))}
+                                className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                                  checked ? 'bg-amber-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600 hover:text-white'}`}>
+                                {cls.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
-                <button onClick={handleSaveAddon} disabled={savingAddon || !addonForm.name || !selectedEventId}
+                <button onClick={handleSaveAddon} disabled={savingAddon || !addonForm.name || !addonForm.wfEventId}
                   className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold rounded-lg">
                   <Save className="h-4 w-4" />{editingAddon ? 'Update' : 'Add'}</button>
-                {editingAddon && <button onClick={() => { setEditingAddon(null); setAddonForm({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true }); }}
+                {editingAddon && <button onClick={() => { setEditingAddon(null); setAddonForm({ name: '', description: '', price: '0', maxQuantity: '1', displayOrder: '0', isActive: true, wfEventId: '', formats: [], classNames: [] }); }}
                   className="px-4 py-2 bg-slate-600 text-white rounded-lg">Cancel</button>}
               </div>
             </div>
@@ -1056,16 +1181,31 @@ export default function WorldFinalsAdminPage() {
               <div className="bg-slate-800 rounded-xl overflow-hidden">
                 <table className="w-full"><thead className="bg-slate-700"><tr>
                   <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Name</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Event</th>
+                  <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Formats</th>
                   <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Price</th>
                   <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Max Qty</th>
                   <th className="px-6 py-3 text-left text-xs text-gray-400 uppercase">Actions</th>
                 </tr></thead><tbody className="divide-y divide-slate-700">
                   {addonItems.map(item => (
                     <tr key={item.id}><td className="px-6 py-3 text-white">{item.name}</td>
+                    <td className="px-6 py-3 text-gray-300 text-sm">
+                      {item.wf_event_id
+                        ? (events.find(evt => evt.id === item.wf_event_id)?.title || 'Unknown event')
+                        : <span className="text-amber-400">Unassigned</span>}
+                    </td>
+                    <td className="px-6 py-3 text-gray-300 text-sm">
+                      {item.formats?.length ? item.formats.join(', ') : 'All'}
+                      {item.class_names?.length > 0 && (
+                        <span className="block text-xs text-amber-400/80" title={item.class_names.join(', ')}>
+                          {item.class_names.length} specific {item.class_names.length === 1 ? 'class' : 'classes'}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-3 text-green-400">${Number(item.price).toFixed(2)}</td>
                     <td className="px-6 py-3 text-white">{item.max_quantity}</td>
                     <td className="px-6 py-3 flex gap-2">
-                      <button onClick={() => { if (item.wf_event_id) setSelectedEventId(item.wf_event_id); setEditingAddon(item.id); setAddonForm({ name: item.name, description: item.description || '', price: String(item.price), maxQuantity: String(item.max_quantity), displayOrder: String(item.display_order), isActive: item.is_active }); }} className="p-1 text-gray-400 hover:text-white"><Edit2 className="h-4 w-4" /></button>
+                      <button onClick={() => { setEditingAddon(item.id); setAddonForm({ name: item.name, description: item.description || '', price: String(item.price), maxQuantity: String(item.max_quantity), displayOrder: String(item.display_order), isActive: item.is_active, wfEventId: item.wf_event_id || '', formats: item.formats || [], classNames: item.class_names || [] }); }} className="p-1 text-gray-400 hover:text-white"><Edit2 className="h-4 w-4" /></button>
                       <button onClick={async () => { if (confirm('Delete?')) { await worldFinalsApi.deleteAddonItem(item.id); await fetchAddonItems(); }}} className="p-1 text-gray-400 hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
                     </td></tr>
                   ))}

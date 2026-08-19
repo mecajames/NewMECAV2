@@ -197,9 +197,6 @@ const AdminAuditPage = lazy(() => import('@/admin/pages/AdminAuditPage'));
 const AdminFeatureRequestsPage = lazy(() => import('@/admin/pages/AdminFeatureRequestsPage'));
 const AdminFindResultsPage = lazy(() => import('@/admin/pages/AdminFindResultsPage'));
 const ResultsNeedingClassPage = lazy(() => import('@/admin/pages/ResultsNeedingClassPage'));
-const QAChecklistPage = lazy(() => import('@/admin/pages/QAChecklistPage'));
-const QARoundDetailPage = lazy(() => import('@/admin/pages/QARoundDetailPage'));
-const QAReviewPage = lazy(() => import('@/admin/pages/QAReviewPage'));
 const ScoreSheetEditorPage = lazy(() => import('@/admin/pages/ScoreSheetEditorPage'));
 
 // Lazy-loaded pages - Admin billing
@@ -480,9 +477,6 @@ function App() {
               <Route path="/admin/results-needing-class" element={<L><ResultsNeedingClassPage /></L>} />
 
               {/* Admin QA Checklist */}
-              <Route path="/admin/qa-checklist" element={<L><QAChecklistPage /></L>} />
-              <Route path="/admin/qa-checklist/rounds/:roundId" element={<L><QARoundDetailPage /></L>} />
-              <Route path="/admin/qa-checklist/review/:assignmentId" element={<L><QAReviewPage /></L>} />
               <Route path="/admin/score-sheet-editor" element={<L><ScoreSheetEditorPage /></L>} />
 
               {/* Card QR Code Redirect */}

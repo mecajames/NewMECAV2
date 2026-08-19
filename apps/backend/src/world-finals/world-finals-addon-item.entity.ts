@@ -24,6 +24,18 @@ export class WorldFinalsAddonItem {
   @Property({ type: 'integer', default: 1, fieldName: 'max_quantity', serializedName: 'max_quantity' })
   maxQuantity: number = 1;
 
+  // Optional format scoping (e.g. ['SPL']): null/empty = offered to every
+  // registrant; otherwise only shown when the chosen package includes classes
+  // in one of these formats.
+  @Property({ type: 'json', nullable: true })
+  formats?: string[] | null;
+
+  // Optional class scoping (e.g. ['Radical X']): null/empty = every class in
+  // the allowed formats; otherwise only shown when the registrant selected one
+  // of these classes.
+  @Property({ type: 'json', nullable: true, fieldName: 'class_names', serializedName: 'class_names' })
+  classNames?: string[] | null;
+
   @Property({ type: 'integer', default: 0, fieldName: 'display_order', serializedName: 'display_order' })
   displayOrder: number = 0;
 

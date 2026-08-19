@@ -86,7 +86,7 @@ export default function WorldFinalsPreRegisterPage() {
 
   // Reset package/class when group changes
   useEffect(() => { setSelectedPackageId(''); setSelectedClasses([]); setAddonSelections({}); }, [selectedGroupIdx]);
-  useEffect(() => { setSelectedClasses([]); }, [selectedPackageId]);
+  useEffect(() => { setSelectedClasses([]); setAddonSelections({}); }, [selectedPackageId]);
 
   const eventGroups: any[] = validation?.eventGroups || [];
   const selectedGroup = selectedGroupIdx >= 0 ? eventGroups[selectedGroupIdx] : null;
@@ -129,7 +129,22 @@ export default function WorldFinalsPreRegisterPage() {
     });
   }, [selectedPkg, formatOrder, classOrder]);
   const isEarlyBird = selectedPkg?._pricingTier === 'early_bird';
-  const addonItems = selectedGroup?.addonItems || [];
+  // Scoped add-ons. Two optional narrowing levels, both empty = everyone:
+  // - `formats`: offered only when the chosen package includes classes in one
+  //   of those formats (an SPL-only add-on stays hidden from SQL registrants).
+  // - `class_names`: offered only once the registrant actually selects one of
+  //   those classes, so class-specific extras appear exactly when relevant.
+  const addonItems = useMemo(() => {
+    const all: any[] = selectedGroup?.addonItems || [];
+    if (!selectedPkg) return all;
+    const pkgFormats = new Set((selectedPkg.eligibleClasses || []).map((c: any) => c.format).filter(Boolean));
+    const pickedClassNames = new Set(selectedClasses.map((c: any) => c.class_name));
+    return all.filter((item: any) => {
+      if (item.formats?.length && !item.formats.some((f: string) => pkgFormats.has(f))) return false;
+      if (item.class_names?.length && !item.class_names.some((n: string) => pickedClassNames.has(n))) return false;
+      return true;
+    });
+  }, [selectedGroup, selectedPkg, selectedClasses]);
 
   const toggleClass = (cls: any) => {
     setSelectedClasses(prev => {

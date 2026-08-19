@@ -1216,6 +1216,8 @@ export class WorldFinalsService {
     if (data.maxQuantity !== undefined) item.maxQuantity = data.maxQuantity;
     if (data.displayOrder !== undefined) item.displayOrder = data.displayOrder;
     if (data.isActive !== undefined) item.isActive = data.isActive;
+    if (data.formats !== undefined) item.formats = data.formats?.length ? data.formats : null;
+    if (data.classNames !== undefined) item.classNames = data.classNames?.length ? data.classNames : null;
     await em.persistAndFlush(item);
     return item;
   }
@@ -1236,6 +1238,8 @@ export class WorldFinalsService {
     if (data.maxQuantity !== undefined) item.maxQuantity = data.maxQuantity;
     if (data.displayOrder !== undefined) item.displayOrder = data.displayOrder;
     if (data.isActive !== undefined) item.isActive = data.isActive;
+    if (data.formats !== undefined) item.formats = data.formats?.length ? data.formats : null;
+    if (data.classNames !== undefined) item.classNames = data.classNames?.length ? data.classNames : null;
     await em.flush();
     return item;
   }
